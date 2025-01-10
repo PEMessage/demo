@@ -31,6 +31,20 @@ build_kernel() {
     )
 }
 
+build_init() {
+    (
+    # for some unknow reason, normal gcc `-entry main` will cause segment fault, but musl-gcc not
+    # not my issue, in video, they use normal gcc
+    musl-gcc -static --entry main init.c -o init
+    )
+}
 
-# build_config
-build_kernel
+build_cpio() {
+    echo init | cpio -o -H newc > init.cpio
+}
+
+
+# build_config &&
+# build_kernel &&
+build_init &&
+build_cpio
