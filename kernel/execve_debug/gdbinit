@@ -1,1 +1,12 @@
 target remote :1234
+dashboard -layout dashboard stack
+b start_kernel
+
+# Kill process (QEMU) on gdb exits
+# Credit: https://jyywiki.cn/os-demos/introduction/debug-firmware/
+define hook-quit
+    kill
+end
+define hook-stop
+    printf "Program Counter:\n" x/i $rip + ($cs * 16) printf "------- Memory around 0x7c00 -------\n" x/16b 0x7c00
+end
