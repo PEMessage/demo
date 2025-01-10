@@ -1,6 +1,14 @@
 
 .PHONY: all
-all: init linux/build/arch/x86_64/boot/bzImage 
+.PHONY: download
+
+all: download linux/build/.config linux/build/arch/x86_64/boot/bzImage init init.cpio
+
+download:
+	if [ ! -d linux/.git ] ; then \
+        git clone https://github.com/torvalds/linux.git -b v5.15 --depth=1 ; \
+	fi
+
 
 linux/build/.config: ./config-fragment
 	cd linux && \
@@ -15,7 +23,7 @@ linux/build/arch/x86_64/boot/bzImage: linux/build/.config
 		bear -- make O=build -j4
 
 init: init.c
-	musl-gcc -static -entry main init.c -o $@
+	musl-gcc -static --entry main init.c -o $@
 
 init.cpio: init
 	echo $^ | cpio -o -H newc > $@ 
