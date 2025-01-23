@@ -30,11 +30,11 @@ constexpr const char *UTILS_LOG_TAG = "utils_base";
 #define UTILS_LOGD(...)
 #endif
 #else
-#define UTILS_LOGF(...)
-#define UTILS_LOGE(...)
-#define UTILS_LOGW(...)
-#define UTILS_LOGI(...)
-#define UTILS_LOGD(...)
+#define UTILS_LOGF(...) do { printf(__VA_ARGS__) ; printf("\n") ; } while(0)
+#define UTILS_LOGE(...) do { printf(__VA_ARGS__) ; printf("\n") ; } while(0)
+#define UTILS_LOGW(...) do { printf(__VA_ARGS__) ; printf("\n") ; } while(0)
+#define UTILS_LOGI(...) do { printf(__VA_ARGS__) ; printf("\n") ; } while(0)
+#define UTILS_LOGD(...) do { printf(__VA_ARGS__) ; printf("\n") ; } while(0)
 #endif  // CONFIG_HILOG
 
 #if (defined CONFIG_HILOG) && (defined CONFIG_PARCEL_DEBUG)
