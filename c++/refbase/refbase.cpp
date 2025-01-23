@@ -102,8 +102,8 @@ RefTracker::RefTracker(RefTracker* exTracker, const void* id, int strong, int we
 
 void RefTracker::PrintTrace(const void* refCounterPtr)
 {
-    UTILS_LOGI("%{public}p call %{public}p. strong: %{public}d weak: %{public}d " \
-        "refcnt: %{public}d PID: %{public}d TID: %{public}d",
+    UTILS_LOGI("%p call %p. strong: %d weak: %d " \
+        "refcnt: %d PID: %d TID: %d",
         ptrID, refCounterPtr, strongRefCnt, weakRefCnt, refCnt, PID, TID);
 }
 
@@ -121,8 +121,8 @@ RefTracker* RefTracker::PopTrace(const void* refCounterPtr)
 void RefCounter::PrintRefs(const void* objectId)
 {
     std::lock_guard<std::mutex> lock(trackerMutex);
-    UTILS_LOGI("%{public}p call %{public}p. strong: %{public}d weak: %{public}d " \
-        "refcnt: %{public}d", objectId, this, atomicStrong_.load(std::memory_order_relaxed),
+    UTILS_LOGI("%p call %p. strong: %d weak: %d " \
+        "refcnt: %d", objectId, this, atomicStrong_.load(std::memory_order_relaxed),
         atomicWeak_.load(std::memory_order_relaxed), atomicRefCount_.load(std::memory_order_relaxed));
 }
 #else
@@ -138,11 +138,11 @@ void RefCounter::PrintTracker()
 {
     std::lock_guard<std::mutex> lock(trackerMutex);
     if (refTracker) {
-        UTILS_LOGI("%{public}p start backtrace", this);
+        UTILS_LOGI("%p start backtrace", this);
         while (refTracker) {
             refTracker = refTracker->PopTrace(this);
         }
-        UTILS_LOGI("%{public}p end backtrace", this);
+        UTILS_LOGI("%p end backtrace", this);
     }
 }
 #endif
@@ -152,7 +152,7 @@ void RefCounter::EnableTracker()
 {
     std::lock_guard<std::mutex> lock(trackerMutex);
 #ifdef PRINT_TRACK_AT_ONCE
-    UTILS_LOGI("%{public}p start tracking", this);
+    UTILS_LOGI("%p start tracking", this);
 #endif
     enableTrack = true;
 }
@@ -233,7 +233,7 @@ RefCounter::~RefCounter()
 #ifdef DEBUG_REFBASE
     if (enableTrack) {
 #ifdef PRINT_TRACK_AT_ONCE
-        UTILS_LOGI("%{public}p end tracking", this);
+        UTILS_LOGI("%p end tracking", this);
 #else
         PrintTracker();
 #endif
@@ -520,7 +520,7 @@ void RefBase::IncStrongRef(const void *objectId)
     IncWeakRef(objectId);
     const int curCount = refs_->IncStrongRefCount(objectId);
     if (!refs_->IsLifeTimeExtended() && curCount == 0) {
-        UTILS_LOGF("%{public}p still incStrongRef after last strong ref", this);
+        UTILS_LOGF("%p still incStrongRef after last strong ref", this);
     }
     if (curCount == INITIAL_PRIMARY_VALUE) {
         OnFirstStrongRef(objectId);
@@ -533,7 +533,7 @@ void RefBase::CheckIsAttemptAcquireSet(const void *objectId)
         refs_->ClearAttemptAcquire();
         const int attemptCount = refs_->GetAttemptAcquire();
         if (attemptCount < 0) {
-            UTILS_LOGF("Multi-threads trigger illegal decstrong from %{public}d due to AttemptIncStrong in ipc",
+            UTILS_LOGF("Multi-threads trigger illegal decstrong from %d due to AttemptIncStrong in ipc",
                 attemptCount);
         }
         refs_->DecStrongRefCount(objectId);
@@ -550,7 +550,7 @@ void RefBase::DecStrongRef(const void *objectId)
     RefCounter * const refs = refs_;
     const int curCount = refs->DecStrongRefCount(objectId);
     if (curCount <= 0) {
-        UTILS_LOGF("%{public}p call decStrongRef too many times", this);
+        UTILS_LOGF("%p call decStrongRef too many times", this);
     }
     if (curCount == 1) {
         std::atomic_thread_fence(std::memory_order_acquire);
