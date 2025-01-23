@@ -1,3 +1,4 @@
 linux/
 .gdb_history
 *.cpio
+init
