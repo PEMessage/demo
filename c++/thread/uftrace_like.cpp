@@ -8,6 +8,14 @@
 //         in every function enter add “  ” to thread local global var INDENT,
 //         and print function name with indent，
 
+#if __cplusplus >= 202002L // Check if C++20 or later
+    #include <source_location>
+    #define MY_PRETTY_FUNC std::source_location::current().function_name()
+#elif defined(__GNUC__) || defined(__clang__) // Check if using GCC or Clang
+    #define MY_PRETTY_FUNC __PRETTY_FUNCTION__
+#else
+    #define MY_PRETTY_FUNC __func__
+#endif
 
 thread_local std::string INDENT;  // Thread-local variable for indentation
 std::mutex print_mutex;           // Mutex for print eachline indepent, (not work perfect, why?)
@@ -20,7 +28,7 @@ void print_with_indent(const std::string& function_name) {
 
 #define FUNCTION_ENTER() \
     INDENT += "  "; \
-    print_with_indent(__PRETTY_FUNCTION__);
+    print_with_indent(MY_PRETTY_FUNC);
 
 #define FUNCTION_EXIT() \
     INDENT.erase(0, 2);  // Remove the last two spaces
