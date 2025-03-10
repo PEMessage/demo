@@ -1,7 +1,8 @@
 
 
-run:all test/cert.der
-	./build/print_der test/cert.der
+run:all test/ecc/cert.der test/rsa/cert.der
+	./build/print_der test/ecc/cert.der
+	./build/print_der test/rsa/cert.der
 
 all:
 	mkdir -p build && \
@@ -12,8 +13,13 @@ all:
 		.. && \
 	make
 
-test/cert.der:
-	mkdir -p test
-	openssl ecparam -name prime256v1 -genkey -noout -out test/private.key
-	openssl req -x509 -new -key test/private.key -sha256 -days 365 -out test/cert.der -outform DER -subj "/CN=Example/C=US/O=MyOrg"
+test/ecc/cert.der:
+	mkdir -p test/ecc
+	openssl ecparam -name prime256v1 -genkey -noout -out test/ecc/private.key
+	openssl req -x509 -new -key test/ecc/private.key -sha256 -days 365 -out test/ecc/cert.der -outform DER -subj "/CN=Example/C=US/O=MyOrg"
+test/rsa/cert.der:
+	mkdir -p test/rsa
+	openssl genrsa -out test/rsa/private.key
+	openssl req -x509 -new -key test/rsa/private.key -sha256 -days 365 -out test/rsa/cert.der -outform DER -subj "/CN=Example/C=US/O=MyOrg"
+
 

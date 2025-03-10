@@ -37,11 +37,11 @@ void print_cert_info(const mbedtls_x509_crt *cert)
 
     // Print validity period
     printf("  Not Before: %04d-%02d-%02d %02d:%02d:%02d UTC\n",
-           cert.valid_from.year, cert.valid_from.mon, cert.valid_from.day,
-           cert.valid_from.hour, cert.valid_from.min, cert.valid_from.sec);
+           cert->valid_from.year, cert->valid_from.mon, cert->valid_from.day,
+           cert->valid_from.hour, cert->valid_from.min, cert->valid_from.sec);
     printf("  Not After:  %04d-%02d-%02d %02d:%02d:%02d UTC\n",
-           cert.valid_to.year, cert.valid_to.mon, cert.valid_to.day,
-           cert.valid_to.hour, cert.valid_to.min, cert.valid_to.sec);
+           cert->valid_to.year, cert->valid_to.mon, cert->valid_to.day,
+           cert->valid_to.hour, cert->valid_to.min, cert->valid_to.sec);
 
     // Print signature algorithm
     printf("Signature Algorithm: ");
