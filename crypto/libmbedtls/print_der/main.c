@@ -9,6 +9,7 @@
 #include <mbedtls/x509_crt.h>
 #include <mbedtls/error.h>
 
+
 int main(int argc, char *argv[]) {
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <certificate.der>\n", argv[0]);
@@ -63,11 +64,8 @@ int main(int argc, char *argv[]) {
     printf("Subject: %s\n", subject);
     printf("Issuer: %s\n", issuer);
 
-    char not_before[20], not_after[20];
-    // mbedtls_x509_get_time(not_before, sizeof(not_before), &crt.valid_from);
-    // mbedtls_x509_get_time(not_after, sizeof(not_after), &crt.valid_to);
-    // printf("Valid From: %s UTC\n", not_before);
-    // printf("Valid To: %s UTC\n", not_after);
+    printf("Valid From: %d-%d-%d UTC\n", crt.valid_from.year, crt.valid_from.mon, crt.valid_from.day);
+    printf("Valid to:   %d-%d-%d UTC\n",   crt.valid_to.year,   crt.valid_to.mon,   crt.valid_to.day);
 
     char serial[100];
     // mbedtls_mpi_write_string(&crt.serial, 16, serial, sizeof(serial), NULL);
@@ -89,12 +87,12 @@ int main(int argc, char *argv[]) {
             pk_alg = "EC";
             {
                 mbedtls_ecp_keypair *ec = mbedtls_pk_ec(crt.pk);
-                // const mbedtls_ecp_curve_info *curve = mbedtls_ecp_curve_info_from_grp_id(
-                //     mbedtls_ecp_group_get_id(&ec->grp)
-                // );
-                // if (curve) {
-                //     printf("EC Curve: %s\n", curve->name);
-                // }
+                const mbedtls_ecp_curve_info *curve = mbedtls_ecp_curve_info_from_grp_id(
+                    mbedtls_ecp_keypair_get_group_id(ec)
+                );
+                if (curve) {
+                    printf("EC Curve: %s\n", curve->name);
+                }
             }
             break;
         default:

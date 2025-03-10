@@ -1,5 +1,8 @@
 
 
+run:all test/cert.der
+	./build/print_der test/cert.der
+
 all:
 	mkdir -p build && \
 	cd build && \
