@@ -1,1 +1,4 @@
 **/*.swp
+.gdb_history
+.cache
+build/
