@@ -85,10 +85,29 @@ void print_cert_info(const mbedtls_x509_crt *cert)
     unsigned char key_buf[2048];
     int ret = mbedtls_pk_write_pubkey_pem(&cert->pk, key_buf, sizeof(key_buf));
     if (ret == 0) {
-        printf("%s\n", key_buf);
+        printf("%s", key_buf);
     } else {
         printf("Failed to extract public key\n");
     }
+
+        // Print the DER format public key in hex
+    printf("Public Key (DER Format in Hex):\n");
+    unsigned char der_buf[2048];
+    ret = mbedtls_pk_write_pubkey_der(&cert->pk, der_buf, sizeof(der_buf));
+    if (ret > 0) {
+        // mbedtls_pk_write_pubkey_der writes at the end of the buffer!
+        unsigned char *start = der_buf + sizeof(der_buf) - ret;
+        for (n = 0; n < ret; n++) {
+            if (n > 0 && n % 16 == 0) {
+                printf("\n");
+            }
+            printf("0x%02X ", start[n]);
+        }
+        printf("\n");
+    } else {
+        printf("Failed to extract public key in DER format\n");
+    }
+
 
     // Print certificate version
     printf("Version: %d\n", cert->version);
