@@ -61,8 +61,9 @@ int main(int argc, char **argv) {
 
     printf("DER format in hex:\n");
     for (int i = 0; i < der_len; i++) {
-        printf("0x%02X", der_data[i]);
-        if (i < der_len - 1) printf(" ");
+        printf("0x%02X ", der_data[i]);
+        if ( i % 8 == 7 ) printf("\n");
+        // if (i < der_len - 1) printf(" ");
     }
     printf("\n");
 
