@@ -66,6 +66,7 @@ int main(int argc, char **argv) {
         // if (i < der_len - 1) printf(" ");
     }
     printf("\n");
+    int *a = malloc(32);
 
     OPENSSL_free(der_data);
     EVP_PKEY_free(pkey);

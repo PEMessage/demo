@@ -4,11 +4,28 @@ run:all test/ecc/cert.der test/rsa/cert.der
 	./build/print_cert test/ecc/cert.der
 	./build/print_cert test/rsa/cert.der
 
+run32:all test/ecc/cert.der test/rsa/cert.der
+	./build32/print_cert test/ecc/cert.der
+	./build32/print_cert test/rsa/cert.der
+
 all:
 	mkdir -p build && \
 	cd build && \
 	cmake \
 		-DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+		-DCMAKE_BUILD_TYPE=Debug \
+		.. && \
+	make
+all32:
+	mkdir -p build32 && \
+	cd build32 && \
+	cmake \
+		-DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+		-DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+		-DCMAKE_C_FLAGS="-m32" \
+		-DCMAKE_CXX_FLAGS="-m32" \
+		-DCMAKE_SHARED_LINKER_FLAGS="-m32" \
+		-DCMAKE_EXE_LINKER_FLAGS="-m32" \
 		-DCMAKE_BUILD_TYPE=Debug \
 		.. && \
 	make

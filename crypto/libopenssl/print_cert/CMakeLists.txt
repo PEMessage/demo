@@ -17,9 +17,11 @@ FetchContent_MakeAvailable(ssl_content)
 add_library(OpenSSL::SSL ALIAS ssl)
 add_library(OpenSSL::Crypto ALIAS crypto)
 
+add_compile_options(-fsanitize=address)
+add_link_options(-fsanitize=address)
+
 # Add executable
 add_executable(print_cert main.c)
-
 # Link OpenSSL libraries (this will not work as-is - see explanation)
 target_link_libraries(print_cert PRIVATE
   OpenSSL::SSL
