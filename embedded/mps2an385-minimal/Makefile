@@ -12,15 +12,27 @@ MODULE_NAME := firmware
 
 # Compiler flags
 CFLAGS  := -mcpu=cortex-m3 -mthumb -Wall -Os -g -g3
+# CFLAGS  += -lnosys -lm
 CFLAGS  += -DCMSDK_CM3
-CFLAGS  += -Iinclude -ICMSIS/Core/Include
+CFLAGS  += -Iinclude -ICMSIS/Core/Include 
+# Step2: for USART
+CFLAGS  += -ICMSIS/Driver  -ICMSIS/Driver/Include
 
 # Linker flags
 LDFLAGS := -T gcc_arm.ld --entry=Reset_Handler
 
+# Thanks to: https://www.reddit.com/r/embedded/comments/o2kuqt/linking_freertos_for_gcc/
+# FreeRTOS needs a memcpy and memset implementation.
+# Either you need to get them from the standard library or you need to implement them yourself.
+# To use the standard library, you can use --specs=nano.spec or --specs=nosys.spec in LDFLAGS (and remove -nostdlib).
+LDFLAGS += -specs=nosys.specs
+
 # Project files
 SRCS    := startup_CMSDK_CM3.c system_CMSDK_CM3.c  # Add your source files here
 SRCS    += main.c
+# Step2: for USART
+SRCS    += CMSIS/Driver/USART_V2M-MPS2.c
+
 OBJS    := $(addprefix $(OUT)/, $(SRCS:.c=.o))
 TARGET  := $(OUT)/$(MODULE_NAME).elf
 BIN     := $(OUT)/$(MODULE_NAME).bin
@@ -32,7 +44,8 @@ all: $(TARGET) $(BIN) $(LSS)
 # Link the final executable
 $(TARGET): $(OBJS)
 	mkdir -p $$(dirname $@)
-	$(LD) $(LDFLAGS) -o $@ $^
+	# $(LD) $(LDFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
 
 # Generate binary file for flashing
 $(BIN): $(TARGET)
