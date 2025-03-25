@@ -31,7 +31,7 @@ LDFLAGS += -specs=nosys.specs
 SRCS    := startup_CMSDK_CM3.c system_CMSDK_CM3.c  # Add your source files here
 SRCS    += main.c
 # Step2: for USART
-SRCS    += CMSIS/Driver/USART_V2M-MPS2.c
+SRCS    += CMSIS/Driver/USART_V2M-MPS2.c stdout_USART.c
 
 OBJS    := $(addprefix $(OUT)/, $(SRCS:.c=.o))
 TARGET  := $(OUT)/$(MODULE_NAME).elf
