@@ -133,5 +133,15 @@ run: all
 		-monitor none \
 		-nographic -serial stdio
 
+debug: all
+	qemu-system-arm \
+		-machine mps2-an385 \
+		-cpu cortex-m3 \
+		-kernel $(BIN) \
+		-monitor none \
+		-nographic -serial stdio \
+		-s -S
+
+
 
 .PHONY: all clean size run
