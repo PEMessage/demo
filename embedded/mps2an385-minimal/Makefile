@@ -34,6 +34,15 @@ $(strip
 )
 endef
 
+define include_wildcard
+$(strip
+  $(foreach file,
+  	$(wildcard $1),
+	$(eval include $(file))
+  )
+)
+endef
+
 
 
 
@@ -74,6 +83,8 @@ CFLAGS  += -Ilib/CMSIS/Driver  -Ilib/CMSIS/Driver/Include
 ifeq ($(call file_exists,src/$(MODULE_NAME)/*.mk),false)
   CFLAGS  += -Isrc/$(MODULE_NAME)
   SRCS    += $(wildcard src/$(MODULE_NAME)/*.c)
+else
+  $(call include_wildcard,src/$(MODULE_NAME)/*.mk)
 endif
 
 OBJS    := $(addprefix $(OUT)/, $(SRCS:.c=.o))
@@ -111,6 +122,13 @@ $(OUT)/%.S.o: %.S
 # Clean build artifacts
 clean:
 	rm -f $(OBJS) $(TARGET) $(BIN)
+run: all
+	qemu-system-arm \
+		-machine mps2-an385 \
+		-cpu cortex-m3 \
+		-kernel $(BIN) \
+		-monitor none \
+		-nographic -serial stdio
 
 
-.PHONY: all clean size
+.PHONY: all clean size run
