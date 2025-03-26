@@ -4,6 +4,7 @@ extern int stdout_init (void);
 int main() {
     stdout_init();
     while(1){
-        stdout_putchar('a');
+        // ZJW_C stdout_putchar('a');
+        printf("Hello world\n");
     }
 }

@@ -32,6 +32,13 @@
    ---------------------------------------------------------------------------*/
  
 #include "Driver_USART.h"
+#include <stdio.h>
+#include <sys/stat.h>
+#include <stdlib.h>
+#include <errno.h>
+#include <stdio.h>
+#include <stdint.h>
+
  
 //-------- <<< Use Configuration Wizard in Context Menu >>> --------------------
  
@@ -98,4 +105,21 @@ int stdout_putchar (int ch) {
   }
   while (ptrUSART->GetTxCount() != 1);
   return (ch);
+}
+
+
+// Required for printf
+int _write(int file, char *ptr, int len) {
+    int i;
+
+    if (file == 2 || file == 1) {
+        for (i = 0; i < len; i++) {
+            if (stdout_putchar(ptr[i]) != ptr[i]) {
+                return -1;
+            }
+        }
+        return i;
+    }
+
+    return -1;
 }
