@@ -1,27 +1,3 @@
-# Toolchain configuration
-MAKEFLAGS += -r
-ARCH        := arm
-CROSS_COMPILE := arm-none-eabi-
-CC          := $(CROSS_COMPILE)gcc
-LD          := $(CROSS_COMPILE)ld
-OBJCOPY     := $(CROSS_COMPILE)objcopy
-OBJDUMP     := $(CROSS_COMPILE)objdump
-SIZE        := $(CROSS_COMPILE)size
-ifeq ($M,)
-  M := hello_world
-endif
-	
-$(info ==================================)
-$(info build module "$M")
-$(info ==================================)
-
-MODULE_NAME := $(M)
-OUT := out/$(MODULE_NAME)
-
-# Compiler flags
-CFLAGS  := -mcpu=cortex-m3 -mthumb -Wall -Os -g -g3
-
-
 # ====================================================
 # Helper function
 # ====================================================
@@ -43,8 +19,35 @@ $(strip
 )
 endef
 
+# ====================================================
+# Toolchain configuration
+# ====================================================
+MAKEFLAGS += -r
+ARCH        := arm
+CROSS_COMPILE := arm-none-eabi-
+CC          := $(CROSS_COMPILE)gcc
+LD          := $(CROSS_COMPILE)ld
+OBJCOPY     := $(CROSS_COMPILE)objcopy
+OBJDUMP     := $(CROSS_COMPILE)objdump
+SIZE        := $(CROSS_COMPILE)size
+CFLAGS  := -mcpu=cortex-m3 -mthumb -Wall -Os -g -g3
 
+# ====================================================
+# Configuration check
+# ====================================================
+ifeq ($M,)
+  M := hello_world
+endif
+ifeq ($(call file_exists,src/$(M)),false)
+  $(error Module dir not exist, pls check "src/$(M)")
+endif
+	
+$(info ==================================)
+$(info build module "$M")
+$(info ==================================)
 
+MODULE_NAME := $(M)
+OUT := out/$(MODULE_NAME)
 
 # ====================================================
 # Step 1, Basic startup file
