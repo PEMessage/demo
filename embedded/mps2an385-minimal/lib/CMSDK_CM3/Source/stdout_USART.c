@@ -97,6 +97,7 @@ int stdout_init (void) {
   \return          The character written, or -1 on write error.
 */
 int stdout_putchar (int ch) {
+  // Note: this function has bug under QEMU SVC_Handler
   uint8_t buf[1];
  
   buf[0] = ch;
@@ -109,17 +110,56 @@ int stdout_putchar (int ch) {
 
 
 // Required for printf
-int _write(int file, char *ptr, int len) {
-    int i;
+// Old implement has bug?
+// int _write(int file, char *ptr, int len) {
+//     int i;
 
-    if (file == 2 || file == 1) {
-        for (i = 0; i < len; i++) {
-            if (stdout_putchar(ptr[i]) != ptr[i]) {
-                return -1;
-            }
+//     if (file == 2 || file == 1) {
+//         for (i = 0; i < len; i++) {
+//             if (stdout_putchar(ptr[i]) != ptr[i]) {
+//                 return -1;
+//             }
+//         }
+//         return i;
+//     }
+
+//     return -1;
+// }
+
+// Implement from FreeRTOS/Demo/CORTEX_MPS2_QEMU_IAR_GCC/main.c
+static void prvUARTInit( void )
+{
+    #define UART0_ADDRESS                         ( 0x40004000UL )
+    #define UART0_DATA                            ( *( ( ( volatile uint32_t * ) ( UART0_ADDRESS + 0UL ) ) ) )
+    #define UART0_STATE                           ( *( ( ( volatile uint32_t * ) ( UART0_ADDRESS + 4UL ) ) ) )
+    #define UART0_CTRL                            ( *( ( ( volatile uint32_t * ) ( UART0_ADDRESS + 8UL ) ) ) )
+    #define UART0_BAUDDIV                         ( *( ( ( volatile uint32_t * ) ( UART0_ADDRESS + 16UL ) ) ) )
+    #define TX_BUFFER_MASK                        ( 1UL )
+    UART0_BAUDDIV = 16;
+    UART0_CTRL = 1;
+}
+
+// Implement from FreeRTOS/Demo/CORTEX_MPS2_QEMU_IAR_GCC/main.c
+int _write( int iFile,
+             char * pcString,
+             int iStringLength )
+{
+    int iNextChar;
+
+    /* Avoid compiler warnings about unused parameters. */
+    ( void ) iFile;
+
+    /* Output the formatted string to the UART. */
+    for( iNextChar = 0; iNextChar < iStringLength; iNextChar++ )
+    {
+        while( ( UART0_STATE & TX_BUFFER_MASK ) != 0 )
+        {
         }
-        return i;
+
+        UART0_DATA = *pcString;
+        // stdout_putchar( *pcString ); // This function work abnormal under QEMU SVC_Handler
+        pcString++;
     }
 
-    return -1;
+    return iStringLength;
 }
