@@ -17,6 +17,16 @@ add_subdirectory(lib/CMSIS)
 option(BUILD_HELLO_WORLD "Build hello_world module" ON)
 # option(BUILD_SVC_HANDLER "Build svc_handler module" OFF)
 
+# Credit: deepseek-v3-0324
+macro(add_executable_with_binaries MODULE_NAME)
+    add_executable(${MODULE_NAME} ${ARGN})
+    add_custom_command(TARGET ${MODULE_NAME} POST_BUILD
+        COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:${MODULE_NAME}> ${MODULE_NAME}.bin
+        COMMAND ${CMAKE_OBJDUMP} -S $<TARGET_FILE:${MODULE_NAME}> > ${MODULE_NAME}.lss
+        COMMENT "Generating binary and listing files for ${MODULE_NAME}"
+    )
+endmacro()
+
 # if(BUILD_HELLO_WORLD)
   add_subdirectory(src/hello_world)
   add_subdirectory(src/svc_handler)

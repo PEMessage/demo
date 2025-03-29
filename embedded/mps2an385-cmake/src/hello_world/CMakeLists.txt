@@ -9,7 +9,7 @@ set(MODULE_NAME hello_world)
 file(GLOB SRCS *.c)
 
 # Create executable
-add_executable(${MODULE_NAME} ${SRCS})
+add_executable_with_binaries(${MODULE_NAME} ${SRCS})
 
 # Link libraries
 target_link_libraries(${MODULE_NAME}
@@ -20,21 +20,4 @@ target_link_libraries(${MODULE_NAME}
 # Include directories
 target_include_directories(${MODULE_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-)
-
-# Linker script and flags
-# target_link_options(${MODULE_NAME} PRIVATE
-#     -T ${CMAKE_SOURCE_DIR}/lib/CMSDK_CM3/Source/gcc_arm.ld
-#     --entry=Reset_Handler
-# )
-
-# Output files
-set(BIN_FILE ${CMAKE_CURRENT_BINARY_DIR}/${MODULE_NAME}.bin)
-set(LSS_FILE ${CMAKE_CURRENT_BINARY_DIR}/${MODULE_NAME}.lss)
-
-# Custom commands for binary and listing
-add_custom_command(TARGET ${MODULE_NAME} POST_BUILD
-    COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:${MODULE_NAME}> ${BIN_FILE}
-    COMMAND ${CMAKE_OBJDUMP} -S $<TARGET_FILE:${MODULE_NAME}> > ${LSS_FILE}
-    COMMENT "Generating binary and listing files"
 )
