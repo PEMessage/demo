@@ -1,42 +1,54 @@
 # ====================================================
-# Helper function
+# Basic 
 # ====================================================
 MAKEFLAGS += --no-builtin-rules 
+# main purpose of this makefile is to call cmake,
+# so let cmake to build parrelled is enougth
+MAKEFLAGS += -j1
+
+OUT := out
+MODULES := $(wildcard src/*)
+
+help: 
+	@echo avaiable target: $(MODULES)
 
 # ====================================================
-# Debug subcmds handler
+# Handler subcmds
 # ====================================================
-# Check if 'debug' is in MAKECMDGOALS, 
-ifneq (,$(filter debug,$(MAKECMDGOALS)))
-  BUILD_MODE := debug
-  # Remove 'debug' from arguments
-  TEMP := $(filter-out debug,$(MAKECMDGOALS))
-  # Add all target with `debug-prefix`, 
-  DEBUG_GOALS := $(addprefix debug-,$(TEMP))
-else ifneq (,$(filter run,$(MAKECMDGOALS)))
-  # same as above
-  $(warning $(MAKECMDGOALS))
-  TEMP := $(filter-out run,$(MAKECMDGOALS))
-  RUN_GOALS := $(addprefix run-,$(TEMP))
+
+
+define define_subcmd
+  # Set BUILD_MODE if needed (optional)
+  # Remove subcommand from arguments
+  TEMP := $$(filter-out $(1),$$(MAKECMDGOALS))
+  # Add prefix to all targets
+  $(1)_GOALS := $$(addprefix $(1)-,$$(TEMP))
+  
+  # Create the subcommand target
+$(1): $$($(1)_GOALS)
+	@true # interface for $(1)-* targets
+.PHONY: $(1)
+endef
+
+define define_subcmds
+ifeq (dummy,)
+  # pass
+$(foreach cmd,$(1),
+else ifneq (,$$(filter $(cmd),$$(MAKECMDGOALS)))
+$(call define_subcmd,$(cmd)))
 else
-  # passthrough
+  # passthough
 endif
+endef
+
+$(eval $(call define_subcmds,clean run debug))
+
+
+
 
 # ====================================================
 # Configuration check
 # ====================================================
-OUT := out
-
-MODULES := $(wildcard src/*)
-
-
-help: 
-	@echo avaiable target: $(MODULES)
-debug: $(DEBUG_GOALS)
-	@true # interface of debug-*
-run: $(RUN_GOALS)
-	@true # interface of run-*
-.PHONY: help debug run
 
 
 define build_module
@@ -80,7 +92,7 @@ debug-$(1): $(1)
 endef
 
 define build_module_v2
-# 在理解上面的v1的原理后，只需要确保call展开时，PRIVATE_M 有赋值就可以了，可以通过
+# 在理解上面的v1的原理后，只需要确保call展开时，PRIVATE_M 有赋值就可以了
 # 那么我们通过eval，就可以确保PRIVATE_M 在赋值时展开
 $(eval PRIVATE_M := $(notdir $(1)))
 $(eval PRIVATE_BIN := $(OUT)/$(PRIVATE_M)/src/$(PRIVATE_M)/$(PRIVATE_M).bin)
@@ -109,6 +121,8 @@ debug-$(1):
 		-monitor none \
 		-nographic -serial stdio \
 		-s -S
+clean-$(1):
+	cmake --build $(OUT)/$(PRIVATE_M) -- clean
 endef
 
 # instancize all module under src/*
