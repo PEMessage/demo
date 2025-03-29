@@ -17,10 +17,10 @@ add_subdirectory(lib/CMSIS)
 option(BUILD_HELLO_WORLD "Build hello_world module" ON)
 # option(BUILD_SVC_HANDLER "Build svc_handler module" OFF)
 
-if(BUILD_HELLO_WORLD)
+# if(BUILD_HELLO_WORLD)
   add_subdirectory(src/hello_world)
-endif()
+  add_subdirectory(src/svc_handler)
+# endif()
 
 # if(BUILD_SVC_HANDLER)
-#   add_subdirectory(src/svc_handler)
 # endif()

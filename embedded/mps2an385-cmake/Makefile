@@ -14,6 +14,7 @@ ifneq (,$(filter debug,$(MAKECMDGOALS)))
   # Add all target with `debug-prefix`, 
   DEBUG_GOALS := $(addprefix debug-,$(TEMP))
 else ifneq (,$(filter run,$(MAKECMDGOALS)))
+  # same as above
   $(warning $(MAKECMDGOALS))
   TEMP := $(filter-out run,$(MAKECMDGOALS))
   RUN_GOALS := $(addprefix run-,$(TEMP))
@@ -32,9 +33,9 @@ MODULES := $(wildcard src/*)
 help: 
 	@echo avaiable target: $(MODULES)
 debug: $(DEBUG_GOALS)
-	@echo avaiable target: $(DEBUG_GOALS)
+	@true # interface of debug-*
 run: $(RUN_GOALS)
-	@echo avaiable target: $(RUN_GOALS)
+	@true # interface of run-*
 .PHONY: help debug run
 
 
@@ -76,14 +77,44 @@ debug-$(1): $(1)
 		-monitor none \
 		-nographic -serial stdio \
 		-s -S
-$()
+endef
 
+define build_module_v2
+# 在理解上面的v1的原理后，只需要确保call展开时，PRIVATE_M 有赋值就可以了，可以通过
+# 那么我们通过eval，就可以确保PRIVATE_M 在赋值时展开
+$(eval PRIVATE_M := $(notdir $(1)))
+$(eval PRIVATE_BIN := $(OUT)/$(PRIVATE_M)/src/$(PRIVATE_M)/$(PRIVATE_M).bin)
+
+$(1):
+	@echo "=================================="
+	@echo "build module \"$(PRIVATE_M)\""
+	@echo "=================================="
+	mkdir -p $(OUT)/$(PRIVATE_M)
+	cmake -B $(OUT)/$(PRIVATE_M)
+	cmake --build $(OUT)/$(PRIVATE_M) -- $(PRIVATE_M)
+
+run-$(1):
+	qemu-system-arm \
+		-machine mps2-an385 \
+		-cpu cortex-m3 \
+		-kernel $(PRIVATE_BIN) \
+		-monitor none \
+		-nographic -serial stdio
+
+debug-$(1):
+	qemu-system-arm \
+		-machine mps2-an385 \
+		-cpu cortex-m3 \
+		-kernel $(PRIVATE_BIN) \
+		-monitor none \
+		-nographic -serial stdio \
+		-s -S
 endef
 
 # instancize all module under src/*
 $(foreach MODULE, \
 	$(MODULES),\
-	$(eval $(call build_module,$(MODULE))) \
+	$(eval $(call build_module_v2,$(MODULE))) \
 )
 	# $(info $(call build_module,$(MODULE))) \
 

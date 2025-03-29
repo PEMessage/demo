@@ -1,9 +1,9 @@
-# SVC Handler Module
+# Hello World Module
 cmake_minimum_required(VERSION 3.12)
-project(svc_handler LANGUAGES C ASM)
+project(hello_world LANGUAGES C ASM)
 
 # Set module name
-set(MODULE_NAME svc_handler)
+set(MODULE_NAME hello_world)
 
 # Source files
 file(GLOB SRCS *.c)
@@ -23,10 +23,10 @@ target_include_directories(${MODULE_NAME} PRIVATE
 )
 
 # Linker script and flags
-target_link_options(${MODULE_NAME} PRIVATE
-    -T ${CMAKE_SOURCE_DIR}/lib/CMSDK_CM3/Source/gcc_arm.ld
-    --entry=Reset_Handler
-)
+# target_link_options(${MODULE_NAME} PRIVATE
+#     -T ${CMAKE_SOURCE_DIR}/lib/CMSDK_CM3/Source/gcc_arm.ld
+#     --entry=Reset_Handler
+# )
 
 # Output files
 set(BIN_FILE ${CMAKE_CURRENT_BINARY_DIR}/${MODULE_NAME}.bin)
