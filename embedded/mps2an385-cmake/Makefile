@@ -94,15 +94,18 @@ define build_module_v2
 # 在理解上面的v1的原理后，只需要确保call展开时，PRIVATE_M 有赋值就可以了
 # 那么我们通过eval，就可以确保PRIVATE_M 在赋值时展开
 $(eval PRIVATE_M := $(notdir $(1)))
-$(eval PRIVATE_BIN := $(OUT)/$(PRIVATE_M)/src/$(PRIVATE_M)/$(PRIVATE_M).bin)
+$(eval PRIVATE_OUT := $(OUT)/$(PRIVATE_M))
+$(eval PRIVATE_BIN := $(PRIVATE_OUT)/src/$(PRIVATE_M)/$(PRIVATE_M).bin)
 
 $(1):
 	@echo "=================================="
 	@echo "build module \"$(PRIVATE_M)\""
 	@echo "=================================="
 	mkdir -p $(OUT)/$(PRIVATE_M)
-	cmake -B $(OUT)/$(PRIVATE_M)
-	cmake --build $(OUT)/$(PRIVATE_M) -- $(PRIVATE_M)
+	cmake -B $(OUT)/$(PRIVATE_M) -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+	cmake --build $(OUT)/$(PRIVATE_M) -- $(PRIVATE_M) VERBOSE=1 && \
+		rm -rf compile_commands.json && \
+		ln -s $(PRIVATE_OUT)/compile_commands.json compile_commands.json
 
 run-$(1):
 	qemu-system-arm \
