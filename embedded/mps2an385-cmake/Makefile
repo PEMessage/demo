@@ -47,9 +47,8 @@ $(eval $(call define_subcmds,clean run debug))
 
 
 # ====================================================
-# Configuration check
+# module templete
 # ====================================================
-
 
 define build_module
 # Why: var-$(1)
@@ -125,11 +124,12 @@ clean-$(1):
 	cmake --build $(OUT)/$(PRIVATE_M) -- clean
 endef
 
-# instancize all module under src/*
+# ====================================================
+# Instance all module under src/*
+# ====================================================
 $(foreach MODULE, \
 	$(MODULES),\
 	$(eval $(call build_module_v2,$(MODULE))) \
 )
-	# $(info $(call build_module,$(MODULE))) \
 
 .PHONY: $(MODULES)
