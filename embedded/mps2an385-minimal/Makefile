@@ -76,9 +76,9 @@ SRCS    := lib/CMSDK_CM3/Source/startup_CMSDK_CM3.c lib/CMSDK_CM3/Source/system_
 # 	CFLAGS += -specs=nano.specs
 # 	CFLAGS  += -lnosys -lm
 LDFLAGS += -specs=nosys.specs -lnosys
-SRCS    += lib/CMSIS/Driver/USART_V2M-MPS2.c lib/CMSDK_CM3/Source/stdout_USART.c
+SRCS    += lib/CMSDK_CM3/Source/USART_V2M-MPS2.c lib/CMSDK_CM3/Source/stdout_USART.c
 CFLAGS  += -Ilib/CMSDK_CM3/Include/
-CFLAGS  += -Ilib/CMSIS/Driver  -Ilib/CMSIS/Driver/Include
+CFLAGS  += -Ilib/CMSIS/Driver/Include
 
 # ====================================================
 # Step 3, User code
