@@ -13,10 +13,6 @@ project(mps2an385-minimal LANGUAGES C ASM)
 add_subdirectory(lib/CMSDK_CM3)
 add_subdirectory(lib/CMSIS)
 
-# Add modules (built separately via their own CMakeLists)
-option(BUILD_HELLO_WORLD "Build hello_world module" ON)
-# option(BUILD_SVC_HANDLER "Build svc_handler module" OFF)
-
 # Credit: deepseek-v3-0324
 macro(add_executable_with_binaries MODULE_NAME)
     add_executable(${MODULE_NAME} ${ARGN})
@@ -27,10 +23,6 @@ macro(add_executable_with_binaries MODULE_NAME)
     )
 endmacro()
 
-# if(BUILD_HELLO_WORLD)
-  add_subdirectory(src/hello_world)
-  add_subdirectory(src/svc_handler)
-# endif()
-
-# if(BUILD_SVC_HANDLER)
-# endif()
+add_subdirectory(src/hello_world)
+add_subdirectory(src/svc_handler)
+add_subdirectory(src/hello_world_systick)

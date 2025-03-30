@@ -103,7 +103,7 @@ $(1):
 	@echo "=================================="
 	mkdir -p $(OUT)/$(PRIVATE_M)
 	cmake -B $(OUT)/$(PRIVATE_M) -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-	cmake --build $(OUT)/$(PRIVATE_M) -- $(PRIVATE_M) VERBOSE=1 && \
+	cmake --build $(OUT)/$(PRIVATE_M) -- $(PRIVATE_M) && \
 		rm -rf compile_commands.json && \
 		ln -s $(PRIVATE_OUT)/compile_commands.json compile_commands.json
 
