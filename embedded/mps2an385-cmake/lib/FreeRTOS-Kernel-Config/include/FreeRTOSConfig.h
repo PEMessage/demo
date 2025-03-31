@@ -60,13 +60,13 @@
 #define configUSE_RECURSIVE_MUTEXES              1
 #define configCHECK_FOR_STACK_OVERFLOW           0
 #define configUSE_MALLOC_FAILED_HOOK             0
-#define configUSE_QUEUE_SETS                     0
-#define configUSE_COUNTING_SEMAPHORES            0
+#define configUSE_QUEUE_SETS                     1
+#define configUSE_COUNTING_SEMAPHORES            1
 
-#define configMAX_PRIORITIES                     ( 9UL )
+#define configMAX_PRIORITIES                     ( 6UL )
 #define configMAX_CO_ROUTINE_PRIORITIES          ( 2 )
 #define configQUEUE_REGISTRY_SIZE                10
-// #define configSUPPORT_STATIC_ALLOCATION          1
+#define configSUPPORT_STATIC_ALLOCATION          0
 
 /* Timer related defines. */
 #define configUSE_TIMERS                         1
@@ -101,9 +101,9 @@
  * format the raw data provided by the uxTaskGetSystemState() function in to human
  * readable ASCII form.  See the notes in the implementation of vTaskList() within
  * FreeRTOS/Source/tasks.c for limitations. */
-// #define configUSE_STATS_FORMATTING_FUNCTIONS      0
+#define configUSE_STATS_FORMATTING_FUNCTIONS      0
 
-#define configKERNEL_INTERRUPT_PRIORITY           ( 255 )        /* All eight bits as QEMU doesn't model the priority bits. */
+#define configKERNEL_INTERRUPT_PRIORITY           ( 7 )        /* All eight bits as QEMU doesn't model the priority bits. */
 
 
 /* !!!! configMAX_SYSCALL_INTERRUPT_PRIORITY must not be set to zero !!!!
@@ -123,11 +123,11 @@
  * machine on which the test is developed). */
 #define configSTREAM_BUFFER_TRIGGER_LEVEL_TEST_MARGIN    4
 
-#ifndef __IASMARM__ /* Prevent C code being included in IAR asm files. */
-    void vAssertCalled( const char * pcFileName,
-                        uint32_t ulLine );
-    #define configASSERT( x )    if( ( x ) == 0 ) vAssertCalled( __FILE__, __LINE__ );
-#endif
+// #ifndef __IASMARM__ /* Prevent C code being included in IAR asm files. */
+//     void vAssertCalled( const char * pcFileName,
+//                         uint32_t ulLine );
+//     #define configASSERT( x )    if( ( x ) == 0 ) vAssertCalled( __FILE__, __LINE__ );
+// #endif
 
 #define intqHIGHER_PRIORITY      ( configMAX_PRIORITIES - 5 )
 #define bktPRIMARY_PRIORITY      ( configMAX_PRIORITIES - 3 )
@@ -136,8 +136,9 @@
 #define configENABLE_BACKWARD_COMPATIBILITY 0
 
 /* TODO TraceRecorder (Step 5): Include trcRecorder.h at the end of FreeRTOSConfig.h. */
-#ifndef __IASMARM__
-    #include "trcRecorder.h"
-#endif
+// #ifndef __IASMARM__
+//     #include "trcRecorder.h"
+// #endif
+
 
 #endif /* FREERTOS_CONFIG_H */

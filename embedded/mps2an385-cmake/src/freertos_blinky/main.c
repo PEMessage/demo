@@ -21,7 +21,6 @@ void setup() {
 void TaskTest() {
     while(1) {
         printf("Hi\n");
-        vTaskDelay( SystemCoreClock / 30 ) ;
     }
 
 }
