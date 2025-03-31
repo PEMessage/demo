@@ -123,11 +123,11 @@
  * machine on which the test is developed). */
 #define configSTREAM_BUFFER_TRIGGER_LEVEL_TEST_MARGIN    4
 
-// #ifndef __IASMARM__ /* Prevent C code being included in IAR asm files. */
-//     void vAssertCalled( const char * pcFileName,
-//                         uint32_t ulLine );
-//     #define configASSERT( x )    if( ( x ) == 0 ) vAssertCalled( __FILE__, __LINE__ );
-// #endif
+#ifndef __IASMARM__ /* Prevent C code being included in IAR asm files. */
+    void vAssertCalled( const char * pcFileName,
+                        uint32_t ulLine );
+    #define configASSERT( x )    if( ( x ) == 0 ) vAssertCalled( __FILE__, __LINE__ );
+#endif
 
 #define intqHIGHER_PRIORITY      ( configMAX_PRIORITIES - 5 )
 #define bktPRIMARY_PRIORITY      ( configMAX_PRIORITIES - 3 )
