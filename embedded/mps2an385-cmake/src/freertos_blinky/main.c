@@ -12,15 +12,30 @@ void NVIC_Init() {
     }
 }
 
+void SysTick_Init() {
+    SysTick_Config(SystemCoreClock / 1000); // 1000 Hz
+    NVIC_EnableIRQ(SysTick_IRQn);
+}
+
 void setup() {
     extern int stdout_init (void);
     stdout_init();
+    SysTick_Init();
     NVIC_Init();
 }
 
-void TaskTest() {
+void TaskPing() {
     while(1) {
-        printf("Hi\n");
+        printf("Ping!\n");
+        vTaskDelay(1000);
+    }
+
+}
+
+void TaskPong() {
+    while(1) {
+        printf("Pong!\n");
+        vTaskDelay(1700);
     }
 
 }
@@ -29,8 +44,14 @@ void TaskTest() {
 int main() {
     setup();
     printf("Init complete\n");
-    xTaskCreate( TaskTest,
-            "Task1",
+    xTaskCreate( TaskPing,
+            "TaskPing",
+            configMINIMAL_STACK_SIZE + 3*1024,
+            NULL,
+            (tskIDLE_PRIORITY + 1),
+            NULL );
+    xTaskCreate( TaskPong,
+            "TaskPong",
             configMINIMAL_STACK_SIZE + 3*1024,
             NULL,
             (tskIDLE_PRIORITY + 1),
