@@ -12,6 +12,8 @@ project(mps2an385-minimal LANGUAGES C ASM)
 # Add libraries
 add_subdirectory(lib/CMSDK_CM3)
 add_subdirectory(lib/CMSIS)
+add_subdirectory(lib/FreeRTOS-Kernel-Config)
+add_subdirectory(lib/FreeRTOS-Kernel)
 
 # Credit: deepseek-v3-0324
 macro(add_executable_with_binaries MODULE_NAME)
@@ -26,3 +28,4 @@ endmacro()
 add_subdirectory(src/hello_world)
 add_subdirectory(src/svc_handler)
 add_subdirectory(src/hello_world_systick)
+add_subdirectory(src/freertos_blinky)
