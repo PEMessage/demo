@@ -41,15 +41,23 @@ EVP_PKEY *load_pubkey(const char *filename) {
     const unsigned char *p = file_buf;
     EVP_PKEY *pkey = NULL;
 
-    // First try d2i_PUBKEY (standard format)
+    // First try d2i_PUBKEY (expect a SubjectPublicKeyInfo format)
     pkey = d2i_PUBKEY(NULL, &p, file_len);
     if (pkey != NULL) {
         free(file_buf);
         return pkey;
     }
-
-    // If that failed, reset and try PKCS#1 format for RSA
     ERR_clear_error();
+    ERR_print_errors_fp(stderr);
+
+    // If that failed, reset and try PKCS#1 / PKCS#8 format for RSA
+    // Doc:
+    //      i2d_PrivateKey() encodes a. It uses a key specific format or, 
+    //      if none is defined for that key type, PKCS#8 unencrypted PrivateKeyInfo format.
+    //      i2d_PublicKey() does the same for public keys.
+    // Different about d2i_PublicKey / d2i_PUBKEY : Also See:
+    //      https://stackoverflow.com/questions/67717197/what-is-the-difference-between-openssl-functions-d2i-publickey-d2i-pubkey-an
+    //      https://stackoverflow.com/questions/76683427/extracting-the-encoded-public-key-from-rsa-key-pair-in-openssl-3/76684263#76684263
     p = file_buf;
     pkey = d2i_PublicKey(EVP_PKEY_RSA, NULL, &p, file_len);
     if (pkey != NULL) {
@@ -58,9 +66,22 @@ EVP_PKEY *load_pubkey(const char *filename) {
     }
 
     // If that failed, reset and try PKCS#1 format for EC
+    // Update: PKCS#1 is RSA only 
+    //  There is no such thing as an "EC key in PKCS#1 format":
+    //  PKCS#1 is only for RSA keys, not EC keys.
+    //  However, there is another format, analogous to PKCS#1 but made for EC keys, and defined in SEC 1.
+    //  OpenSSL can convert that format into the generic PKCS#8 with the "openssl pkcs8" command, and back into SEC 1 format with "openssl ec".
+    // Also See:
+    //  https://security.stackexchange.com/questions/84327/converting-ecc-private-key-to-pkcs1-format
+#if 0
+    // Err:
+    //  To decode a key with type EVP_PKEY_EC,
+    //  d2i_PublicKey() requires *a to be a non-NULL EVP_PKEY structure assigned an EC_KEY structure referencing the proper EC_GROUP.
+    // Also See: openssl document
     ERR_clear_error();
     p = file_buf;
     pkey = d2i_PublicKey(EVP_PKEY_EC, NULL, &p, file_len);
+#endif
 
     free(file_buf);
     return pkey;
