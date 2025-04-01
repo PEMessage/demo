@@ -33,3 +33,9 @@ target_link_libraries(compare_pubkey PRIVATE
   OpenSSL::SSL
   OpenSSL::Crypto
 )
+
+add_executable(convert_raw_pubkey src/convert_raw_pubkey/main.c)
+target_link_libraries(convert_raw_pubkey PRIVATE
+  OpenSSL::SSL
+  OpenSSL::Crypto
+)
