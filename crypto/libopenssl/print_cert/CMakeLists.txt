@@ -21,9 +21,15 @@ add_compile_options(-fsanitize=address)
 add_link_options(-fsanitize=address)
 
 # Add executable
-add_executable(print_cert main.c)
 # Link OpenSSL libraries (this will not work as-is - see explanation)
+add_executable(print_cert src/print_cert/main.c)
 target_link_libraries(print_cert PRIVATE
+  OpenSSL::SSL
+  OpenSSL::Crypto
+)
+
+add_executable(compare_pubkey src/compare_pubkey/main.c)
+target_link_libraries(compare_pubkey PRIVATE
   OpenSSL::SSL
   OpenSSL::Crypto
 )

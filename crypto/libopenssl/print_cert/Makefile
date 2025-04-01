@@ -1,12 +1,12 @@
 
 
-run:all test/ecc/cert.der test/rsa/cert.der
-	./build/print_cert test/ecc/cert.der
-	./build/print_cert test/rsa/cert.der
+# run:all test/ecc/cert.der test/rsa/cert.der
+# 	./build/print_cert test/ecc/cert.der
+# 	./build/print_cert test/rsa/cert.der
 
-run32:all test/ecc/cert.der test/rsa/cert.der
-	./build32/print_cert test/ecc/cert.der
-	./build32/print_cert test/rsa/cert.der
+# run32:all test/ecc/cert.der test/rsa/cert.der
+# 	./build32/print_cert test/ecc/cert.der
+# 	./build32/print_cert test/rsa/cert.der
 
 all:
 	mkdir -p build && \
