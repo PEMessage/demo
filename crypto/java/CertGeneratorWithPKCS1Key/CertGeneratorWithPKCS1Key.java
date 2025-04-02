@@ -1,6 +1,8 @@
+import java.io.FileOutputStream;
 import java.io.FileInputStream;
 import java.math.BigInteger;
 import java.security.*;
+import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.security.spec.RSAPublicKeySpec;
 import java.security.spec.X509EncodedKeySpec;
@@ -20,9 +22,12 @@ public class CertGeneratorWithPKCS1Key {
 
     public static void main(String[] args) throws Exception {
         if (args.length < 1) {
-            System.err.println("Usage: java CertGeneratorWithPKCS1Key <pkcs1-public-key.der>");
+            System.err.println("Usage: java CertGeneratorWithPKCS1Key <pkcs1-public-key.der> [output.der]");
             System.exit(1);
         }
+
+        System.out.println(args.length);
+        String outputFilename = args.length > 1 ? args[1] : null;
 
         // Load BouncyCastle provider
         Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
@@ -50,11 +55,23 @@ public class CertGeneratorWithPKCS1Key {
         System.out.println("Valid from: " + certificate.getNotBefore());
         System.out.println("Valid until: " + certificate.getNotAfter());
         System.out.println("Public Key Algorithm: " + certificate.getPublicKey().getAlgorithm());
+        
+        // 6. Write certificate to DER file
+        if ( outputFilename != null ) {
+            writeDerFile(certificate, outputFilename);
+            System.out.println("Certificate written to " + outputFilename);
+        }
     }
 
     private static byte[] readFile(String filename) throws Exception {
         try (FileInputStream fis = new FileInputStream(filename)) {
             return fis.readAllBytes();
+        }
+    }
+
+    private static void writeDerFile(X509Certificate certificate, String filename) throws Exception {
+        try (FileOutputStream fos = new FileOutputStream(filename)) {
+            fos.write(certificate.getEncoded());
         }
     }
 
