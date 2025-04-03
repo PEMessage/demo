@@ -39,3 +39,12 @@ LOG_double_sharp(1, "%s")
 
 REGISTER_SYSTEM_ABILITY_BY_ID(TestService, TESTSERVICE_SA_ID, true)
 // const bool TestService_RegisterResult = SystemAbility::MakeAndRegisterAbility(new TestService(TESTSERVICE_SA_ID, true));
+
+#define STR(x) #x
+#define STRINGIFY(x) STR(x)
+#define FILE_LINE __FILE__ ":" STRINGIFY(__LINE__)
+FILE_LINE
+// 直接使用STR(__LINE__)会得到：
+// STR(__LINE__) → "__LINE__"
+// 使用STRINGIFY(__LINE__)会：
+// STRINGIFY(__LINE__) → STR(123) → "123"  // 假设当前行号是123
