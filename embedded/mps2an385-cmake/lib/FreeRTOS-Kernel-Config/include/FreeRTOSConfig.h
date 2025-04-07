@@ -27,6 +27,8 @@
 #ifndef FREERTOS_CONFIG_H
 #define FREERTOS_CONFIG_H
 
+#include "CMSDK_CM3.h" // 
+
 /*-----------------------------------------------------------
 * Application specific definitions.
 *
@@ -103,7 +105,10 @@
  * FreeRTOS/Source/tasks.c for limitations. */
 #define configUSE_STATS_FORMATTING_FUNCTIONS      0
 
-#define configKERNEL_INTERRUPT_PRIORITY           ( 7 )        /* All eight bits as QEMU doesn't model the priority bits. */
+// #define configKERNEL_INTERRUPT_PRIORITY           ( ( 1 <<  __NVIC_PRIO_BITS ) - 1 )  // Using bit we only have
+// Accroiding to https://www.freertos.org/Documentation/02-Kernel/03-Supported-devices/04-Demos/ARM-Cortex/RTOS-Cortex-M3-M4#relevance-when-using-the-rtos-3
+// We always safe to set 255, it always represent lowest, and by doing this, we could remove depeend of CMSDK_CM3
+#define configKERNEL_INTERRUPT_PRIORITY           ( ( 1 <<  __NVIC_PRIO_BITS ) - 1 ) 
 
 
 /* !!!! configMAX_SYSCALL_INTERRUPT_PRIORITY must not be set to zero !!!!
