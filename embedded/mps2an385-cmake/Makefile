@@ -96,6 +96,7 @@ define build_module_v2
 $(eval PRIVATE_M := $(notdir $(1)))
 $(eval PRIVATE_OUT := $(OUT)/$(PRIVATE_M))
 $(eval PRIVATE_BIN := $(PRIVATE_OUT)/src/$(PRIVATE_M)/$(PRIVATE_M).bin)
+$(eval PRIVATE_ELF := $(PRIVATE_OUT)/src/$(PRIVATE_M)/$(PRIVATE_M))
 
 $(1):
 	@echo "=================================="
@@ -116,6 +117,9 @@ run-$(1):
 		-nographic -serial stdio
 
 debug-$(1):
+	@echo '======================='
+	@echo 'gdb-multiarch -x "target remote :1234" $(PRIVATE_ELF)'
+	@echo '======================='
 	qemu-system-arm \
 		-machine mps2-an385 \
 		-cpu cortex-m3 \
