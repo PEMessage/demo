@@ -48,3 +48,8 @@ FILE_LINE
 // STR(__LINE__) → "__LINE__"
 // 使用STRINGIFY(__LINE__)会：
 // STRINGIFY(__LINE__) → STR(123) → "123"  // 假设当前行号是123
+void test_func() {
+    printf("Hello world :" STR(__func__));
+    // printk("Hello world :" "__func__"); // do not met our requirement
+    // __func__ is a local variable, not a macro
+}
