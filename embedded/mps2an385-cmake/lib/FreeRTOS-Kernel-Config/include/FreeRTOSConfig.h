@@ -60,7 +60,7 @@
 #define configUSE_CO_ROUTINES                    0
 #define configUSE_MUTEXES                        1
 #define configUSE_RECURSIVE_MUTEXES              1
-#define configCHECK_FOR_STACK_OVERFLOW           1
+#define configCHECK_FOR_STACK_OVERFLOW           2
 #define configUSE_MALLOC_FAILED_HOOK             0
 #define configUSE_QUEUE_SETS                     1
 #define configUSE_COUNTING_SEMAPHORES            1
