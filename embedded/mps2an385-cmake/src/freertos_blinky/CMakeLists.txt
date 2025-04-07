@@ -17,6 +17,7 @@ target_link_libraries(${MODULE_NAME}
     CMSIS
     freertos_kernel
     freertos_config
+    freertos_hook
 )
 
 # Include directories

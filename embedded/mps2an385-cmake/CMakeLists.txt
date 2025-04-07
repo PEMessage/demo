@@ -13,6 +13,7 @@ project(mps2an385-minimal LANGUAGES C ASM)
 add_subdirectory(lib/CMSDK_CM3)
 add_subdirectory(lib/CMSIS)
 add_subdirectory(lib/FreeRTOS-Kernel-Config)
+add_subdirectory(lib/FreeRTOS-Hook)
 add_subdirectory(lib/FreeRTOS-Kernel)
 
 # Credit: deepseek-v3-0324
