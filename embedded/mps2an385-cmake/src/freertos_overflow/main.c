@@ -17,10 +17,12 @@ void setup() {
     NVIC_Init();
 }
 
-void TaskPing() {
+void TaskMonitor() {
+    TaskHandle_t xTask = xTaskGetHandle("TaskOverFlow"); // 获取任务句柄
     while(1) {
-        printf("Ping!\n");
-        vTaskDelay(300);
+        UBaseType_t highWaterMark = uxTaskGetStackHighWaterMark(xTask);
+        printf("Overflow HighWaterMark is %d !\n", highWaterMark);
+        vTaskDelay(30);
     }
 }
 
@@ -43,8 +45,8 @@ void TaskOverFlow() {
 int main() {
     setup();
     printf("Init complete\n");
-    xTaskCreate( TaskPing,
-            "TaskPing",
+    xTaskCreate( TaskMonitor,
+            "TaskMonitor",
             configMINIMAL_STACK_SIZE + 3*1024,
             NULL,
             (tskIDLE_PRIORITY + 1),
