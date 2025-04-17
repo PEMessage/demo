@@ -14,7 +14,7 @@ typedef unsigned char CHAR; // this work fine
 	    CHAR str[17];\
 	    printf("[%s:%d]: "fmt"\n",__FILE__,__LINE__, ##args );\
 	    printf(" Offset    0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f\n" );\
-	    for (i = 0; i < len; i++)\
+	    for (i = 0; i < (len) ; i++)\
 	    {\
 	        if (i % 16 == 0)\
 	            printf("%08x  ", i/16);\
@@ -32,12 +32,12 @@ typedef unsigned char CHAR; // this work fine
 	            printf("\n");\
 	        }\
 	    }\
-	    if (len % 16 != 0 )\
+	    if ((len) % 16 != 0 )\
 	    {\
-	        for (i = 0; i < (16 - (len % 16)); i++)\
+	        for (i = 0; i < (16 - ((len) % 16)); i++)\
 	            printf("   ");\
 	        printf( " |");\
-	        str[len % 16+1] = '\0';\
+	        str[(len) % 16+1] = '\0';\
 	        printf( "%s", str);\
 	        printf("|");\
 	        printf("\n");\
@@ -72,7 +72,7 @@ int main(int argc, char *argv[]) {
     fread(buf, 1, fsize, file);
     buf[fsize] = '\0'; // null terminate the buffer for safety
 
-    XXD(fsize, buf, "Hex dump of %s", argv[1]);
+    XXD(fsize, buf, "Hex dump of");
 
     free(buf);
     fclose(file);
