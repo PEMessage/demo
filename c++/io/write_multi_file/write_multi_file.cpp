@@ -123,12 +123,15 @@ int main() {
     
     benchmark("Sequential", write_sequential, paths, contentX);
     if (!verify_files(paths, contentX)) return 1;
-    
-    benchmark("Sendfile  ", write_sendfile, paths, contentY);
+
+    benchmark("Parallel  ", write_parallel, paths, contentY);
     if (!verify_files(paths, contentY)) return 1;
     
-    benchmark("MMap      ", write_mmap, paths, contentZ);
+    benchmark("Sendfile  ", write_sendfile, paths, contentZ);
     if (!verify_files(paths, contentZ)) return 1;
+    
+    benchmark("MMap      ", write_mmap, paths, contentX);
+    if (!verify_files(paths, contentX)) return 1;
     
     // Clean up
     for (const auto& path : paths) {
