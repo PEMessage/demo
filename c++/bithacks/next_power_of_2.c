@@ -3,6 +3,9 @@
 #include <stdint.h>
 #include <sys/time.h>
 
+// Thanks to: https://graphics.stanford.edu/~seander/bithacks.html
+// Thanks to: https://www.zhihu.com/question/27417946/answer/1253126563
+
 typedef uint32_t (*power_func)(uint32_t);
 
 uint32_t next_power_of_2(uint32_t x) {
