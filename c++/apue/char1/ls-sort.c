@@ -70,15 +70,6 @@ int dynamic_array_append_str(DynamicArray *array, const char *str) {
 /* Main Program Logic */
 /* ====================== */
 
-// Comparison function for qsort
-static int compare(const void *a, const void *b) {
-    return strcmp(*(const char **)a, *(const char **)b);
-}
-
-static void free_string(void *str) {
-    free(str);
-}
-
 int main(int argc, char *argv[]) {
     DIR *dp;
     struct dirent *dirp;
@@ -105,14 +96,14 @@ int main(int argc, char *argv[]) {
         tmp = strdup(dirp->d_name);
         if (!dynamic_array_append(&entries, &tmp)) {
             perror("Memory allocation failed");
-            dynamic_array_free_pointer_array(&entries, free_string);
+            dynamic_array_free_pointer_array(&entries, free);
             closedir(dp);
             exit(1);
         }
     }
 
     // Sort entries
-    qsort(entries.items, entries.count, entries.item_size, compare);
+    qsort(entries.items, entries.count, entries.item_size, (int (*)(const void *, const void *))&strcmp);
 
     // Print sorted entries
     for (size_t i = 0; i < entries.count; i++) {
