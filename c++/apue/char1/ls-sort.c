@@ -47,14 +47,12 @@ void dynamic_array_free(DynamicArray *array) {
     array->capacity = 0;
 }
 
-/* ====================== */
-/* String-specific helpers */
-/* ====================== */
+
 
 int dynamic_array_append_str(DynamicArray *array, const char *str) {
+
     return dynamic_array_append(array, &str);
 }
-
 
 /* ====================== */
 /* Main Program Logic */
@@ -87,7 +85,7 @@ int main(int argc, char *argv[]) {
 
     // Read directory entries
     while ((dirp = readdir(dp)) != NULL) {
-        if (!dynamic_array_append_str(&entries, dirp->d_name)) {
+        if (!dynamic_array_append_str( &entries, dirp->d_name )) {
             perror("Memory allocation failed");
             closedir(dp);
             exit(1);
