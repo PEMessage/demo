@@ -47,11 +47,23 @@ void dynamic_array_free(DynamicArray *array) {
     array->capacity = 0;
 }
 
-
+void dynamic_array_free_pointer_array(DynamicArray *array, void (*free_item)(void*)) {
+    if (free_item) {
+        for (size_t i = 0; i < array->count; i++) {
+            void *item = *(void**)((char*)array->items + i * array->item_size);
+            free_item(item);
+        }
+    }
+    dynamic_array_free(array);
+}
 
 int dynamic_array_append_str(DynamicArray *array, const char *str) {
-
-    return dynamic_array_append(array, &str);
+    char *str_copy = strdup(str);
+    if (!str_copy) return 0;
+    
+    int result = dynamic_array_append(array, &str_copy);
+    if (!result) free(str_copy);
+    return result;
 }
 
 /* ====================== */
@@ -61,6 +73,10 @@ int dynamic_array_append_str(DynamicArray *array, const char *str) {
 // Comparison function for qsort
 static int compare(const void *a, const void *b) {
     return strcmp(*(const char **)a, *(const char **)b);
+}
+
+static void free_string(void *str) {
+    free(str);
 }
 
 int main(int argc, char *argv[]) {
@@ -84,9 +100,12 @@ int main(int argc, char *argv[]) {
     }
 
     // Read directory entries
+    const char *tmp ;
     while ((dirp = readdir(dp)) != NULL) {
-        if (!dynamic_array_append_str( &entries, dirp->d_name )) {
+        tmp = strdup(dirp->d_name);
+        if (!dynamic_array_append(&entries, &tmp)) {
             perror("Memory allocation failed");
+            dynamic_array_free_pointer_array(&entries, free_string);
             closedir(dp);
             exit(1);
         }
@@ -102,7 +121,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Clean up
-    dynamic_array_free(&entries);
+    dynamic_array_free_pointer_array(&entries, free);
     closedir(dp);
 
     return 0;
