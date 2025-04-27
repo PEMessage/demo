@@ -29,9 +29,22 @@ macro(add_executable_with_binaries MODULE_NAME)
     )
 endmacro()
 
-add_subdirectory(src/hello_world)
-add_subdirectory(src/svc_handler)
-add_subdirectory(src/hello_world_systick)
-add_subdirectory(src/freertos_blinky)
-add_subdirectory(src/freertos_overflow)
-add_subdirectory(src/freertos_stackgrow_mallocgrow)
+# add_subdirectory(src/hello_world)
+# add_subdirectory(src/svc_handler)
+# add_subdirectory(src/hello_world_systick)
+# add_subdirectory(src/freertos_blinky)
+# add_subdirectory(src/freertos_overflow)
+# add_subdirectory(src/freertos_stackgrow_mallocgrow)
+
+# Iterate through all directories under src/ and add them as subdirectories.
+# This assumes each directory under src/ is a CMake project.
+# This is more robust and avoids manually listing each subdirectory.
+
+file(GLOB subdirectories src/*)
+message("${subdirectories}")
+
+foreach(subdir ${subdirectories})
+  if(IS_DIRECTORY "${subdir}")
+    add_subdirectory(${subdir})
+  endif()
+endforeach()
