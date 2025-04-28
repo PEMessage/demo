@@ -51,35 +51,52 @@ size_t ringbuffer_available_write(const RingBuffer *rb) {
     return rb->size - ringbuffer_available_read(rb);
 }
 
-// Read data from the ring buffer
-size_t ringbuffer_read(RingBuffer *rb, char *data, size_t count) {
+
+
+// Helper function that implements the core read logic
+static size_t ringbuffer_read_internal(RingBuffer *rb, char *data, size_t count, bool update_buffer) {
     if (!rb || !data || count == 0) return 0;
-    
+
     size_t available = ringbuffer_available_read(rb);
     if (available == 0) return 0;
-    
+
     if (count > available) count = available;
-    
-    size_t bytes_to_read = count;
+
     size_t bytes_read = 0;
-    
+    size_t head = rb->head;  // Use local copy of head
+
     // First possible contiguous block (from head to end of buffer or wrap around)
-    size_t chunk = (rb->head + count > rb->size) ? (rb->size - rb->head) : count;
-    memcpy(data, rb->buffer + rb->head, chunk);
-    
+    size_t chunk = (head + count > rb->size) ? (rb->size - head) : count;
+    memcpy(data, rb->buffer + head, chunk);
+
     bytes_read += chunk;
-    rb->head = (rb->head + chunk) % rb->size;
-    
+    head = (head + chunk) % rb->size;
+
     // Second possible block (if we wrapped around)
     if (bytes_read < count) {
         size_t remaining = count - bytes_read;
-        memcpy(data + bytes_read, rb->buffer + rb->head, remaining);
-        rb->head = (rb->head + remaining) % rb->size;
+        memcpy(data + bytes_read, rb->buffer + head, remaining);
+        head = (head + remaining) % rb->size;
         bytes_read += remaining;
     }
-    
-    rb->full = false;
+
+    if (update_buffer) {
+        // Cast away const to update the original buffer (only for ringbuffer_read)
+        ((RingBuffer *)rb)->head = head;
+        ((RingBuffer *)rb)->full = false;
+    }
+
     return bytes_read;
+}
+
+// Read data from the ring buffer
+size_t ringbuffer_read(RingBuffer *rb, char *data, size_t count) {
+    return ringbuffer_read_internal(rb, data, count, true);
+}
+
+// Read data from the ring buffer without modifying buffer state (const version)
+size_t ringbuffer_peek(RingBuffer *rb, char *data, size_t count) {
+    return ringbuffer_read_internal(rb, data, count, false);
 }
 
 // Write data to the ring buffer
@@ -116,6 +133,7 @@ size_t ringbuffer_write(RingBuffer *rb, const char *data, size_t count) {
     
     return bytes_written;
 }
+
 
 // Get a pointer to the element at position index (0-based, relative to head)
 // Returns NULL if index is out of bounds
@@ -275,12 +293,58 @@ void test_edge_cases() {
     printf("Edge cases test passed!\n\n");
 }
 
+void test_peek_operations() {
+    printf("=== Testing peek operations ===\n");
+    RingBuffer *rb = ringbuffer_init(5);
+    assert(rb != NULL);
+
+    // Test peek on empty buffer
+    char peek_buf[5] = {0};
+    assert(ringbuffer_peek(rb, peek_buf, 3) == 0);
+
+    // Write some data
+    assert(ringbuffer_write(rb, "ABC", 3) == 3);
+
+    // Test peek without wrap-around
+    assert(ringbuffer_peek(rb, peek_buf, 2) == 2);
+    assert(strncmp(peek_buf, "AB", 2) == 0);
+    assert(ringbuffer_available_read(rb) == 3);  // Verify buffer state unchanged
+
+    // Test peek entire available data
+    memset(peek_buf, 0, sizeof(peek_buf));
+    assert(ringbuffer_peek(rb, peek_buf, 3) == 3);
+    assert(strncmp(peek_buf, "ABC", 3) == 0);
+    assert(ringbuffer_available_read(rb) == 3);  // Verify buffer state unchanged
+
+    // Test peek with wrap-around
+    assert(ringbuffer_read(rb, peek_buf, 2) == 2);  // Move head forward
+    assert(ringbuffer_write(rb, "DE", 2) == 2);     // Create wrap-around
+
+    memset(peek_buf, 0, sizeof(peek_buf));
+    assert(ringbuffer_peek(rb, peek_buf, 3) == 3);  // Should read C, D, E
+    assert(strncmp(peek_buf, "CDE", 3) == 0);
+    assert(ringbuffer_available_read(rb) == 3);      // Verify buffer state unchanged
+
+    // Test peek with count larger than available
+    memset(peek_buf, 0, sizeof(peek_buf));
+    assert(ringbuffer_peek(rb, peek_buf, 10) == 3);  // Only 3 bytes available
+    assert(strncmp(peek_buf, "CDE", 3) == 0);
+
+    // Test NULL pointer handling
+    assert(ringbuffer_peek(NULL, peek_buf, 3) == 0);
+    assert(ringbuffer_peek(rb, NULL, 3) == 0);
+
+    ringbuffer_free(rb);
+    printf("Peek operations test passed!\n\n");
+}
+
 int main() {
     test_basic_operations();
     test_wrap_around();
     test_full_and_empty();
     test_random_access();
     test_edge_cases();
+    test_peek_operations();
 
     printf("All tests passed successfully!\n");
     return 0;
