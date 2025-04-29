@@ -45,11 +45,17 @@ void fill_framebuffer(uint8_t color_index) {
 
     volatile uint32_t *fb_ptr = FB_BASE_ADDRESS;
     uint32_t y, x; // Use x_byte for iterating through bytes horizontally
+    int color_counter = 0;
 
     for (y = 0; y < FB_HEIGHT; ++y) {
+        
         for (x = 0; x < FB_WIDTH; ++x) {
             *fb_ptr = fill_byte;
             fb_ptr++; // Move to the next byte in memory
+        }
+        color_counter = ( color_counter + 1 ) % 10;
+        if ( color_counter == 0 ) {
+            fill_byte = map_of_color[++color_index  % COLOR_IDX_NUM];
         }
     }
 }
@@ -71,9 +77,14 @@ void setup() {
 
 void TaskSwitchColor() {
     static int color = 0 ;
+    static TickType_t previousTimestamp = 0;
     while(1) {
-        printf("Ping!\n");
-        vTaskDelay(1000);
+        TickType_t currentTimestamp = xTaskGetTickCount();
+        TickType_t timeDiff = currentTimestamp - previousTimestamp;
+        printf("Time since last run: %u ticks\n", timeDiff);
+        previousTimestamp = currentTimestamp;
+
+        vTaskDelay(128);
         fill_framebuffer(color);
         color = ( color + 1 ) % COLOR_IDX_NUM;
     }
