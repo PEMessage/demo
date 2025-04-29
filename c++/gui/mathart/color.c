@@ -2,6 +2,8 @@
 #include <math.h>
 #include <stdint.h>
 
+// q-gcc !Compiling: g++ -o "color.out" "color.c" -ggdb -g3 -fsanitize=address -Wall -lSDL2
+
 // Define screen resolution
 #define FB_WIDTH  800
 #define FB_HEIGHT 600
@@ -9,10 +11,16 @@
 // Helper macro for square
 #define _sq(x) ((x)*(x))
 
-unsigned char RD(int x, int y) {
+#define SECONDS_PER_ROUND 2.0
+#define FPS 60.0
+#define ANGULAR_VELOCITY (2.0 * M_PI / (SECONDS_PER_ROUND * FPS))
+
+
+unsigned char RD(int x, int y, uint16_t time) {
     double angle = atan2(y - FB_HEIGHT/2, x - FB_WIDTH/2);
     double half_angle = angle / 2;
-    double phase_adjusted = half_angle;
+    double t = time * ANGULAR_VELOCITY; // control speed
+    double phase_adjusted = half_angle + t;
     double cosine = cos(phase_adjusted);
     double squared = _sq(cosine);
     double scaled = squared * 255;
@@ -20,10 +28,11 @@ unsigned char RD(int x, int y) {
     return (unsigned char)scaled;
 }
 
-unsigned char GR(int x, int y) {
+unsigned char GR(int x, int y, uint16_t time) {
     double angle = atan2(y - FB_HEIGHT/2, x - FB_WIDTH/2);
     double half_angle = angle / 2;
-    double phase_adjusted = half_angle + 1 * M_PI / 3;
+    double t = time * ANGULAR_VELOCITY;
+    double phase_adjusted = half_angle - 2 * M_PI / 3 + t;
     double cosine = cos(phase_adjusted);
     double squared = _sq(cosine);
     double scaled = squared * 255;
@@ -31,10 +40,11 @@ unsigned char GR(int x, int y) {
     return (unsigned char)scaled;
 }
 
-unsigned char BL(int x, int y) {
+unsigned char BL(int x, int y, uint16_t time) {
     double angle = atan2(y - FB_HEIGHT/2, x - FB_WIDTH/2);
     double half_angle = angle / 2;
-    double phase_adjusted = half_angle + 2 * M_PI / 3;
+    double t = time * ANGULAR_VELOCITY;
+    double phase_adjusted = half_angle + 2 * M_PI / 3 + t;
     double cosine = cos(phase_adjusted);
     double squared = _sq(cosine);
     double scaled = squared * 255;
@@ -46,9 +56,9 @@ uint32_t draw(int x, int y, uint16_t time) {
     (void)time; // currently unused, but kept for future animation
 
     uint32_t ret = (
-        (RD(x, y) << 16) |  // R
-        (GR(x, y) << 8)  |  // G
-        (BL(x, y) << 0)     // B
+        (RD(x, y, time) << 16) |  // R
+        (GR(x, y, time) << 8)  |  // G
+        (BL(x, y, time) << 0)     // B
     );
     return ret;
 }
