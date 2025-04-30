@@ -15,6 +15,7 @@ add_subdirectory(lib/CMSIS)
 add_subdirectory(lib/FreeRTOS-Kernel-Config)
 add_subdirectory(lib/FreeRTOS-Hook)
 add_subdirectory(lib/FreeRTOS-Kernel)
+add_subdirectory(lib/LVGL)
 
 # Credit: deepseek-v3-0324
 macro(add_executable_with_binaries MODULE_NAME)

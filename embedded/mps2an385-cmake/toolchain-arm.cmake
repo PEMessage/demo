@@ -15,10 +15,10 @@ set(CMAKE_SIZE arm-none-eabi-size)
 set(GCC_INCLUDE_FLAGS "-isystem /usr/lib/arm-none-eabi/include/")
 
 # Compiler flags
-set(CMAKE_C_FLAGS "-mcpu=cortex-m3 -mthumb -Wall -Os -g -g3 ${GCC_INCLUDE_FLAGS}" CACHE STRING "C Compiler Flags")
+set(CMAKE_C_FLAGS "-mcpu=cortex-m3 -mthumb -Wall -Os -g -g3 ${GCC_INCLUDE_FLAGS} -ffunction-sections -fdata-sections" CACHE STRING "C Compiler Flags")
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS}" CACHE STRING "C++ Compiler Flags")
 set(CMAKE_ASM_FLAGS "${CMAKE_C_FLAGS}" CACHE STRING "ASM Compiler Flags")
-set(CMAKE_EXE_LINKER_FLAGS "-specs=nosys.specs -lnosys" CACHE STRING "Linker Flags")
+set(CMAKE_EXE_LINKER_FLAGS "-specs=nosys.specs -lnosys -Wl,--gc-sections" CACHE STRING "Linker Flags")
 
 # Disable compiler checks
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
