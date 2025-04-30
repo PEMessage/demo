@@ -55,35 +55,82 @@ void init_lvgl_tick(void)
     }
 }
 
+
+SemaphoreHandle_t lvgl_init_semaphore;
+SemaphoreHandle_t app_init_semaphore;
+
 void TaskLVGL() {
     /*Change the active screen's background color*/
     lv_init();
     lv_port_disp_init();
     init_lvgl_tick();
     printf("LVGL Init complete\n");
+    xSemaphoreGive(lvgl_init_semaphore);
 
+    if (xSemaphoreTake(app_init_semaphore, portMAX_DELAY) == pdTRUE) {
+        printf("Application UI setup complete. Starting LVGL loop.\n");
+    }
 
-    lv_obj_set_style_bg_color(lv_screen_active(), lv_color_hex(0x003a57), LV_PART_MAIN);
-
-    /*Create a white label, set its text and align it to the center*/
-    lv_obj_t * label = lv_label_create(lv_screen_active());
-    lv_label_set_text(label, "Hello world");
-    lv_obj_set_style_text_color(lv_screen_active(), lv_color_hex(0xffffff), LV_PART_MAIN);
-    lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
     while(1) {
         lv_task_handler();
     }
 
 }
+
+void TaskAppUI(void *pvParameters) {
+    /* Wait for LVGL initialization to complete */
+    if (xSemaphoreTake(lvgl_init_semaphore, portMAX_DELAY)) {
+        printf("Starting UI setup\n");
+    }
+
+    /* Change the active screen's background color */
+
+    /* Create a white label, set its text and align it to the center */
+    lv_obj_t *label = lv_label_create(lv_screen_active());
+    lv_label_set_text(label, "Hello world");
+    lv_obj_set_style_text_color(lv_screen_active(), lv_color_hex(0xffffff), LV_PART_MAIN);
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
+
+    xSemaphoreGive(app_init_semaphore);
+
+    /* Rainbow color animation loop */
+    uint16_t hue = 0;
+    while (1) {
+        lv_color_t bg_color = lv_color_hsv_to_rgb(hue, 255, 255);
+        // https://docs.lvgl.io/master/details/integration/adding-lvgl-to-your-project/threading.html
+        // LVGL is not thread safe, due to we use LV_USE_OS == LV_OS_FREERTOS, we could use lv_lock to protect
+        lv_lock();
+        lv_obj_set_style_bg_color(lv_screen_active(), bg_color, LV_PART_MAIN);
+        lv_unlock();
+        hue = (hue + 1) % 360;
+
+        vTaskDelay(pdMS_TO_TICKS(100)); // ~20 FPS
+    }
+
+    // while (1) {
+    //     vTaskDelay(pdMS_TO_TICKS(1000));  // keep task alive; could also suspend itself
+    // }
+}
+
+
 int main() {
     setup();
     printf("Init complete\n");
+    lvgl_init_semaphore = xSemaphoreCreateBinary();
+    app_init_semaphore  = xSemaphoreCreateBinary();
     xTaskCreate( TaskLVGL,
             "TaskLVGL",
             configMINIMAL_STACK_SIZE + 3*1024,
             NULL,
             (tskIDLE_PRIORITY + 1),
             NULL );
+        /* Create App UI Task */
+    xTaskCreate(TaskAppUI,
+                "TaskAppUI",
+                configMINIMAL_STACK_SIZE + 2 * 1024,
+                NULL,
+                (tskIDLE_PRIORITY + 1),
+                NULL);
     vTaskStartScheduler();
     while(1);
 }
