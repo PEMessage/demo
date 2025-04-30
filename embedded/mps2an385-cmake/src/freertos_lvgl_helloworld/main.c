@@ -51,18 +51,18 @@ void init_lvgl_tick(void)
     lvgl_tick_timer = xTimerCreate("LVGL Tick", pdMS_TO_TICKS(1), pdTRUE, NULL, lvgl_tick_timer_cb);
     if (lvgl_tick_timer != NULL) {
         xTimerStart(lvgl_tick_timer, 0);
-        printf("Start lvgl!\n");
+        printf("Start LVGL Timer!\n");
     }
 }
 
-void TaskSwitchColor() {
+void TaskLVGL() {
     /*Change the active screen's background color*/
     lv_init();
     lv_port_disp_init();
     init_lvgl_tick();
+    printf("LVGL Init complete\n");
 
 
-    printf("Init complete3\n");
     lv_obj_set_style_bg_color(lv_screen_active(), lv_color_hex(0x003a57), LV_PART_MAIN);
 
     /*Create a white label, set its text and align it to the center*/
@@ -71,18 +71,15 @@ void TaskSwitchColor() {
     lv_obj_set_style_text_color(lv_screen_active(), lv_color_hex(0xffffff), LV_PART_MAIN);
     lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
     while(1) {
-        vTaskDelay(30);
-        printf("Pong!\n");
         lv_task_handler();
     }
 
 }
 int main() {
     setup();
-    printf("Init complete1\n");
-    printf("Init complete2\n");
-    xTaskCreate( TaskSwitchColor,
-            "TaskSwitchColor",
+    printf("Init complete\n");
+    xTaskCreate( TaskLVGL,
+            "TaskLVGL",
             configMINIMAL_STACK_SIZE + 3*1024,
             NULL,
             (tskIDLE_PRIORITY + 1),
