@@ -122,7 +122,7 @@ void disp_disable_update(void)
     disp_flush_enabled = false;
 }
 
-#define FB_BASE_ADDRESS ((volatile uint32_t*)0x41000000)
+#define FB_BASE_ADDRESS ((volatile uint32_t*)0x41001000)
 /*Flush the content of the internal buffer the specific area on the display.
  *`px_map` contains the rendered image as raw pixel map and it should be copied to `area` on the display.
  *You can use DMA or any hardware acceleration to do this operation in the background but

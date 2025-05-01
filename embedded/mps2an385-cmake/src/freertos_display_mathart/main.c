@@ -8,7 +8,7 @@
 
 
 // Define framebuffer properties based on the QEMU code
-#define FB_BASE_ADDRESS ((volatile uint32_t*)0x41000000)
+#define FB_BASE_ADDRESS ((volatile uint32_t*)0x41001000)
 #define FB_WIDTH        640
 #define FB_HEIGHT       480
 #define FB_BPP          32 // Bits per pixel
@@ -78,8 +78,8 @@ uint32_t draw(int x, int y, uint16_t time) {
     (void)time;
 
     uint32_t ret = ( \
-            ( RD(x, y) << (2 * 8) ) +
-            ( GR(x, y) << (1 * 8) ) +
+            ( RD(x, y) << (2 * 8) ) |
+            ( GR(x, y) << (1 * 8) ) |
             ( BL(x, y) << (0 * 8) ) 
             );
     return ret;

@@ -8,7 +8,7 @@
 
 
 // Define framebuffer properties based on the QEMU code
-#define FB_BASE_ADDRESS ((volatile uint32_t*)0x41000000)
+#define FB_BASE_ADDRESS ((volatile uint32_t*)(0x41001000))
 #define FB_WIDTH        640
 #define FB_HEIGHT       480
 #define FB_BPP          32 // Bits per pixel
