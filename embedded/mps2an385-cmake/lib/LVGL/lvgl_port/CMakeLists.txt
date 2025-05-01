@@ -1,6 +1,7 @@
 add_library(lvgl_port
     STATIC
         lv_port_disp.c
+        lv_port_indev.c
     )
 target_include_directories(lvgl_port PUBLIC
     ./
