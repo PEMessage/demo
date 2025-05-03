@@ -1,19 +1,14 @@
 #include <SDL2/SDL.h>
-#include <math.h>
-#include <stdint.h>
 #include <stdbool.h>
 
 // Define screen resolution
 #define FB_WIDTH  800
 #define FB_HEIGHT 600
 
-
 // Global variables
 SDL_Window* window = NULL;
 SDL_Renderer* renderer = NULL;
 SDL_Texture* texture = NULL;
-uint32_t pixels[FB_HEIGHT][FB_WIDTH];
-
 
 bool init() {
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
@@ -59,6 +54,9 @@ void kill() {
 // ===================================================================
 // User code 
 // ===================================================================
+#include <assert.h>
+#include <math.h>
+#include <stdint.h>
 
 // Helper macro for square
 #define _sq(x) ((x)*(x))
@@ -114,24 +112,36 @@ bool loop() {
         }
     }
 
-    // Update pixels
+    // Lock texture for direct pixel access
+    void* pixels;
+    int pitch;
+    if (SDL_LockTexture(texture, NULL, &pixels, &pitch)) {
+        SDL_Log("Could not lock texture: %s", SDL_GetError());
+        return false;
+    }
+
+    // 确保 pitch 没有额外的填充字节，否则不能直接转成二维数组！
+    assert(pitch == FB_WIDTH * sizeof(uint32_t));
+    // Method1: 安全地转换为二维数组（前提：pitch 无填充）
+    uint32_t (*pixel_buffer)[FB_WIDTH] = (uint32_t(*)[FB_WIDTH])pixels;
+    // Method2: Cast the pixels pointer to uint32_t* for easier access
+    // uint32_t* pixel_buffer = (uint32_t*)pixels;
+
+
+    // Update pixels directly in the texture buffer
     for (int y = 0; y < FB_HEIGHT; ++y) {
         for (int x = 0; x < FB_WIDTH; ++x) {
-            pixels[y][x] = draw(x, y, time);
+            pixel_buffer[y][x] = draw(x, y, time); // Method1: 前提：pitch 无填充
+            // Method2: pixel_buffer[y * (pitch / sizeof(uint32_t)) + x] = draw(x, y, time);
         }
     }
 
-    // Update texture and render
-    SDL_UpdateTexture(texture, NULL, pixels, FB_WIDTH * sizeof(uint32_t));
-    SDL_RenderClear(renderer);
-    SDL_RenderCopy(renderer, texture, NULL, NULL);
-    SDL_RenderPresent(renderer);
+    // Unlock the texture
+    SDL_UnlockTexture(texture);
 
     // Increment time for animation
     time++;
 
-    // Cap at ~60 FPS
-    SDL_Delay(16);
     
     return true;
 }
@@ -147,6 +157,12 @@ int main(int argc, char* argv[]) {
 
     while (loop()) {
         // Main loop is handled by loop()
+        // Render the texture
+        SDL_RenderClear(renderer);
+        SDL_RenderCopy(renderer, texture, NULL, NULL);
+        SDL_RenderPresent(renderer);
+        // Cap at ~60 FPS
+        SDL_Delay(16);
     }
 
     kill();
