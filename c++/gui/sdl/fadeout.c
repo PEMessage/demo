@@ -129,8 +129,16 @@ void render() {
     SDL_RenderPresent(renderer);
 }
 
+#define BI_LOOP(v, mod) ( ((v) < (mod)) ? \
+        (v) \
+        : \
+        ( ((mod)-1) * 2 - (v) ) \
+        )
+
 bool loop() {
     static int currentFadeLevel = 0 ;
+    static int enable_autofade = 0 ;
+    static int time = 0;
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_QUIT) {
@@ -146,6 +154,10 @@ bool loop() {
                 case SDLK_DOWN:
                     currentFadeLevel = ( currentFadeLevel + 4 ) % 5; // 4 == -1 (mod5)
                     break;
+                case SDLK_RIGHT:
+                case SDLK_LEFT:
+                    enable_autofade = (enable_autofade + 1 ) % 2; // toggle enable_autofade
+                    break;
                 case SDLK_r:
                     currentFadeLevel = 0;
                     break;
@@ -154,9 +166,16 @@ bool loop() {
             }
         }
     }
+    time = ( time + 1 ) % 3; // 3 frame as a loop
+    if ( enable_autofade && time == 0 ) {
+        // loop between 0->4->0->4...
+        currentFadeLevel = (currentFadeLevel + 1) % 9; 
+    }
+
 
     fillTestPattern();
-    applyFadeOutEffect(currentFadeLevel);
+    // loop between 0->4->0->4...
+    applyFadeOutEffect(BI_LOOP(currentFadeLevel, 5));
     
     return true;
 }
