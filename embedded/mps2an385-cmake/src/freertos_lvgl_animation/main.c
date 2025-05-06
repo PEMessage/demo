@@ -96,16 +96,18 @@ static void anim_size_cb(void * var, int32_t v)
 static void btn_event_cb(lv_event_t * e)
 {
     lv_obj_t * btn = lv_event_get_target(e);
+
+    static int direction = 1;
     
     // Create X-axis bounce animation
     lv_anim_t anim_x;
     lv_anim_init(&anim_x);
     lv_anim_set_var(&anim_x, btn);
-    lv_anim_set_values(&anim_x, lv_obj_get_x(btn), lv_obj_get_x(btn) + 50);
+    lv_anim_set_values(&anim_x, lv_obj_get_x(btn), lv_obj_get_x(btn) + 50 * direction);
     lv_anim_set_time(&anim_x, 1000);
     lv_anim_set_exec_cb(&anim_x, anim_x_cb);
-    lv_anim_set_path_cb(&anim_x, lv_anim_path_bounce);
-    lv_anim_set_playback_time(&anim_x, 500);
+    lv_anim_set_path_cb(&anim_x, lv_anim_path_ease_out);
+    // lv_anim_set_playback_time(&anim_x, 500);
     lv_anim_set_repeat_count(&anim_x, 1);
     lv_anim_start(&anim_x);
 
@@ -113,13 +115,16 @@ static void btn_event_cb(lv_event_t * e)
     lv_anim_t anim_size;
     lv_anim_init(&anim_size);
     lv_anim_set_var(&anim_size, btn);
-    lv_anim_set_values(&anim_size, lv_obj_get_height(btn), lv_obj_get_height(btn) + 100);
-    lv_anim_set_time(&anim_size, 1000);
+    lv_anim_set_values(&anim_size, lv_obj_get_height(btn), lv_obj_get_height(btn) + 20);
+    lv_anim_set_time(&anim_size, 200);
     lv_anim_set_exec_cb(&anim_size, anim_size_cb);
-    lv_anim_set_path_cb(&anim_size, lv_anim_path_bounce);
-    lv_anim_set_playback_time(&anim_size, 500);
+    lv_anim_set_path_cb(&anim_size, lv_anim_path_ease_out);
+    lv_anim_set_playback_time(&anim_size, 300);
     lv_anim_set_repeat_count(&anim_size, 1);
     lv_anim_start(&anim_size);
+
+    // 1, 2, -2, 2, -2 .... loop
+    direction = direction > 0 ? -2 : 2; 
 }
 
 
