@@ -13,10 +13,10 @@ class Template(ABC):
     def generate(cls, args):
         pass
 
-def UpCase(in: str):
-    return field[0].upper() + field[1:]
-def lowCase(in: str):
-    return field[0].lower() + field[1:]
+def UpCase(x: str):
+    return x[0].upper() + x[1:]
+def lowCase(x: str):
+    return x[0].lower() + x[1:]
 
 class JavaMapClassTemplate(Template):
     """Generates a Java class that uses a Map to store fields"""
