@@ -12,6 +12,7 @@ DTS = $(DTB:.dto=.dts)
 
 all: $(KDIR) $(KDIR)/.config
 	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) Image -j8
+	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) scripts_gdb
 
 $(KIMG):
 	make all
@@ -24,18 +25,21 @@ $(KDIR)/.config:
 	make defconfig
 
 # 默认配置并开启调试功能
-defconfig:
+defconfig: Makefile
 	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) defconfig
 		$(KDIR)/scripts/config --file $(KDIR)/.config \
-		--set-val CONFIG_DEBUG_INFO y \
+		--enable CONFIG_DEBUG_INFO \
 		--enable CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT \
+		--enable CONFIG_GDB_SCRIPTS \
 		--disable CONFIG_DEBUG_INFO_NONE \
 		--disable CONFIG_DEBUG_INFO_SPLIT \
 		--disable CONFIG_DEBUG_INFO_BTF \
 		--disable CONFIG_DEBUG_INFO_REDUCED \
 		--disable CONFIG_DEBUG_INFO_COMPRESSED \
-		--disable CONFIG_GDB_SCRIPTS \
-		--disable CONFIG_DEBUG_EFI
+		--disable CONFIG_DEBUG_EFI \
+		--disable CONFIG_RANDOMIZE_BASE \
+		--disable CONFIG_RANDOMIZE_MODULE_REGION_FULL
+
 	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) oldconfig
 
 menuconfig:
