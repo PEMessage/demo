@@ -38,6 +38,13 @@ EXTRA_DEFCONFIG += --disable CONFIG_DEBUG_INFO_REDUCED
 EXTRA_DEFCONFIG += --disable CONFIG_DEBUG_INFO_COMPRESSED
 EXTRA_DEFCONFIG += --disable CONFIG_DEBUG_EFI
 
+# disbale watch(secure feature same ad CONFIG_RANDOMIZE_BASE)
+# See: 【简单几步搭建Linux Kernel调试环境】 【精准空降到 00:41】
+# https://www.bilibili.com/video/BV1UTVfzfETp/?t=41
+# deepseek-v3: 在调试时，内核可能因断点、单步执行或人为暂停而无法及时喂狗，导致看门狗误判为系统故障并重启。
+EXTRA_DEFCONFIG += --disable CONFIG_WATCHDOG
+
+
 # 默认配置并开启调试功能
 defconfig: Makefile
 	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) defconfig
