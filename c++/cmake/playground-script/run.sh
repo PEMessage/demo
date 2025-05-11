@@ -7,8 +7,8 @@ fi
 
 
 # Hook isatty, to ensure that cmake output color
-if [ ! -f "fakeisatty/fakeisatty.so" ] ; then
-    gcc -shared -fPIC -o fakeisatty/fakeisatty.so fakeisatty/fakeisatty.c
+if [ ! -f "helper/fakeisatty/fakeisatty.so" ] ; then
+    gcc -shared -fPIC -o helper/fakeisatty/fakeisatty.so helper/fakeisatty/fakeisatty.c
 fi
 
 
@@ -20,7 +20,7 @@ do
     mkdir -p "$OUT"
     # -B <path-to-build>
     # -P <cmake-script-file>
-    LD_PRELOAD="./fakeisatty/fakeisatty.so" \
+    LD_PRELOAD="./helper/fakeisatty/fakeisatty.so" \
     cmake --trace-source="$f" \
     -fdiagnostics-color=always \
     --force-color \
