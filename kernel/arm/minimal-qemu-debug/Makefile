@@ -24,22 +24,25 @@ $(KDIR):
 $(KDIR)/.config:
 	make defconfig
 
+# Come from https://www.kernel.org/doc/html/v6.9/dev-tools/gdb-kernel-debugging.html
+EXTRA_DEFCONFIG := --enable CONFIG_DEBUG_INFO 
+EXTRA_DEFCONFIG += --enable CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT
+EXTRA_DEFCONFIG += --enable CONFIG_GDB_SCRIPTS
+EXTRA_DEFCONFIG += --enable CONFIG_RANDOMIZE_BASE
+
+# some config generate when run oldconfig
+EXTRA_DEFCONFIG += --disable CONFIG_DEBUG_INFO_NONE
+EXTRA_DEFCONFIG += --disable CONFIG_DEBUG_INFO_SPLIT
+EXTRA_DEFCONFIG += --disable CONFIG_DEBUG_INFO_BTF
+EXTRA_DEFCONFIG += --disable CONFIG_DEBUG_INFO_REDUCED
+EXTRA_DEFCONFIG += --disable CONFIG_DEBUG_INFO_COMPRESSED
+EXTRA_DEFCONFIG += --disable CONFIG_DEBUG_EFI
+
 # 默认配置并开启调试功能
 defconfig: Makefile
 	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) defconfig
 		$(KDIR)/scripts/config --file $(KDIR)/.config \
-		--enable CONFIG_DEBUG_INFO \
-		--enable CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT \
-		--enable CONFIG_GDB_SCRIPTS \
-		--disable CONFIG_DEBUG_INFO_NONE \
-		--disable CONFIG_DEBUG_INFO_SPLIT \
-		--disable CONFIG_DEBUG_INFO_BTF \
-		--disable CONFIG_DEBUG_INFO_REDUCED \
-		--disable CONFIG_DEBUG_INFO_COMPRESSED \
-		--disable CONFIG_DEBUG_EFI \
-		--disable CONFIG_RANDOMIZE_BASE \
-		--disable CONFIG_RANDOMIZE_MODULE_REGION_FULL
-
+		$(EXTRA_DEFCONFIG)
 	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) oldconfig
 
 menuconfig:
