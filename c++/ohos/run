@@ -1,0 +1,87 @@
+#!/bin/bash
+set -e
+project_dir="$1"
+shift
+
+project_name="$(basename "$project_dir")"
+if [[ ! "$project_dir" =~ src ]] || [ ! -d "$project_dir" ]  ; then
+    echo "must be in src dir"
+fi
+
+before_double_dash=()
+after_double_dash=()
+first_found_double_dash=false
+for arg in "$@"; do
+    if [ "$arg" = "--" ] && [ "$first_found_double_dash" = false ] ; then
+        first_found_double_dash=true
+        continue
+    fi
+
+    if $first_found_double_dash; then
+        after_double_dash+=("$arg")
+    else
+        before_double_dash+=("$arg")
+    fi
+done
+
+build() {
+    (
+        set -xe
+        if [ ! -f "out/$project_name/CMakeCache.txt" ] ; then
+            cmake -S "$project_dir" -B "out/$project_name"
+        fi
+        cmake --build "out/$project_name"
+        ln -sf "out/$project_name/compile_commands.json" compile_commands.json
+    )
+}
+run() {
+    set -x
+    ./out/$project_name/app "${unknown[@]}"
+}
+
+
+if [  ${#before_double_dash[@]} -eq 0 ] ; then
+    before_double_dash+=("default")
+fi
+
+unknown=()
+while (( ${#before_double_dash[@]} )); do
+    arg="${before_double_dash[0]}"
+    before_double_dash=("${before_double_dash[@]:1}")  # Remove the first element
+
+    case "$arg" in
+        build)
+            build=1
+            ;;
+        run)
+            build=1
+            run=1
+            ;;
+        clean)
+            clean=1
+            ;;
+        default)
+            build=1
+            run=1
+            ;;
+        *)
+            unknown+=("$arg")
+            ;;
+    esac
+done
+declare -p unknown
+if [ "$clean" = 1 ] ; then 
+    ( 
+        set -x
+        rm -rf ./out/$project_name
+        exit 0
+    )
+fi
+
+if [ "$build" = 1 ] ; then 
+    build
+fi
+
+if [ "$run" = 1 ] ; then 
+    run
+fi

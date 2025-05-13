@@ -1,3 +1,5 @@
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE INTERNAL "")
+
 function(find_project_root out_var)
     # Start from current source directory
     set(current_dir "${CMAKE_CURRENT_SOURCE_DIR}")
