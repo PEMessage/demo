@@ -1,34 +1,33 @@
 #include "refbase.h"
-#include <iostream>
 
 using namespace OHOS;
 using namespace std;
 
 struct A: RefBase {
     A() {
-        cout << "Create class A: "  << this << endl;
+        printf("Create class A: %p\n", this);
     }
     ~A() {
-        cout << "~ class A: "  << this << endl;
+        printf("~ class A: %p\n", this);
     }
 };
 
 int main (int argc, char *argv[]) {
-    cout << "=================" << endl;
-    cout << "Create a in Stack" << endl;
-    cout << "=================" << endl;
+    printf("=================\n");
+    printf("Create a in Stack\n");
+    printf("=================\n");
     A a;
-    cout << "=================" << endl;
-    cout << "Create sptr pa" << endl;
-    cout << "=================" << endl;
+    printf("=================\n");
+    printf("Create sptr pa\n");
+    printf("=================\n");
     sptr<A> pa = sptr<A>::MakeSptr();
-    cout << "=================" << endl;
-    cout << "Create sptr pb" << endl;
-    cout << "=================" << endl;
+    printf("=================\n");
+    printf("Create sptr pb\n");
+    printf("=================\n");
     sptr<A> pb = pa;
 
-    cout << "=================" << endl;
-    cout << "return" << endl;
-    cout << "=================" << endl;
+    printf("=================\n");
+    printf("return\n");
+    printf("=================\n");
     return 0;
 }

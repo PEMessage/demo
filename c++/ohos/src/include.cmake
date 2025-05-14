@@ -1,4 +1,6 @@
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE INTERNAL "")
+set(CMAKE_C_FLAGS "-g3 -ggdb -O0" CACHE STRING "C Compiler Flags")
+set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS}" CACHE STRING "C++ Compiler Flags")
 
 function(find_project_root out_var)
     # Start from current source directory

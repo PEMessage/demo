@@ -1,0 +1,13 @@
+id: convert-cout-to-printf
+language: cpp
+rule:
+  pattern: cout << "$ARGS" << endl
+transform:
+  NEWVARS:
+    replace:
+      source: $ARGS
+      replace: '$'
+      by: '\n'
+fix: |
+  printf("$NEWVARS")
+message: Convert cout << ... << endl to printf
