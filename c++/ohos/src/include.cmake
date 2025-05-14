@@ -1,6 +1,8 @@
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE INTERNAL "")
-set(CMAKE_C_FLAGS "-g3 -ggdb -O0" CACHE STRING "C Compiler Flags")
-set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS}" CACHE STRING "C++ Compiler Flags")
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE INTERNAL "" FORCE)
+set(CMAKE_BUILD_TYPE Debug CACHE INTERNAL "" FORCE)
+
+set(CMAKE_C_FLAGS_DEBUG "-g3 -ggdb -O0" CACHE STRING "C Compiler Flags" FORCE)
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}" CACHE STRING "C++ Compiler Flags" FORCE)
 
 function(find_project_root out_var)
     # Start from current source directory
@@ -41,7 +43,7 @@ macro(auto_target_link_libraries target visibility)
     foreach(libname IN LISTS libnames)
         # Use find command to locate the library directory
         execute_process(
-            COMMAND find "${PROJECT_ROOT}" -name "${libname}" -type d
+            COMMAND find "${PROJECT_ROOT}/lib" -name "${libname}" -type d
             OUTPUT_VARIABLE LIBDIRS
             OUTPUT_STRIP_TRAILING_WHITESPACE
             ERROR_QUIET  # Suppress error output if not found
