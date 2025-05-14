@@ -18,7 +18,7 @@ int main (int argc, char *argv[]) {
     printf("=================\n");
     A a;
     printf("=================\n");
-    printf("Create sptr pa\n");
+    printf("Create sptr pa(Create A in heap, and assgin it to pa)\n");
     printf("=================\n");
     sptr<A> pa = sptr<A>::MakeSptr();
     printf("=================\n");
