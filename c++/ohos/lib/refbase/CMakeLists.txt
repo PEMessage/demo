@@ -5,6 +5,7 @@ add_library(refbase STATIC
 )
 
 target_include_directories(refbase PUBLIC .)
+auto_target_link_libraries(refbase PUBLIC misc)
 
 target_compile_definitions(refbase PUBLIC 
     DEBUG_REFBASE
