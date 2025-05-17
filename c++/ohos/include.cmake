@@ -62,11 +62,12 @@ macro(auto_target_link_libraries target visibility)
 
         # Check if we've already added this subdirectory
         get_property(subdirs_added GLOBAL PROPERTY AUTO_TARGET_LINK_LIBRARIES_ADDED_DIR)
+        message("${subdirs_added}")
         if(NOT ${LIBDIR} IN_LIST subdirs_added)
             # Add subdirectory and link library
             add_subdirectory(${LIBDIR} ${libname})
-            set_property(GLOBAL PROPERTY AUTO_TARGET_LINK_LIBRARIES_ADDED_DIR
-                ${subdirs_added} ${LIBDIR})
+            set_property(GLOBAL APPEND PROPERTY AUTO_TARGET_LINK_LIBRARIES_ADDED_DIR
+                ${LIBDIR})
         endif()
 
         target_link_libraries(${target} ${visibility} ${libname})
