@@ -32,11 +32,11 @@ constexpr const char *UTILS_LOG_TAG = "utils_base";
 #endif
 #else
 #include "stdio.h"
-#define UTILS_LOGF(...) do { printf(__VA_ARGS__) ; printf("\n") ; } while(0)
-#define UTILS_LOGE(...) do { printf(__VA_ARGS__) ; printf("\n") ; } while(0)
-#define UTILS_LOGW(...) do { printf(__VA_ARGS__) ; printf("\n") ; } while(0)
-#define UTILS_LOGI(...) do { printf(__VA_ARGS__) ; printf("\n") ; } while(0)
-#define UTILS_LOGD(...) do { printf(__VA_ARGS__) ; printf("\n") ; } while(0)
+#define UTILS_LOGF(fmt, ...) printf("[FATAL] %s:%d: " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__)
+#define UTILS_LOGE(fmt, ...) printf("[ERROR] %s:%d: " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__)
+#define UTILS_LOGW(fmt, ...) printf("[WARN]  " fmt "\n", ##__VA_ARGS__)
+#define UTILS_LOGI(fmt, ...) printf("[INFO]  " fmt "\n", ##__VA_ARGS__)
+#define UTILS_LOGD(fmt, ...) printf("[DEBUG] " fmt "\n", ##__VA_ARGS__)
 #endif  // CONFIG_HILOG
 
 #if (defined CONFIG_HILOG) && (defined CONFIG_PARCEL_DEBUG)
