@@ -1,4 +1,5 @@
 #include "refbase.h"
+#include "stdio.h"
 
 using namespace OHOS;
 using namespace std;

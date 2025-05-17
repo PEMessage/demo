@@ -15,6 +15,7 @@
 #ifndef UTILS_BASE_LOG_H
 #define UTILS_BASE_LOG_H
 
+
 #ifdef CONFIG_HILOG
 #include "hilog_base/log_base.h"
 constexpr LogType UTILS_LOG_TYPE = LOG_CORE;
@@ -30,6 +31,7 @@ constexpr const char *UTILS_LOG_TAG = "utils_base";
 #define UTILS_LOGD(...)
 #endif
 #else
+#include "stdio.h"
 #define UTILS_LOGF(...) do { printf(__VA_ARGS__) ; printf("\n") ; } while(0)
 #define UTILS_LOGE(...) do { printf(__VA_ARGS__) ; printf("\n") ; } while(0)
 #define UTILS_LOGW(...) do { printf(__VA_ARGS__) ; printf("\n") ; } while(0)
