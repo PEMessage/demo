@@ -1,3 +1,0 @@
-[submodule "embedded/mps2an385-cmake/lib/FreeRTOS-Kernel"]
-	path = embedded/mps2an385-cmake/lib/FreeRTOS-Kernel
-	url = https://github.com/FreeRTOS/FreeRTOS-Kernel.git
