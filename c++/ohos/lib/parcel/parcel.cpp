@@ -14,6 +14,7 @@
  */
 
 #include "parcel.h"
+#include "limits.h"
 #include "securec.h"
 #include "utils_log.h"
 
@@ -136,8 +137,8 @@ bool Parcel::EnsureWritableCapacity(size_t desireCapacity)
     size_t minNewCapacity = desireCapacity + writeCursor_;
     size_t newCapacity = CalcNewCapacity(minNewCapacity);
     if ((newCapacity <= dataCapacity_) || (newCapacity < minNewCapacity)) {
-        UTILS_LOGW("Failed to ensure parcel capacity, newCapacity = %{public}zu, dataCapacity_ = %{public}zu, "
-                   "minNewCapacity = %{public}zu",
+        UTILS_LOGW("Failed to ensure parcel capacity, newCapacity = %zu, dataCapacity_ = %zu, "
+                   "minNewCapacity = %zu",
                    newCapacity, dataCapacity_, minNewCapacity);
         return false;
     }
@@ -149,7 +150,7 @@ bool Parcel::EnsureWritableCapacity(size_t desireCapacity)
             dataCapacity_ = newCapacity;
             return true;
         }
-        UTILS_LOGW("Failed to realloc parcel capacity, newCapacity = %{public}zu, dataCapacity_ = %{public}zu",
+        UTILS_LOGW("Failed to realloc parcel capacity, newCapacity = %zu, dataCapacity_ = %zu",
                    newCapacity, dataCapacity_);
     }
 
@@ -164,7 +165,7 @@ bool Parcel::IsReadObjectData(const size_t nextObj, const size_t upperBound)
     if (currentObject->hdr.type == BINDER_TYPE_FD || currentObject->hdr.type == BINDER_TYPE_HANDLE) {
         return true;
     }
-    UTILS_LOGE("Non-object Read object data, readPos = %{public}zu, upperBound = %{public}zu", readCursor_, upperBound);
+    UTILS_LOGE("Non-object Read object data, readPos = %zu, upperBound = %zu", readCursor_, upperBound);
     return false;
 }
 
@@ -183,7 +184,7 @@ bool Parcel::ValidateReadData([[maybe_unused]]size_t upperBound)
         size_t nextObj = nextObjectIdx_;
         do {
             if (readPos < objects[nextObj] + sizeof(parcel_flat_binder_object)) {
-                UTILS_LOGE("Non-object Read object data, readPos = %{public}zu, upperBound = %{public}zu",
+                UTILS_LOGE("Non-object Read object data, readPos = %zu, upperBound = %zu",
                            readCursor_, upperBound);
                 return false;
             }
@@ -248,7 +249,7 @@ bool Parcel::SetAllocator(Allocator *allocator)
 
         void *newData = allocator->Alloc(dataSize_);
         if (newData == nullptr) {
-            UTILS_LOGE("Failed to alloc parcel size, dataSize_ = %{public}zu", dataSize_);
+            UTILS_LOGE("Failed to alloc parcel size, dataSize_ = %zu", dataSize_);
             return false;
         }
 
@@ -270,7 +271,7 @@ bool Parcel::CheckOffsets()
 {
     size_t readPos = readCursor_;
     if ((readPos + sizeof(parcel_flat_binder_object)) > dataSize_) {
-        UTILS_LOGD("CheckOffsets Invalid obj, obj size overflow. objSize:%{public}zu, dataSize:%{public}zu",
+        UTILS_LOGD("CheckOffsets Invalid obj, obj size overflow. objSize:%zu, dataSize:%zu",
             readPos + sizeof(parcel_flat_binder_object), dataSize_);
         return false;
     }
@@ -430,7 +431,7 @@ bool Parcel::WriteBufferAddTerminator(const void *data, size_t size, size_t type
         // Reserved for 32 bits
         const char terminator[] = {0, 0, 0, 0};
         if (typeSize > sizeof(terminator)) {
-            UTILS_LOGE("invalid typeSize, typeSize: %{public}zu", typeSize);
+            UTILS_LOGE("invalid typeSize, typeSize: %zu", typeSize);
             return false;
         }
         if (!WriteDataBytes(terminator, typeSize)) {
@@ -1459,7 +1460,7 @@ bool Parcel::ReadVector(std::vector<T> *val, bool (Parcel::*Read)(T &))
     size_t readAbleSize = this->GetReadableBytes() / sizeof(T);
     size_t size = static_cast<size_t>(len);
     if ((size > readAbleSize) || (size > val->max_size())) {
-        UTILS_LOGE("Failed to read vector, size = %{public}zu, readAbleSize = %{public}zu", size, readAbleSize);
+        UTILS_LOGE("Failed to read vector, size = %zu, readAbleSize = %zu", size, readAbleSize);
         return false;
     }
     val->resize(size);
@@ -1493,7 +1494,7 @@ bool Parcel::ReadFixedAlignVector(std::vector<T1> *val, bool (Parcel::*SpecialRe
     size_t readAbleSize = this->GetReadableBytes() / sizeof(Type);
     size_t size = static_cast<size_t>(len);
     if ((size > readAbleSize) || (size > val->max_size())) {
-        UTILS_LOGE("Failed to fixed aligned read vector, size = %{public}zu, readAbleSize = %{public}zu",
+        UTILS_LOGE("Failed to fixed aligned read vector, size = %zu, readAbleSize = %zu",
             size, readAbleSize);
         return false;
     }
@@ -1584,7 +1585,7 @@ bool Parcel::ReadStringVector(std::vector<std::string> *val)
     size_t readAbleSize = this->GetReadableBytes();
     size_t size = static_cast<size_t>(len);
     if ((size > readAbleSize) || (val->max_size() < size)) {
-        UTILS_LOGE("Failed to read string vector, size = %{public}zu, readAbleSize = %{public}zu", size, readAbleSize);
+        UTILS_LOGE("Failed to read string vector, size = %zu, readAbleSize = %zu", size, readAbleSize);
         return false;
     }
     val->resize(size);
@@ -1613,7 +1614,7 @@ bool Parcel::ReadString16Vector(std::vector<std::u16string> *val)
     size_t readAbleSize = this->GetReadableBytes();
     size_t size = static_cast<size_t>(len);
     if ((size > readAbleSize) || (val->max_size() < size)) {
-        UTILS_LOGE("Failed to read u16string vector, size = %{public}zu, readAbleSize = %{public}zu",
+        UTILS_LOGE("Failed to read u16string vector, size = %zu, readAbleSize = %zu",
             size, readAbleSize);
         return false;
     }
