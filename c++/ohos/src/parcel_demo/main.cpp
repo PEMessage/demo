@@ -1,7 +1,10 @@
 #include <iostream>
 #include "parcel.h"
+#include "xxd.h"
 
 using namespace OHOS;
+
+#define DUMP_PARCEL(parcel) xxd_color2(parcel.GetDataSize(), (unsigned char*)parcel.GetData())
 
 // A simple Parcelable class example
 class MyParcelable : public Parcelable {
@@ -29,20 +32,63 @@ private:
 
 int main() {
     // Create a parcel
+    printf("------------------------------------\n");
+    printf("Empty parcel\n");
     Parcel parcel;
+    DUMP_PARCEL(parcel);
+    printf("------------------------------------\n\n\n");
     
+
+
+    printf("------------------------------------\n");
+    printf("Write Int32: 42\n");
     // Write primitive types
     parcel.WriteInt32(42);
+    DUMP_PARCEL(parcel);
+    printf("------------------------------------\n\n\n");
+
+
+
+    printf("------------------------------------\n");
+    printf("Write float: 3.14f\n");
     parcel.WriteFloat(3.14f);
+    DUMP_PARCEL(parcel);
+    printf("------------------------------------\n\n\n");
+
+
+
+    printf("------------------------------------\n");
+    printf("Write std::string: Hello, Parcel!\n");
+    printf("| size(4b) + data(14) + padding(2b)\n");
     parcel.WriteString("Hello, Parcel!");
+    DUMP_PARCEL(parcel);
+    printf("------------------------------------\n\n\n");
     
+    printf("------------------------------------\n");
+    printf("Write std::string: Hello, Parcel!xx\n");
+    printf("| size(4b) + data(16b) + padding(4b), must have padding for string event if already align\n");
+    parcel.WriteString("Hello, Parcel!xx");
+    DUMP_PARCEL(parcel);
+    printf("------------------------------------\n\n\n");
+
+
     // Write a vector
+    printf("------------------------------------\n");
+    printf("Write vector<int32_t>: 1 - 8\n");
     std::vector<int32_t> numbers = {1, 2, 3, 4, 5};
     parcel.WriteInt32Vector(numbers);
+    DUMP_PARCEL(parcel);
+    printf("------------------------------------\n\n\n");
     
+
+
     // Write a Parcelable object
+    printf("------------------------------------\n");
+    printf("Write MyParcelable: 100\n");
     MyParcelable parcelable(100);
     parcel.WriteParcelable(&parcelable);
+    DUMP_PARCEL(parcel);
+    printf("------------------------------------\n\n\n");
     
     // Reset read position to beginning
     parcel.RewindRead(0);
@@ -59,6 +105,10 @@ int main() {
     std::string strValue = parcel.ReadString();
     std::cout << "Read string: " << strValue << std::endl;
     
+
+    std::string strValue2 = parcel.ReadString();
+    std::cout << "Read string: " << strValue2 << std::endl;
+
     std::vector<int32_t> readNumbers;
     parcel.ReadInt32Vector(&readNumbers);
     std::cout << "Read vector: ";
