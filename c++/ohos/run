@@ -27,9 +27,9 @@ done
 build() {
     (
         set -xe
-        if [ ! -f "out/$project_name/CMakeCache.txt" ] ; then
-            cmake -S "$project_dir" -B "out/$project_name"
-        fi
+        # if [ ! -f "out/$project_name/CMakeCache.txt" ] ; then
+        cmake -S "$project_dir" -B "out/$project_name"
+        # fi
         cmake --build "out/$project_name"
         ln -sf "out/$project_name/compile_commands.json" compile_commands.json
     )
