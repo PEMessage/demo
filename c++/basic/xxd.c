@@ -207,7 +207,7 @@ int main(int argc, char *argv[]) {
     fread(buf, 1, fsize, file);
     buf[fsize] = '\0'; // null terminate the buffer for safety
 
-    xxd2(fsize, buf);
+    xxd_color2(fsize, (CHAR *)buf);
 
     free(buf);
     fclose(file);
