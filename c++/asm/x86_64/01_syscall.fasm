@@ -1,0 +1,19 @@
+format ELF64 executable
+SYS_write = 1
+SYS_exit = 60
+
+msg: db "Hello World"
+msglen = $ - msg
+
+entry main
+main:
+    mov rax, SYS_write
+    mov rdi, 1          ; file descriptor (1 = stdout)
+    mov rsi, msg        ; pointer to message
+    mov rdx, msglen     ; message length
+    syscall
+
+    mov rax, SYS_exit         ; syscall number for exit
+    mov rdi, 20               ; exit(20)
+    syscall
+
