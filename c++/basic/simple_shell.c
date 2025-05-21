@@ -4,12 +4,41 @@
 
 #define MAX_INPUT_LEN 100
 #define MAX_TOKENS 32
+#define MAX_COMMANDS 32
+
+typedef struct {
+    const char *name;
+    void (*func)(int argc, char **argv);
+    const char *description;
+} cmd;
+
+// Global command list
 
 // Predefined command functions
-void cmd_help();
-void cmd_echo(char *args);
-void cmd_add(char *args);
-void cmd_exit();
+void cmd_help(int argc, char **argv);
+void cmd_echo(int argc, char **argv);
+void cmd_add(int argc, char **argv);
+void cmd_exit(int argc, char **argv);
+
+const cmd command_list[] = {
+    {"help", cmd_help, "Show this help message"},
+    {"echo", cmd_echo, "Echo back the provided text"},
+    {"add", cmd_add, "Add two numbers"},
+    {"exit", cmd_exit, "Exit the shell"}
+};
+int command_count = sizeof(command_list) / sizeof(cmd);
+
+
+const cmd* find_command(const char *name) {
+    for (int i = 0; i < command_count; i++) {
+        if (strcmp(command_list[i].name, name) == 0) {
+            return &command_list[i];
+        }
+    }
+    return NULL;
+}
+
+
 
 int main() {
     char input[MAX_INPUT_LEN];
@@ -34,7 +63,7 @@ int main() {
         if ((ch == EOF) && (i == 0)) {
             // EOF at start of line - treat as exit command
             printf("\n");
-            cmd_exit();
+            cmd_exit(0, NULL);
         } 
         
         // 1.3 -- Skip empty input
@@ -56,26 +85,9 @@ int main() {
                                          // Update: without this, pure space input will cause error
 
         // Execute command
-        if (strcmp(tokens[0], "help") == 0) {
-            cmd_help();
-        } else if (strcmp(tokens[0], "echo") == 0) {
-            // Combine remaining tokens into args string
-            char args[MAX_INPUT_LEN] = {0};
-            for (int j = 1; j < token_count; j++) {
-                if (j > 1) strcat(args, " ");
-                strcat(args, tokens[j]);
-            }
-            cmd_echo(args);
-        } else if (strcmp(tokens[0], "add") == 0) {
-            // Combine remaining tokens into args string
-            char args[MAX_INPUT_LEN] = {0};
-            for (int j = 1; j < token_count; j++) {
-                if (j > 1) strcat(args, " ");
-                strcat(args, tokens[j]);
-            }
-            cmd_add(args);
-        } else if (strcmp(tokens[0], "exit") == 0) {
-            cmd_exit();
+        const cmd *command = find_command(tokens[0]);
+        if (command != NULL) {
+            command->func(token_count - 1, tokens + 1);
         } else {
             printf("Unknown command: %s\n", tokens[0]);
         }
@@ -84,39 +96,41 @@ int main() {
     return 0;
 }
 
-void cmd_help() {
+void cmd_help(int argc, char **argv) {
     printf("Available commands:\n");
-    printf("  help          - Show this help message\n");
-    printf("  echo <text>   - Echo back the provided text\n");
-    printf("  add <num1> <num2> - Add two numbers\n");
-    printf("  exit          - Exit the shell\n");
-}
-
-void cmd_echo(char *args) {
-    if (strlen(args) == 0) {
-        printf("Usage: echo <text>\n");
-    } else {
-        printf("%s\n", args);
+    for (int i = 0; i < command_count; i++) {
+        printf("  %-10s - %s\n", command_list[i].name, command_list[i].description);
     }
 }
 
-void cmd_add(char *args) {
-    if (strlen(args) == 0) {
+void cmd_echo(int argc, char **argv) {
+    if (argc == 0) {
+        printf("Usage: echo <text>\n");
+        return;
+    }
+
+    for (int i = 0; i < argc; i++) {
+        printf("%s%s", argv[i], (i < argc - 1) ? " " : "");
+    }
+    printf("\n");
+}
+
+void cmd_add(int argc, char **argv) {
+    if (argc != 2) {
         printf("Usage: add <num1> <num2>\n");
         return;
     }
-    
+
     double num1, num2;
-    int parsed = sscanf(args, "%lf %lf", &num1, &num2);
-    
-    if (parsed != 2) {
-        printf("Error: Please provide two numbers\n");
-    } else {
-        printf("Result: %.2f\n", num1 + num2);
+    if (sscanf(argv[0], "%lf", &num1) != 1 || sscanf(argv[1], "%lf", &num2) != 1) {
+        printf("Error: Please provide two valid numbers\n");
+        return;
     }
+
+    printf("Result: %.2f\n", num1 + num2);
 }
 
-void cmd_exit() {
+void cmd_exit(int argc, char **argv) {
     printf("Exiting shell...\n");
     exit(0);
 }
