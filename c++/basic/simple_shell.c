@@ -19,12 +19,14 @@ void cmd_help(int argc, char **argv);
 void cmd_echo(int argc, char **argv);
 void cmd_add(int argc, char **argv);
 void cmd_exit(int argc, char **argv);
+void cmd_loop(int argc, char **argv);
 
 const cmd command_list[] = {
     {"help", cmd_help, "Show this help message"},
     {"echo", cmd_echo, "Echo back the provided text"},
     {"add", cmd_add, "Add two numbers"},
-    {"exit", cmd_exit, "Exit the shell"}
+    {"exit", cmd_exit, "Exit the shell"},
+    {"loop", cmd_loop, "Loop n times cmd"}
 };
 int command_count = sizeof(command_list) / sizeof(cmd);
 
@@ -128,6 +130,33 @@ void cmd_add(int argc, char **argv) {
     }
 
     printf("Result: %.2f\n", num1 + num2);
+}
+
+void cmd_loop(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: loop N CMD ARGS\n");
+        return;
+    }
+
+    int i = 0;
+    int times = 0;
+    if ( sscanf(argv[0], "%d", &times) != 1 ) {
+        printf("Error: Please provide a valid numbers\n");
+    }
+    argv++;
+    argc--;
+
+    const cmd *command = find_command(argv[0]);
+    if (command == NULL) {
+        printf("Unknown command: %s\n", argv[0]);
+        return ;
+    } 
+    argv++;
+    argc--;
+
+    for ( i = 0 ; i < times ; i ++ ) {
+        command->func(argc, argv);
+    }
 }
 
 void cmd_exit(int argc, char **argv) {
