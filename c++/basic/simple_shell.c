@@ -21,16 +21,24 @@ int main() {
     while (1) {
         // Print prompt
         printf("> ");
+        fflush(stdout);  // Ensure prompt is displayed immediately
         
         // Read input
         i = 0;
         while ((ch = getchar()) != '\n' && ch != EOF && i < MAX_INPUT_LEN - 1) {
             input[i++] = ch;
         }
-        input[i] = '\0';
+        
+        // Handle EOF (Ctrl+D)
+        if ((ch == EOF) && (i == 0)) {
+            // EOF at start of line - treat as exit command
+            printf("\n");
+            cmd_exit();
+        } 
         
         // Skip empty input
         if (i == 0) continue;
+        input[i] = '\0';
         
         // Parse command and arguments
         int cmd_end = 0;
