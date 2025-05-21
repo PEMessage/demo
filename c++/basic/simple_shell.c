@@ -3,6 +3,7 @@
 #include <stdlib.h>
 
 #define MAX_INPUT_LEN 100
+#define MAX_TOKENS 32
 
 // Predefined command functions
 void cmd_help();
@@ -12,60 +13,71 @@ void cmd_exit();
 
 int main() {
     char input[MAX_INPUT_LEN];
-    char cmd[MAX_INPUT_LEN];
-    char args[MAX_INPUT_LEN];
+    char *tokens[MAX_TOKENS];
+    char *saveptr;
     int i, ch;
     
     printf("Simple Shell - Type 'help' for available commands\n");
     
     while (1) {
-        // Print prompt
+        // 1.0 -- Print prompt
         printf("> ");
         fflush(stdout);  // Ensure prompt is displayed immediately
         
-        // Read input
+        // 1.1 -- Read input
         i = 0;
         while ((ch = getchar()) != '\n' && ch != EOF && i < MAX_INPUT_LEN - 1) {
             input[i++] = ch;
         }
         
-        // Handle EOF (Ctrl+D)
+        // 1.2 -- Handle EOF (Ctrl+D)
         if ((ch == EOF) && (i == 0)) {
             // EOF at start of line - treat as exit command
             printf("\n");
             cmd_exit();
         } 
         
-        // Skip empty input
+        // 1.3 -- Skip empty input
         if (i == 0) continue;
         input[i] = '\0';
         
-        // Parse command and arguments
-        int cmd_end = 0;
-        while (cmd_end < i && input[cmd_end] != ' ') {
-            cmd_end++;
+        // 2.0 -- Tokenize input using strtok_r(now we have input as cstring)
+        char *token;
+        int token_count = 0;
+
+        token = strtok_r(input, " ", &saveptr);
+        while (token != NULL && token_count < MAX_TOKENS - 1) {
+            tokens[token_count++] = token;
+            token = strtok_r(NULL, " ", &saveptr);
         }
-        
-        strncpy(cmd, input, cmd_end);
-        cmd[cmd_end] = '\0';
-        
-        if (cmd_end < i) {
-            strcpy(args, input + cmd_end + 1);
-        } else {
-            args[0] = '\0';
-        }
-        
+        tokens[token_count] = NULL;  // Null-terminate the token array
+
+        if (token_count == 0) continue;  // Shouldn't happen due to earlier check
+                                         // Update: without this, pure space input will cause error
+
         // Execute command
-        if (strcmp(cmd, "help") == 0) {
+        if (strcmp(tokens[0], "help") == 0) {
             cmd_help();
-        } else if (strcmp(cmd, "echo") == 0) {
+        } else if (strcmp(tokens[0], "echo") == 0) {
+            // Combine remaining tokens into args string
+            char args[MAX_INPUT_LEN] = {0};
+            for (int j = 1; j < token_count; j++) {
+                if (j > 1) strcat(args, " ");
+                strcat(args, tokens[j]);
+            }
             cmd_echo(args);
-        } else if (strcmp(cmd, "add") == 0) {
+        } else if (strcmp(tokens[0], "add") == 0) {
+            // Combine remaining tokens into args string
+            char args[MAX_INPUT_LEN] = {0};
+            for (int j = 1; j < token_count; j++) {
+                if (j > 1) strcat(args, " ");
+                strcat(args, tokens[j]);
+            }
             cmd_add(args);
-        } else if (strcmp(cmd, "exit") == 0) {
+        } else if (strcmp(tokens[0], "exit") == 0) {
             cmd_exit();
         } else {
-            printf("Unknown command: %s\n", cmd);
+            printf("Unknown command: %s\n", tokens[0]);
         }
     }
     
