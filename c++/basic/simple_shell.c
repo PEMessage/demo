@@ -3,20 +3,22 @@
 #include <stdlib.h>
 
 #ifdef __linux
-#define SS_GETCHAR getchar
-#define SS_MAIN main
-void echo(char ch) {
-    (void)ch;
-}
+    #define SS_GETCHAR getchar
+    #define SS_PUTCHAR putchar
+    #define SS_MAIN main
+    void echo(char ch) {
+        (void)ch;
+    }
 #else
-int __io_getchar(void);
-int __io_putchar(char);
-#define SS_GETCHAR __io_getchar
-#define SS_MAIN shell_main
+    int __io_getchar(void);
+    int __io_putchar(char);
+    #define SS_GETCHAR __io_getchar
+    #define SS_PUTCHAR __io_putchar
+    #define SS_MAIN shell_main
 
-void echo(char ch) {
-    __io_putchar(ch);
-}
+    void echo(char ch) {
+        __io_putchar(ch);
+    }
 #endif
 
 #define MAX_INPUT_LEN 100
@@ -90,11 +92,25 @@ int SS_MAIN() {
         
         // 1.1 -- Read input
         i = 0;
-        while ((ch = SS_GETCHAR()) != '\n' && ch != '\r' && ch != EOF && i < MAX_INPUT_LEN - 1) {
+        while ((ch = SS_GETCHAR()) != '\n' &&
+                ch != '\r' &&
+                ch != EOF &&
+                i < MAX_INPUT_LEN - 1) {
+
+            // Support DEL 
+            if (ch == 127) {
+                if (i > 0) {
+                    i--;
+                    SS_PUTCHAR('\b');
+                } else {
+                    continue;
+                }
+            }
+
             input[i++] = ch;
             echo(ch);
         }
-        
+
         // 1.2 -- Handle EOF (Ctrl+D)
         if ((ch == EOF) && (i == 0)) {
             // EOF at start of line - treat as exit command
@@ -103,7 +119,10 @@ int SS_MAIN() {
         } 
         
         // 1.3 -- Skip empty input
-        if (i == 0) continue;
+        if (i == 0) {
+            echo('\n');
+            continue;
+        }
         input[i] = '\0';
         
         // 2.0 -- Tokenize input using strtok_r(now we have input as cstring)
@@ -126,6 +145,7 @@ int SS_MAIN() {
             echo('\n');
             command->func(token_count - 1, tokens + 1);
         } else {
+            echo('\n');
             printf("Unknown command: %s\n", tokens[0]);
         }
     }
