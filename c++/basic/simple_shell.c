@@ -2,6 +2,23 @@
 #include <string.h>
 #include <stdlib.h>
 
+#ifdef __linux
+#define SS_GETCHAR getchar
+#define SS_MAIN main
+void echo(char ch) {
+    (void)ch;
+}
+#else
+int __io_getchar(void);
+int __io_putchar(char);
+#define SS_GETCHAR __io_getchar
+#define SS_MAIN shell_main
+
+void echo(char ch) {
+    __io_putchar(ch);
+}
+#endif
+
 #define MAX_INPUT_LEN 100
 #define MAX_TOKENS 32
 #define MAX_COMMANDS 32
@@ -20,12 +37,13 @@ void cmd_echo(int argc, char **argv);
 void cmd_add(int argc, char **argv);
 void cmd_exit(int argc, char **argv);
 void cmd_loop(int argc, char **argv);
+void cmd_keycode(int argc, char **argv);
 
 const cmd command_list[] = {
     {"help", cmd_help, "Show this help message"},
     {"echo", cmd_echo, "Echo back the provided text"},
-    {"add", cmd_add, "Add two numbers"},
     {"exit", cmd_exit, "Exit the shell"},
+    {"keycode", cmd_keycode, "Show keycode"},
     {"loop", cmd_loop, "Loop n times cmd"}
 };
 int command_count = sizeof(command_list) / sizeof(cmd);
@@ -40,13 +58,28 @@ const cmd* find_command(const char *name) {
     return NULL;
 }
 
+// #include <termios.h>
+// #include <unistd.h>
+
+// void set_raw_mode() {
+//     struct termios term;
+//     tcgetattr(STDIN_FILENO, &term);
+//     // term.c_lflag &= ~(ICANON | ECHO);  // Raw mode (no line buffering)
+//     term.c_iflag &= ~(ICRNL | INLCR);  // Disable \r → \n and \n → \r
+//     term.c_oflag &= ~(ONLCR | OCRNL);   // Map \n → \r\n on output
+//     tcsetattr(STDIN_FILENO, TCSANOW, &term);
+// }
 
 
-int main() {
+
+
+int SS_MAIN() {
     char input[MAX_INPUT_LEN];
     char *tokens[MAX_TOKENS];
     char *saveptr;
     int i, ch;
+
+    // set_raw_mode();
     
     printf("Simple Shell - Type 'help' for available commands\n");
     
@@ -57,8 +90,9 @@ int main() {
         
         // 1.1 -- Read input
         i = 0;
-        while ((ch = getchar()) != '\n' && ch != EOF && i < MAX_INPUT_LEN - 1) {
+        while ((ch = SS_GETCHAR()) != '\n' && ch != '\r' && ch != EOF && i < MAX_INPUT_LEN - 1) {
             input[i++] = ch;
+            echo(ch);
         }
         
         // 1.2 -- Handle EOF (Ctrl+D)
@@ -89,6 +123,7 @@ int main() {
         // Execute command
         const cmd *command = find_command(tokens[0]);
         if (command != NULL) {
+            echo('\n');
             command->func(token_count - 1, tokens + 1);
         } else {
             printf("Unknown command: %s\n", tokens[0]);
@@ -115,21 +150,6 @@ void cmd_echo(int argc, char **argv) {
         printf("%s%s", argv[i], (i < argc - 1) ? " " : "");
     }
     printf("\n");
-}
-
-void cmd_add(int argc, char **argv) {
-    if (argc != 2) {
-        printf("Usage: add <num1> <num2>\n");
-        return;
-    }
-
-    double num1, num2;
-    if (sscanf(argv[0], "%lf", &num1) != 1 || sscanf(argv[1], "%lf", &num2) != 1) {
-        printf("Error: Please provide two valid numbers\n");
-        return;
-    }
-
-    printf("Result: %.2f\n", num1 + num2);
 }
 
 void cmd_loop(int argc, char **argv) {
@@ -162,4 +182,11 @@ void cmd_loop(int argc, char **argv) {
 void cmd_exit(int argc, char **argv) {
     printf("Exiting shell...\n");
     exit(0);
+}
+
+void cmd_keycode(int argc, char **argv) {
+    char ch;
+    while( (ch = SS_GETCHAR()) != 'q') {
+        printf("keycode is %d\n", ch);
+    }
 }
