@@ -42,7 +42,7 @@ static QueueHandle_t xQueue = NULL;
 static void prvQueueSendTask( void * pvParameters )
 {
     TickType_t xNextWakeTime;
-    unsigned long ulValueToSend = 100UL;
+    unsigned long ulValueToSend = 0UL;
 
     /* Remove warning about unused parameters. */
     ( void ) pvParameters;
@@ -62,6 +62,8 @@ static void prvQueueSendTask( void * pvParameters )
          * queue should always	be empty at this point in the code, and it is an
          * error if it is not. */
         xQueueSend( xQueue, &ulValueToSend, 0U );
+
+        ulValueToSend = ( ulValueToSend + 1 ) % 100;
 
     }
 }
@@ -83,11 +85,11 @@ static void prvQueueReceiveTask( void * pvParameters )
         /*  To get here something must have been received from the queue, but
          * is it the expected value?  If it is, write the message to the
          * display before looping back to block on the queue again. */
-        if( ulReceivedValue == 100UL )
-        {
-            printf("Message received!\r\n");
-            ulReceivedValue = 0U;
-        }
+        // if( ulReceivedValue == 100UL )
+        // {
+        printf("Message received! %lu \r\n", ulReceivedValue);
+        ulReceivedValue = 0U;
+        // }
     }
 }
 
@@ -99,11 +101,16 @@ int main() {
     xQueue = xQueueCreate( mainQUEUE_LENGTH, sizeof( unsigned long ) );
     xTaskCreate( prvQueueReceiveTask,             /* The function that implements the task. */
                  "Rx",                            /* The text name assigned to the task - for debug only as it is not used by the kernel. */
-                 configMINIMAL_STACK_SIZE,        /* The size of the stack to allocate to the task.  Not actually used as a stack in the Win32 simulator port. */
+                 configMINIMAL_STACK_SIZE * 2,    /* The size of the stack to allocate to the task.  Not actually used as a stack in the Win32 simulator port. */
                  NULL,                            /* The parameter passed to the task - not used in this example. */
                  mainQUEUE_RECEIVE_TASK_PRIORITY, /* The priority assigned to the task. */
                  NULL );                          /* The task handle is not required, so NULL is passed. */
-    xTaskCreate( prvQueueSendTask, "TX", configMINIMAL_STACK_SIZE, NULL, mainQUEUE_SEND_TASK_PRIORITY, NULL );
+    xTaskCreate( prvQueueSendTask,
+                 "TX",
+                 configMINIMAL_STACK_SIZE * 2,
+                 NULL,
+                 mainQUEUE_SEND_TASK_PRIORITY,
+                 NULL );
 
     // Create the event group
     vTaskStartScheduler();
