@@ -12,7 +12,50 @@ int add(int a, int b, int c, int d,
     return a + b + c + d + e + f + g + h;
 }
 
-int main() {
+
+// Try do same thing as
+// https://stackoverflow.com/questions/18024672/what-registers-are-preserved-through-a-linux-x86-64-function-call
+// 这段代码的核心目的是通过Clobber list显式声明哪些寄存器在函数调用中需要被调用者保存。列出的寄存器包括
+uint32_t inc(uint32_t i) __attribute__((optimize("O0")));
+uint32_t inc(uint32_t i) {
+    //  52e:   e92d 4ff0   stmdb   sp!, {r4, r5, r6, r7, r8, r9, sl, fp, lr}
+    __asm__ __volatile__(
+        ""          // 空汇编指令
+        : "+m" (i)  // i作为可读写的内存操作数
+        :           // 无输入操作数
+        : "r0", "r1", "r2", "r3", "r4", "r5", "r6", /*"r7",*/ // Clobber list：列出可能被修改的寄存器
+          "r8", "r9", "r10", "r11", "r12", "lr",  // 通用寄存器
+          "cc", "memory"                          // 条件码和内存屏障
+    );
+    return i + 1;
+    // 542:   e8bd 8ff0   ldmia.w sp!, {r4, r5, r6, r7, r8, r9, sl, fp, pc}
+}
+
+
+
+// main.c:27:1: error: r7 cannot be used in 'asm' here
+//    27 | }
+//       | ^
+// Maybe same reason? 
+//  https://bugs.launchpad.net/gcc-arm-embedded/+bug/1379236
+//      The r7 is used as frame pointer register for thumb1 target cortex-m0.
+//      It is not allowed to be changed like above ldr instruction when the frame register is actually needed.
+//      Above inline assembly code is used in below function:
+//  https://github.com/cuberite/cuberite/issues/2387 (not work)
+//      Platform
+//          ARM (Thumb assembly)
+//      What
+//          Depending on the GCC compiler options used, you can receive an error:
+//          error: r7 cannot be used in asm here
+//      Reason
+//          The assembly code in bn_mul.h is optimized for the ARM platform and uses some registers, including r7 to efficiently do an operation. GCC also uses r7 as the frame pointer under ARM Thumb assembly.
+//      Solution
+//          Add -fomit-frame-pointer to your GCC compiler options.
+//          If you have already added -O, -O2, etc you do not need to add -fomit-frame-pointer as the optimization options already include it on most systems by default.
+
+
+
+int      main() {
 
     int ret = add(1, 2, 3, 4, 5, 6, 7, 8);
     // 使用16位的movs指令（而不是32位的mov）
@@ -41,6 +84,6 @@ int main() {
     //
     // 548:	f7ff ffd6 	bl	4f8 <add>
 
-    return ret;
+    return inc(ret);
 
 }
