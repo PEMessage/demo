@@ -17,9 +17,15 @@ int function(void) {
 
 int main(int argc, char *argv[])
 {
-    int i; 
+    int i;
     for ( i = 0 ; i < 10 ; i ++ ) {
         printf("comsumer loop : %d\n", function());
     }
     return 0;
 }
+
+// More refine lib
+// https://github.com/jsseldenthuis/coroutine
+//
+// Must read:
+// https://www.chiark.greenend.org.uk/~sgtatham/coroutines.html
