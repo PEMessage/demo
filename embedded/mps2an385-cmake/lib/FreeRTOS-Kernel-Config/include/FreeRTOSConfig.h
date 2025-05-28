@@ -149,4 +149,6 @@
 #define xPortPendSVHandler PendSV_Handler
 #define xPortSysTickHandler SysTick_Handler
 
+#define configRECORD_STACK_HIGH_ADDRESS 1 // to record stack area, (clion freertos support also recommand this)
+
 #endif /* FREERTOS_CONFIG_H */
