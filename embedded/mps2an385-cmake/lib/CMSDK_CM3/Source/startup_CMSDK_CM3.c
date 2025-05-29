@@ -53,7 +53,10 @@ __NO_RETURN void Reset_Handler  (void);
  *----------------------------------------------------------------------------*/
 /* Exceptions */
 void NMI_Handler            (void) __attribute__ ((weak, alias("Default_Handler")));
-void HardFault_Handler      (void) __attribute__ ((weak));
+// void HardFault_Handler      (void) __attribute__ ((weak)); 
+// for same reason, if `__attribute__ ((weak))` was added, HardFault_Handler, must within this file
+// Even if we comment HardFault_Handler within this file, it will not work
+void HardFault_Handler      (void);
 void MemManage_Handler      (void) __attribute__ ((weak, alias("Default_Handler")));
 void BusFault_Handler       (void) __attribute__ ((weak, alias("Default_Handler")));
 void UsageFault_Handler     (void) __attribute__ ((weak, alias("Default_Handler")));
@@ -403,10 +406,10 @@ __NO_RETURN void Reset_Handler(void)
 /*----------------------------------------------------------------------------
   Hard Fault Handler
  *----------------------------------------------------------------------------*/
-void HardFault_Handler(void)
-{
-  while(1);
-}
+// void HardFault_Handler(void)
+// {
+//   while(1);
+// }
 
 /*----------------------------------------------------------------------------
   Default Handler for Exceptions / Interrupts

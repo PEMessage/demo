@@ -4,6 +4,7 @@ project(CMSDK_CM3 LANGUAGES C ASM)
 
 # Source files
 set(SRCS
+    Source/hard_fault.c
     Source/startup_CMSDK_CM3.c
     Source/system_CMSDK_CM3.c
     Source/stdout_USART.c
