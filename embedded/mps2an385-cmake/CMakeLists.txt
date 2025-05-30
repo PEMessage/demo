@@ -26,6 +26,7 @@ macro(add_executable_with_binaries MODULE_NAME)
     add_custom_command(TARGET ${MODULE_NAME} POST_BUILD
         COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:${MODULE_NAME}> ${MODULE_NAME}.bin
         COMMAND ${CMAKE_OBJDUMP} -S $<TARGET_FILE:${MODULE_NAME}> > ${MODULE_NAME}.lss
+        COMMAND ln -sf $<TARGET_FILE:${MODULE_NAME}> ${CMAKE_BINARY_DIR}
         COMMENT "Generating binary and listing files for ${MODULE_NAME}"
     )
 endmacro()
