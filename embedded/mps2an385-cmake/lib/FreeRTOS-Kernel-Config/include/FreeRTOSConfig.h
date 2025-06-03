@@ -52,6 +52,14 @@
 #define configTOTAL_HEAP_SIZE                    ( ( size_t ) ( 60 * 1024 ) )
 #define configMAX_TASK_NAME_LEN                  ( 24 )
 
+#ifdef CONFIG_USE_MPU
+// MPU Warpper V2 extra requirement, origin setting from CORTEX_MPU_M3_MPS2_QEMU_GCC/FreeRTOSConfig.h
+    /* See https://freertos.org/a00110.html#configPROTECTED_KERNEL_OBJECT_POOL_SIZE for details. */
+    #define configPROTECTED_KERNEL_OBJECT_POOL_SIZE        ( 150 )
+    /* See https://freertos.org/a00110.html#configSYSTEM_CALL_STACK_SIZE for details. */
+    #define configSYSTEM_CALL_STACK_SIZE                   ( 128 )
+#endif
+
 /* TODO TraceRecorder (Step 4): Enable configUSE_TRACE_FACILITY in FreeRTOSConfig.h. */
 #define configUSE_TRACE_FACILITY                 0
 

@@ -44,6 +44,21 @@ MEMORY
   RAM   (rwx) : ORIGIN = __RAM_BASE, LENGTH = __RAM_SIZE
 }
 
+__privileged_functions_region_size__  = 64K; /* 64000 bytes */
+__privileged_data_region_size__       = 32K; /* 32000 bytes */
+
+__FLASH_segment_start__               = ORIGIN( FLASH );
+__FLASH_segment_end__                 = __FLASH_segment_start__ + LENGTH( FLASH );
+
+__SRAM_segment_start__      = ORIGIN( RAM );
+__SRAM_segment_end__        = __SRAM_segment_start__ + LENGTH( RAM );
+
+__privileged_data_start__   = __SRAM_segment_start__;
+__privileged_data_end__     = __SRAM_segment_start__ + __privileged_data_region_size__;
+
+__privileged_functions_start__        = __FLASH_segment_start__;
+__privileged_functions_end__          = __FLASH_segment_start__ + __privileged_functions_region_size__;
+
 /* Linker script to place sections and symbol values. Should be used together
  * with other linker script that defines memory regions FLASH and RAM.
  * It references following symbols, which must be defined in code:
@@ -78,9 +93,28 @@ ENTRY(Reset_Handler)
 
 SECTIONS
 {
+  .privileged_functions :
+  {
+    . = ALIGN(4);
+    KEEP(*(.vectors))
+    . = ALIGN(4);
+    *(privileged_functions)
+    . = ALIGN(4);
+    FILL(0xDEAD);
+    /* Ensure that un-privileged code is placed after the region reserved                                                                                                                                         4          * for privileged kernel code. */
+    /* Note that dot (.) actually refers to the byte offset from the start
+        * of the current section (.privileged_functions in this case). As a
+        * result, setting dot (.) to a value sets the size of the section. */
+    . = __privileged_functions_region_size__;
+  } >FLASH
+
   .text :
   {
-    KEEP(*(.vectors))
+    . = ALIGN(4);
+    __syscalls_flash_start__ = .;
+    *(freertos_system_calls)
+    __syscalls_flash_end__ = .;
+    . = ALIGN(4);
     *(.text*)
 
     KEEP(*(.init))
