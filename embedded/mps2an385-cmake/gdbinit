@@ -1,0 +1,6 @@
+target remote :1234
+# Ubuntu 22.04:
+#     apt install newlib-source
+#     cd /usr/src/newlib
+#     sudo tar -J -xvf newlib-3.3.0.tar.xz
+set substitute-path ../../../../../../../.. /usr/src/newlib/newlib-3.3.0
