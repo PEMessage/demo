@@ -31,6 +31,8 @@ set_target_properties(CMSDK_CM3 PROPERTIES
 target_link_options(CMSDK_CM3 INTERFACE
     -T ${CMAKE_SOURCE_DIR}/lib/CMSDK_CM3/Source/gcc_arm.ld
     --entry=Reset_Handler
+    -Wl,-Map=gcc_arm.map # allow us to check gcc_arm.ld work fine
+    -Wl,--print-memory-usage # also print usage
 )
 
 # Compile definitions
