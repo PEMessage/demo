@@ -53,3 +53,19 @@ void test_func() {
     // printk("Hello world :" "__func__"); // do not met our requirement
     // __func__ is a local variable, not a macro
 }
+
+
+// https://github.com/netcan/recipes/blob/master/cpp/metaproggramming/MetaMacro.hpp
+// https://zhuanlan.zhihu.com/p/165993590
+// https://pfultz2.com/blog/2012/07/31/reflection-in-under-100-lines/
+// 用于C++反射
+// DEFINE_STRUCT(Point,
+//     (double) x,
+//     (double) y)
+#define PARE(...) __VA_ARGS__
+#define EAT(...)
+#define PAIR(x) PARE x // PAIR((int) x) => PARE(int) x => int x
+#define STRIP(x) EAT x // STRIP((int) x) => EAT(int) x => x
+
+PAIR((int) x)
+STRIP((int) x)
