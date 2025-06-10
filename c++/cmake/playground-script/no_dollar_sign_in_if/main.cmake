@@ -31,9 +31,15 @@ else()
 endif()
 
 if("${MY_VAR}")
-    message(STATUS "If branch") # <--- this
+    message(STATUS "If branch")
 else()
-    message(STATUS "Else branch") 
+    message(STATUS "Else branch")  # <--- this
+    # ``if(<string>)``                                                   
+    #  A quoted string always evaluates to false unless:                 
+    #     * The string's value is one of the true constants, or             
+    #     * Policy ``CMP0054`` is not set to ``NEW`` and the string's value 
+    #       happens to be a variable name that is affected by ``CMP0054``'s 
+    #       behavior.                                                       
 endif()
 
 
@@ -47,13 +53,14 @@ set(DO_NOTHING "-----------After Policy CMP0054-----------")
 
 
 if(${MY_VAR})
-    message(STATUS "If branch")
+    message(STATUS "If branch") # <--- this
 else()
-    message(STATUS "Else branch") # <--- this
+    message(STATUS "Else branch")
 endif()
 
 if("${MY_VAR}")
-    message(STATUS "If branch") # <--- this
+    message(STATUS "If branch")
 else()
-    message(STATUS "Else branch") 
+    message(STATUS "Else branch") # <--- this 
+    # though predicate commands like if receive quoting information that isn’t shown
 endif()
