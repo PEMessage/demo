@@ -1,3 +1,4 @@
+---
 id: convert-cout-to-printf
 language: cpp
 rule:
@@ -11,3 +12,21 @@ transform:
 fix: |
   printf("$NEWVARS")
 message: Convert cout << ... << endl to printf
+---
+id: insert-braces-in-if
+language:  c
+rule:
+  kind: return_statement
+  pattern: return $$$X ;
+  inside:
+    any:
+      - kind: if_statement
+        not:
+          has:
+            kind: compound_statement
+      - kind: else_clause
+        not:
+          has:
+            kind: compound_statement
+fix:
+  '{ return $$$X; }'
