@@ -1,0 +1,15 @@
+[package]
+name = "basic"
+version = "0.1.0"
+edition = "2024"
+
+
+
+[[bin]]
+name = "result"
+path = "src/result.rs"
+
+[[bin]]
+name = "polymorphism"
+path = "src/polymorphism.rs"
+
