@@ -4,6 +4,32 @@
 #include "CMSDK_CM3.h" // for __get_CONTROL
 extern int stdout_init (void);
 
+
+
+// * 状态字寄存器 （三合一）:
+//   * xPSR: 记录 ALU 标志（0 标志，进位标志，负数标志，溢出标志），
+//           执行状态，以及当前正服务的中断号
+// * 中断屏蔽寄存器 :
+//   * PRIMASK: 除能所有的中断——当然了，不可屏蔽中断（NMI）才不甩它呢
+//   * FAULTMASK: 除能所有的 fault——NMI 依然不受影响，而且被除能的 faults 会“上访”，见后续章节的叙述
+//   * BASEPRI: 除能所有优先级不高于某个具体数值的中断
+// * 控制寄存器:
+//   * CONTROL: 定义特权状态（见后续章节对特权的叙述），
+//              并且决定使用哪一个堆栈指针
+//     * nPRIV (Bit 0): 特权级别控制 - 0: 主任务模式为特权级（privileged），1: 主任务模式为非特权级（unprivileged）
+//     * SPSEL (Bit 1): 堆栈指针选择 - 0: 使用主堆栈指针 MSP，1: 使用进程堆栈指针 PSP
+//     * FPCA (Bit 2): 浮点上下文保存激活标志 - 1: 当前线程使用了浮点寄存器，需要保存浮点状态
+//     * [31:2]: 保留位，必须写为 0
+uint32_t get_current_mode(void) {
+    uint32_t ipsr = __get_IPSR();
+    if (ipsr == 0) {
+        printf("Your are runing Threading Mode\n");
+        return 0; // Thread Mode
+    } else {
+        printf("Your are runing Handler Mode: %d\n", ipsr); // ips - 16 to get IRQ number
+        return 1; // Handler Mode
+    }
+}
 // SVC 异常处理函数
 // See: https://developer.arm.com/documentation/ka004005/latest/
 void  SVC_Handler() {
@@ -24,12 +50,14 @@ void SVC_Handler_Main( unsigned int *svc_args )
 
     /*
      * Stack contains:
-     * r0, r1, r2, r3, r12, r14, the return address and xPSR
+     * r0, r1, r2, r3, r12, r14(LR), the return address and xPSR
      * First argument (r0) is svc_args[0]
      */
     svc_number = ( ( char * )svc_args[ 6 ] )[ -2 ] ;
     // TODO: why printf doesn't work?
-    printf("Now we are in SVC_Handler_Main\n");
+    printf("\n\n-- 4. In SVC, Now we are in SVC_Handler_Main\n");
+    get_current_mode();
+    printf("Is privileged : %d\n", (__get_CONTROL() & 0x1) == 0 );
     switch( svc_number )
     {
         case 0:  /* EnablePrivilegedMode */
@@ -47,14 +75,23 @@ int main() {
     stdout_init();
     // prvUARTInit();
 
-    __set_CONTROL(0x1);  // 切换到非特权级
-    printf("Switch to privileged!\n");
+    // 1. Aftre Init complete
+    printf("\n\n-- 1. After Init complete\n");
     printf("Is privileged : %d\n", (__get_CONTROL() & 0x1) == 0 );
+    get_current_mode();
+
+    printf("\n\n-- 2. Switch to privileged!\n");
+    __set_CONTROL(0x1);  // 切换到非特权级
+    printf("Is privileged : %d\n", (__get_CONTROL() & 0x1) == 0 );
+    get_current_mode();
 
     // See: https://developer.arm.com/documentation/ka004005/latest/
-    printf("Raise SVC #0!\n");
+    printf("\n\n-- 3. Raise SVC #0!\n");
     asm volatile ("SVC #0");  // 触发特权切换
+
+    printf("\n\n-- 5. After SVC\n");
     printf("Is privileged : %d\n", (__get_CONTROL() & 0x1) == 0 );
+    get_current_mode();
 
     while(1) {
         // printf("Now we are in SVC_Handler_Main\n");
