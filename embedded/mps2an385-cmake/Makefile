@@ -113,7 +113,6 @@ run-$(1):
 		-machine mps2-an385 \
 		-cpu cortex-m3 \
 		-kernel $(PRIVATE_BIN) \
-		-monitor none \
 		-serial stdio
 
 debug-$(1):
@@ -124,7 +123,7 @@ debug-$(1):
 		-machine mps2-an385 \
 		-cpu cortex-m3 \
 		-kernel $(PRIVATE_BIN) \
-		-monitor none \
+		-d int,cpu_reset \
 		-nographic -serial stdio \
 		-s -S
 clean-$(1):
