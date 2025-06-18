@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include "cmsis_gcc.h" // for __get_CONTROL
 #include "CMSDK_CM3.h" // for __get_CONTROL
 extern int stdout_init (void);
@@ -26,7 +27,7 @@ uint32_t get_current_mode(void) {
         printf("Your are runing Threading Mode\n");
         return 0; // Thread Mode
     } else {
-        printf("Your are runing Handler Mode: %d\n", ipsr); // ips - 16 to get IRQ number
+        printf("Your are runing Handler Mode: %"PRIu32"\n", ipsr); // ips - 16 to get IRQ number
         return 1; // Handler Mode
     }
 }
@@ -93,8 +94,56 @@ int main() {
     printf("Is privileged : %d\n", (__get_CONTROL() & 0x1) == 0 );
     get_current_mode();
 
+    printf("\n\n-- 6. Print SCS Register\n");
+    void print_SCB_info(void);
+    void print_SCnSCB_info(void);
+    print_SCnSCB_info();
+    print_SCB_info();
     while(1) {
         // printf("Now we are in SVC_Handler_Main\n");
     }
 
+}
+
+/* Macro to extract bitfield from register */
+// #define EXTRACT_BITFIELD(reg, field) ((reg & field##_Msk) >> field##_Pos)
+#define EXTRACT_BITFIELD(reg, field) ((typeof(reg))((reg & field##_Msk) >> field##_Pos))
+
+/* Macro to extract field from CMSIS SCS register structure */
+#define EXTRACT_FIELD(obj, reg, field) EXTRACT_BITFIELD(obj->reg, obj##_##reg##_##field)
+
+/* Individual register print functions */
+void print_CPUID() {
+    printf("CPUID Register (0x%08"PRIX32"):\n", SCB->CPUID);
+    printf(" |Implementer:    0x%"PRIX32" (ARM)\n", EXTRACT_FIELD(SCB, CPUID, IMPLEMENTER));
+    printf(" |Variant:        0x%"PRIX32"\n", EXTRACT_FIELD(SCB, CPUID, VARIANT));
+    printf(" |Architecture:   0x%"PRIX32"\n", EXTRACT_FIELD(SCB, CPUID, ARCHITECTURE));
+    printf(" |Part number:    0x%"PRIX32" (Cortex-M3)\n", EXTRACT_FIELD(SCB, CPUID, PARTNO));
+    printf(" |Revision:       0x%"PRIX32"\n", EXTRACT_FIELD(SCB, CPUID, REVISION));
+}
+
+void print_SCB_info() {
+    printf("\n===== SCB (System Control Block) =====\n");
+    print_CPUID();
+}
+
+/* 打印 ICTR 寄存器信息 */
+void print_ICTR() {
+    printf("ICTR Register (0x%08"PRIX32"): // Interrupt Controller Type Register \n", SCnSCB->ICTR);
+    printf(" |Interrupt lines supported: %"PRIu32" (32 * (%"PRIu32" + 1))\n",
+           32 * (EXTRACT_FIELD(SCnSCB, ICTR, INTLINESNUM) + 1),
+           EXTRACT_FIELD(SCnSCB, ICTR, INTLINESNUM));
+}
+
+/* 打印 ACTLR 寄存器信息 Vendor Used it */
+void print_ACTLR() {
+    printf("ACTLR Register (0x%08"PRIX32"): // Auxiliary Control Register \n", SCnSCB->ACTLR);
+}
+
+/* 主打印函数 */
+void print_SCnSCB_info() {
+    printf("\n===== SCnSCB (System Control not in SCB) =====\n");
+    print_ICTR();
+    print_ACTLR();
+    // print_CPPWR();
 }
