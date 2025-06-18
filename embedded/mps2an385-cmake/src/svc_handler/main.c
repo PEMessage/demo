@@ -148,12 +148,56 @@ void print_SCR() {
     //   1 = enter sleep, or deep sleep, on return from an ISR to Thread mode.
     printf(" |SLEEPONEXIT:    %"PRIu32" (Sleep on Exit)\n", EXTRACT_FIELD(SCB, SCR, SLEEPONEXIT));
 }
+
+void print_ICSR() {
+    printf("ICSR Register (0x%08"PRIX32"):\n", SCB->ICSR);
+    /* [31] RW: NMI set-pending bit
+     * Write: 1=set pending, Read: 1=NMI pending
+     * Highest-priority exception, handler entry clears this bit */
+    printf(" |NMIPENDSET:     %"PRIu32" (NMI set-pending bit)\n", EXTRACT_FIELD(SCB, ICSR, NMIPENDSET));
+    /* [28] RW: PendSV set-pending bit
+     * Write: 1=set pending, Read: 1=PendSV pending
+     * Only way to set PendSV pending state */
+    printf(" |PENDSVSET:      %"PRIu32" (PendSV set-pending bit)\n", EXTRACT_FIELD(SCB, ICSR, PENDSVSET));
+    /* [27] WO: PendSV clear-pending bit
+     * Write: 1=clear pending state, Read value undefined */
+    printf(" |PENDSVCLR:      %"PRIu32" (PendSV clear-pending bit)\n", EXTRACT_FIELD(SCB, ICSR, PENDSVCLR));
+    /* [26] RW: SysTick set-pending bit
+     * Write: 1=set pending, Read: 1=SysTick pending */
+    printf(" |PENDSTSET:      %"PRIu32" (SysTick set-pending bit)\n", EXTRACT_FIELD(SCB, ICSR, PENDSTSET));
+    /* [25] WO: SysTick clear-pending bit
+     * Write: 1=clear pending, Read value unknown */
+    printf(" |PENDSTCLR:      %"PRIu32" (SysTick clear-pending bit)\n", EXTRACT_FIELD(SCB, ICSR, PENDSTCLR));
+    /* [23] RO: Reserved for Debug use
+     * Reads-as-zero when not in Debug mode */
+    printf(" |ISRPREEMPT:     %"PRIu32" (Reserved for Debug)\n", EXTRACT_FIELD(SCB, ICSR, ISRPREEMPT));
+    /* [22] RO: Interrupt pending flag (excludes NMI and Faults)
+     * 1=any interrupt pending (except NMI/Faults) */
+    printf(" |ISRPENDING:     %"PRIu32" (Any IRQ pending)\n", EXTRACT_FIELD(SCB, ICSR, ISRPENDING));
+    /* [17:12] RO: Highest priority pending exception number
+     * 0=no pending, Nonzero=exception number
+     * Affected by BASEPRI/FAULTMASK but not PRIMASK */
+    printf(" |VECTPENDING:    0x%03"PRIX32" (Highest pending IRQ number)\n", EXTRACT_FIELD(SCB, ICSR, VECTPENDING));
+    /* [11] RO: Exception preemption status
+     * 0=preempted exceptions exist, 1=only current exception active */
+    printf(" |RETTOBASE:      %"PRIu32" (No preempted exceptions)\n", EXTRACT_FIELD(SCB, ICSR, RETTOBASE));
+    /* [8:0] RO: Currently active exception number
+     * 0=Thread mode, Nonzero=active exception number
+     * Note: Subtract 16 to get CMSIS IRQ number */
+    printf(" |VECTACTIVE:     0x%03"PRIX32" (Active exception number)\n" \
+            "    |-- 0=Thread mode, Nonzero=active exception number\n" \
+            "    |-- same as IPSR(Special Regs in xPSR), but don't need mrs(Priv) to read\n" ,
+            EXTRACT_FIELD(SCB, ICSR, VECTACTIVE));
+}
+
 void print_SCB_info() {
     printf("\n===== SCB (System Control Block) =====\n");
     print_CPUID();
+    print_ICSR();
     print_CCR();
     print_SCR();
 }
+
 
 /* 打印 ICTR 寄存器信息 */
 void print_ICTR() {
