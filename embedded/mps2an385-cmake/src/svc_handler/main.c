@@ -116,11 +116,11 @@ int main() {
 /* Individual register print functions */
 void print_CPUID() {
     printf("CPUID Register (0x%08"PRIX32"):\n", SCB->CPUID);
-    printf(" |Implementer:    0x%"PRIX32" (ARM)\n", EXTRACT_FIELD(SCB, CPUID, IMPLEMENTER));
-    printf(" |Variant:        0x%"PRIX32"\n", EXTRACT_FIELD(SCB, CPUID, VARIANT));
-    printf(" |Architecture:   0x%"PRIX32"\n", EXTRACT_FIELD(SCB, CPUID, ARCHITECTURE));
-    printf(" |Part number:    0x%"PRIX32" (Cortex-M3)\n", EXTRACT_FIELD(SCB, CPUID, PARTNO));
-    printf(" |Revision:       0x%"PRIX32"\n", EXTRACT_FIELD(SCB, CPUID, REVISION));
+    printf(" |Implementer:          0x%"PRIX32" (ARM == 0x41)\n", EXTRACT_FIELD(SCB, CPUID, IMPLEMENTER));
+    printf(" |Variant(rN,Revision): 0x%"PRIX32"\n", EXTRACT_FIELD(SCB, CPUID, VARIANT));
+    printf(" |Architecture:         0x%"PRIX32"\n", EXTRACT_FIELD(SCB, CPUID, ARCHITECTURE));
+    printf(" |Part number:          0x%"PRIX32" (Cortex-M3 == C23)\n", EXTRACT_FIELD(SCB, CPUID, PARTNO));
+    printf(" |Revision(pN,Patch):   0x%"PRIX32"\n", EXTRACT_FIELD(SCB, CPUID, REVISION));
 }
 void print_CCR() {
     printf("CCR Register (0x%08"PRIX32"): // Configuration Control Register\n", SCB->CCR);
@@ -132,12 +132,27 @@ void print_CCR() {
     printf(" |USERSETMPEND:    0x%"PRIX32" (User level SETMPEND)\n", EXTRACT_FIELD(SCB, CCR, USERSETMPEND));
     printf(" |NONBASETHRDENA:  0x%"PRIX32" (Non-base thread enable)\n", EXTRACT_FIELD(SCB, CCR, NONBASETHRDENA));
 }
-
-
+void print_SCR() {
+    // See: https://developer.arm.com/documentation/dui0552/a/cortex-m3-peripherals/system-control-block/system-control-register
+    printf("SCR Register (0x%08"PRIX32"): // System Control Register\n", SCB->SCR);
+    // Send Event on Pending bit:
+    //   0 = only enabled interrupts or events can wake up the processor, disabled interrupts are excluded.
+    //   1 = enabled events and all interrupts, including disabled interrupts, can wakeup the processor.
+    printf(" |SEVONPEND:      %"PRIu32" (Send Event on Pending)\n", EXTRACT_FIELD(SCB, SCR, SEVONPEND));
+    // Controls whether the processor uses sleep or deep sleep as its low power mode:
+    //   0 = sleep.
+    //   1 = deep sleep
+    printf(" |SLEEPDEEP:      %"PRIu32" (Deep Sleep Enable)\n", EXTRACT_FIELD(SCB, SCR, SLEEPDEEP));
+    // Indicates sleep-on-exit when returning from Handler mode to Thread mode:
+    //   0 = do not sleep when returning to Thread mode.
+    //   1 = enter sleep, or deep sleep, on return from an ISR to Thread mode.
+    printf(" |SLEEPONEXIT:    %"PRIu32" (Sleep on Exit)\n", EXTRACT_FIELD(SCB, SCR, SLEEPONEXIT));
+}
 void print_SCB_info() {
     printf("\n===== SCB (System Control Block) =====\n");
     print_CPUID();
     print_CCR();
+    print_SCR();
 }
 
 /* 打印 ICTR 寄存器信息 */
