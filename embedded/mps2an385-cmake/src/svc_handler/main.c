@@ -73,6 +73,7 @@ void SVC_Handler_Main( unsigned int *svc_args )
 int main() {
 
     SystemCoreClockUpdate();
+    SystemInit();
     stdout_init();
     // prvUARTInit();
 
@@ -121,10 +122,22 @@ void print_CPUID() {
     printf(" |Part number:    0x%"PRIX32" (Cortex-M3)\n", EXTRACT_FIELD(SCB, CPUID, PARTNO));
     printf(" |Revision:       0x%"PRIX32"\n", EXTRACT_FIELD(SCB, CPUID, REVISION));
 }
+void print_CCR() {
+    printf("CCR Register (0x%08"PRIX32"): // Configuration Control Register\n", SCB->CCR);
+    printf(" |STKALIGN:        0x%"PRIX32" (Stack alignment)\n", EXTRACT_FIELD(SCB, CCR, STKALIGN));
+    printf(" |BFHFNMIGN:       0x%"PRIX32" (BusFault, HardFault NMI ignore)\n", EXTRACT_FIELD(SCB, CCR, BFHFNMIGN));
+    printf(" |DIV_0_TRP:       0x%"PRIX32" (Divide by 0 trap)\n", EXTRACT_FIELD(SCB, CCR, DIV_0_TRP));
+    printf(" |UNALIGN_TRP:     0x%"PRIX32" (Unaligned access trap) <-- SystemInit will set this, if UNALIGNED_SUPPORT_DISABLE\n",
+            EXTRACT_FIELD(SCB, CCR, UNALIGN_TRP));
+    printf(" |USERSETMPEND:    0x%"PRIX32" (User level SETMPEND)\n", EXTRACT_FIELD(SCB, CCR, USERSETMPEND));
+    printf(" |NONBASETHRDENA:  0x%"PRIX32" (Non-base thread enable)\n", EXTRACT_FIELD(SCB, CCR, NONBASETHRDENA));
+}
+
 
 void print_SCB_info() {
     printf("\n===== SCB (System Control Block) =====\n");
     print_CPUID();
+    print_CCR();
 }
 
 /* 打印 ICTR 寄存器信息 */
