@@ -81,8 +81,8 @@ void SVC_Handler_Main( unsigned int *svc_args )
 }
 
 // MPU must align to it's size
-// 8 region for max 8 mpu region
-char PSP_STACK[2048 * 8] __attribute__((aligned(2048))) = {};
+#define STACK_SIZE (4*1024)
+char PSP_STACK[STACK_SIZE] __attribute__((section(".process_stack"), aligned(STACK_SIZE))) = {};
 
 
 int main() {
@@ -118,7 +118,8 @@ int main() {
 
     printf("\n\n-- 4. Switch to Unprivileged!\n");
     {
-        __set_CONTROL(0x1);  // 切换到非特权级
+        __set_CONTROL(0x1 | 0x2);  // 切换到非特权级 and PSP
+        // printf is not a stack only func, it will access data section
         printf("Is privileged : %d\n", (__get_CONTROL() & 0x1) == 0 );
         get_current_mode();
     }
@@ -153,72 +154,131 @@ int main() {
 
 void CmsisInitMPU(void) {
     ARM_MPU_Disable();
+    #define INDENT "   |"
 
     // Note: if a symbol variable define in linker script,
     // in C world, should treat that in that a symbol in there(like enum)
-    extern void * __ROM_BASE;
-    extern void * __ROM_SIZE;
-    printf("ROMBASE is %p\n", &__ROM_BASE);
-    printf("ROMSIZE is %p\n", &__ROM_SIZE); // and convert it to ARM_MPU_REGION_SIZE
-    ARM_MPU_SetRegionEx(
-            0UL                           /* Region Number */,
-            (uintptr_t)&__ROM_BASE        /* Base Address  */,
-            ARM_MPU_RASR(0UL              /* DisableExec */, // ROM region content all code
-                                                             //
-                ARM_MPU_AP_FULL           /* AccessPermission*/,
-                0UL                       /* TypeExtField*/,
-                0UL                       /* IsShareable*/,
-                0UL                       /* IsCacheable*/,
-                0UL                       /* IsBufferable*/,
-                0x00UL                    /* SubRegionDisable*/,
-                ARM_MPU_REGION_SIZE_256KB /* Size*/)
-            );
-            // DisableExec change to 1, will cause
-            //   Taking exception 3 [Prefetch Abort]
-            //   ...with CFSR.IACCVIOL
-            //   ...taking pending nonsecure exception 4
-            //   Taking exception 3 [Prefetch Abort]
-            //   ...with CFSR.IACCVIOL
-            //   ...taking pending nonsecure exception 3
-            //   Taking exception 3 [Prefetch Abort]
-            //   ...with CFSR.IACCVIOL
-            //   qemu: fatal: Lockup: can't escalate 3 to HardFault (current priority -1)
+    printf(INDENT "\n");
+    printf(INDENT "-- 1. config ROM, Full Access\n");
+    {
+        extern void * __ROM_BASE;
+        extern void * __ROM_SIZE;
+        printf(INDENT "ROMBASE is %p\n", &__ROM_BASE);
+        printf(INDENT "ROMSIZE is %p\n", &__ROM_SIZE); // and convert it to ARM_MPU_REGION_SIZE
+        ARM_MPU_SetRegionEx(
+                0UL                           /* Region Number */,
+                (uintptr_t)&__ROM_BASE        /* Base Address  */,
+                ARM_MPU_RASR(0UL              /* DisableExec */, // ROM region content all code
+                    ARM_MPU_AP_RO             /* AccessPermission*/,
+                    0UL                       /* TypeExtField*/,
+                    0UL                       /* IsShareable*/,
+                    0UL                       /* IsCacheable*/,
+                    0UL                       /* IsBufferable*/,
+                    0x00UL                    /* SubRegionDisable*/,
+                    ARM_MPU_REGION_SIZE_256KB /* Size*/)
+                );
+                // DisableExec change to 1, will cause
+                //   Taking exception 3 [Prefetch Abort]
+                //   ...with CFSR.IACCVIOL
+                //   ...taking pending nonsecure exception 4
+                //   Taking exception 3 [Prefetch Abort]
+                //   ...with CFSR.IACCVIOL
+                //   ...taking pending nonsecure exception 3
+                //   Taking exception 3 [Prefetch Abort]
+                //   ...with CFSR.IACCVIOL
+                //   qemu: fatal: Lockup: can't escalate 3 to HardFault (current priority -1)
+    }
 
-    extern void * __RAM_BASE;
-    extern void * __RAM_SIZE;
-    printf("ROMBASE is %p\n", &__RAM_BASE);
-    printf("ROMSIZE is %p\n", &__RAM_SIZE); // and convert it to ARM_MPU_REGION_SIZE
-    ARM_MPU_SetRegionEx(
-            1UL                           /* Region Number */,
-            (uintptr_t)&__RAM_BASE        /* Base Address  */,
-            ARM_MPU_RASR(1UL              /* DisableExec */, // RAM region should not content code
-                ARM_MPU_AP_FULL           /* AccessPermission*/,
-                0UL                       /* TypeExtField*/,
-                0UL                       /* IsShareable*/,
-                0UL                       /* IsCacheable*/,
-                0UL                       /* IsBufferable*/,
-                0x00UL                    /* SubRegionDisable*/,
-                ARM_MPU_REGION_SIZE_128KB /* Size*/)
-            );
+    printf(INDENT "\n");
+    printf(INDENT "-- 2. config data_section, Full Access\n");
+    {
+        // data(ALL) + heap(ALL) + process_stack(PSP) + stack(MSP, Priv only)
+        extern void * __data_start__;
+        extern void * __end__;
+        printf(INDENT "data_start is %p\n", &__data_start__);
+        printf(INDENT "data_size is %p\n", (void *)(&__end__ - &__data_start__)); // and convert it to ARM_MPU_REGION_SIZE
+        ARM_MPU_SetRegionEx(
+                1UL                           /* Region Number */,
+                (uintptr_t)&__data_start__    /* Base Address  */,
+                ARM_MPU_RASR(1UL              /* DisableExec */, // RAM region should not content code
+                    ARM_MPU_AP_FULL           /* AccessPermission*/,
+                    0UL                       /* TypeExtField*/,
+                    0UL                       /* IsShareable*/,
+                    0UL                       /* IsCacheable*/,
+                    0UL                       /* IsBufferable*/,
+                    0x00UL                    /* SubRegionDisable*/,
+                    ARM_MPU_REGION_SIZE_4KB /* Size*/) // due to limit of CM3 MPU,
+                                                       // we could not algin to it exactlly during compile time
+                                                       // we only add first 4K(same as PSP_STACK
+                                                       // __data_start__ - __end__  should < 4K
+                );
+    }
 
-    #define UART0_ADDRESS                         ( 0x40004000UL )
-    ASSERT(UART0_ADDRESS % (4 * 1024) == 0, "MPU need to aligin to it's size");
-    ARM_MPU_SetRegionEx(
-            2UL                          /* Region Number */,
-            (uintptr_t)UART0_ADDRESS     /* Base Address  */,
-            ARM_MPU_RASR(1UL             /* DisableExec */,
-                ARM_MPU_AP_FULL          /* AccessPermission*/,
-                0UL                      /* TypeExtField*/,
-                0UL                      /* IsShareable*/,
-                0UL                      /* IsCacheable*/,
-                0UL                      /* IsBufferable*/,
-                0x00UL                   /* SubRegionDisable*/,
-                ARM_MPU_REGION_SIZE_4KB  /* Size*/) // 4K should be already cover all USART register
-                                                    //
-                                                    // If change to 256K,  cause that(qemu should add `-d int,cpu_reset` ):
-                                                    //    Taking exception 4 [Data Abort]
-                                                    //    ...with CFSR.DACCVIOL and MMFAR 0x40004004
-            );
+    printf(INDENT "\n");
+    printf(INDENT "-- 3. config MSP STACK, Priv only\n");
+    {
+        // MSP is for Priv only
+        extern void * __StackLimit;
+        extern void * __STACK_SIZE;
+        printf(INDENT "StackLimit is %p\n", &__StackLimit);
+        printf(INDENT "STACK_SIZE is %p\n", &__STACK_SIZE); // and convert it to ARM_MPU_REGION_SIZE
+        ARM_MPU_SetRegionEx(
+                2UL                           /* Region Number */,
+                (uintptr_t)&__StackLimit      /* Base Address  */,
+                ARM_MPU_RASR(1UL              /* DisableExec */, // RAM region should not content code
+                    ARM_MPU_AP_PRIV           /* AccessPermission*/,
+                    0UL                       /* TypeExtField*/,
+                    0UL                       /* IsShareable*/,
+                    0UL                       /* IsCacheable*/,
+                    0UL                       /* IsBufferable*/,
+                    0x00UL                    /* SubRegionDisable*/,
+                    ARM_MPU_REGION_SIZE_1KB /* Size*/) // convert from STACK_SIZE(for MSP)
+                );
+    }
+
+
+    printf(INDENT "\n");
+    printf(INDENT "-- 4. config PSP STACK, Full Access\n");
+    {
+        printf(INDENT "PSP_STACK is %p\n", PSP_STACK); // and convert it to ARM_MPU_REGION_SIZE
+        ARM_MPU_SetRegionEx(
+                3UL                           /* Region Number */,
+                (uintptr_t)PSP_STACK        /* Base Address  */,
+                ARM_MPU_RASR(1UL              /* DisableExec */, // RAM region should not content code
+                    ARM_MPU_AP_FULL           /* AccessPermission*/,
+                    0UL                       /* TypeExtField*/,
+                    0UL                       /* IsShareable*/,
+                    0UL                       /* IsCacheable*/,
+                    0UL                       /* IsBufferable*/,
+                    0x00UL                    /* SubRegionDisable*/,
+                    ARM_MPU_REGION_SIZE_4KB /* Size*/)
+                );
+    }
+
+    printf(INDENT "\n");
+    printf(INDENT "-- 5. config USART, Full Access\n");
+    {
+        #define UART0_ADDRESS                         ( 0x40004000UL )
+        printf(INDENT "UART0_ADDRESS is %p\n", (void *)UART0_ADDRESS);
+        ASSERT(UART0_ADDRESS % (4 * 1024) == 0, "MPU need to aligin to it's size");
+        ARM_MPU_SetRegionEx(
+                4UL                          /* Region Number */,
+                (uintptr_t)UART0_ADDRESS     /* Base Address  */,
+                ARM_MPU_RASR(1UL             /* DisableExec */,
+                    ARM_MPU_AP_FULL          /* AccessPermission*/,
+                    0UL                      /* TypeExtField*/,
+                    0UL                      /* IsShareable*/,
+                    0UL                      /* IsCacheable*/,
+                    0UL                      /* IsBufferable*/,
+                    0x00UL                   /* SubRegionDisable*/,
+                    ARM_MPU_REGION_SIZE_4KB  /* Size*/) // 4K should be already cover all USART register
+                                                        //
+                                                        // If change to 256K,  cause that(qemu should add `-d int,cpu_reset` ):
+                                                        //    Taking exception 4 [Data Abort]
+                                                        //    ...with CFSR.DACCVIOL and MMFAR 0x40004004
+                );
+    }
+
 
     ARM_MPU_Enable(MPU_CTRL_PRIVDEFENA_Msk
             | MPU_CTRL_HFNMIENA_Msk
