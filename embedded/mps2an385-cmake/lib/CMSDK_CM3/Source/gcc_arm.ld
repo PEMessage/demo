@@ -85,6 +85,8 @@ __privileged_functions_end__          = __FLASH_segment_start__ + __privileged_f
  *   __end__
  *   end
  *   __HeapLimit
+ *   __process_stack_start (SVC_HANDLER_DEMO only)
+ *   __ProcessStackLimit (SVC_HANDLER_DEMO only)
  *   __StackLimit
  *   __StackTop
  *   __stack
@@ -296,6 +298,16 @@ SECTIONS
     __HeapLimit = .;
   } > RAM
 
+#ifdef SVC_HANDLER_DEMO
+  .process_stack (COPY) :
+  {
+    __process_stack_start = .;
+    *(.process_stack)
+    __process_stack_end = .;
+    __ProcessStackLimit = .;
+  } > RAM
+#endif
+
   .stack (ORIGIN(RAM) + LENGTH(RAM) - __STACK_SIZE) (COPY) :
   {
     . = ALIGN(8);
@@ -306,6 +318,11 @@ SECTIONS
   } > RAM
   PROVIDE(__stack = __StackTop);
 
+#ifdef SVC_HANDLER_DEMO
+  /* Check if data + heap + stack exceeds RAM limit */
+  ASSERT(__StackLimit >= __ProcessStackLimit, "region RAM overflowed with stack")
+#else
   /* Check if data + heap + stack exceeds RAM limit */
   ASSERT(__StackLimit >= __HeapLimit, "region RAM overflowed with stack")
+#endif
 }
