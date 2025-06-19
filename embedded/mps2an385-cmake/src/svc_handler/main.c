@@ -3,8 +3,19 @@
 #include <inttypes.h>
 #include "cmsis_gcc.h" // for __get_CONTROL
 #include "CMSDK_CM3.h" // for __get_CONTROL
-extern int stdout_init (void);
 
+#if defined(ASSERT)
+    #error "macro ASSERT already defined!"
+#elif defined(__GNUC__) || defined(__clang__)
+    // GCC or Clang: use _Static_assert
+    #define ASSERT(expr, msg) _Static_assert(expr, msg)
+#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+    // C11 or later: use static_assert
+    #define ASSERT(expr, msg) static_assert(expr, msg)
+#else
+    // Fallback for older compilers: use a hack with typedef and array size
+    #define ASSERT(expr, msg) typedef char static_assert_##msg[(expr) ? 1 : -1]
+#endif
 
 
 // * 状态字寄存器 （三合一）:
@@ -56,7 +67,7 @@ void SVC_Handler_Main( unsigned int *svc_args )
      */
     svc_number = ( ( char * )svc_args[ 6 ] )[ -2 ] ;
     // TODO: why printf doesn't work?
-    printf("\n\n-- 4. In SVC, Now we are in SVC_Handler_Main\n");
+    printf("\n\n-- 5. In SVC, Now we are in SVC_Handler_Main\n");
     get_current_mode();
     printf("Is privileged : %d\n", (__get_CONTROL() & 0x1) == 0 );
     switch( svc_number )
@@ -70,50 +81,151 @@ void SVC_Handler_Main( unsigned int *svc_args )
 }
 
 // MPU must align to it's size
-char PSP_STACK[256] __attribute__((aligned(256))) = {};
+// 8 region for max 8 mpu region
+char PSP_STACK[2048 * 8] __attribute__((aligned(2048))) = {};
 
 
 int main() {
 
     SystemCoreClockUpdate();
     SystemInit();
+    extern int stdout_init (void);
     stdout_init();
     // prvUARTInit();
 
     // 1. Aftre Init complete
     printf("\n\n-- 1. After Init complete\n");
-    printf("Is privileged : %d\n", (__get_CONTROL() & 0x1) == 0 );
-    get_current_mode();
-    // set theading mode -- psp stack
-    __set_PSP((uint32_t)(PSP_STACK+sizeof(PSP_STACK)));
-    printf("Control 0x%08"PRIx32"\n"
-            "PSP 0x%08"PRIx32"\n"
-            "MSP 0x%08"PRIx32"\n",
-            __get_CONTROL(), __get_PSP(), __get_MSP());
+    {
+        printf("Is privileged : %d\n", (__get_CONTROL() & 0x1) == 0 );
+        get_current_mode();
+    }
 
-    printf("\n\n-- 2. Switch to Unprivileged!\n");
-    __set_CONTROL(0x1);  // 切换到非特权级
-    printf("Is privileged : %d\n", (__get_CONTROL() & 0x1) == 0 );
-    get_current_mode();
+    printf("\n\n-- 2. Set PSP\n");
+    {
+        // set theading mode -- psp stack
+        __set_PSP((uint32_t)(PSP_STACK+sizeof(PSP_STACK)));
+        printf("Control 0x%08"PRIx32"\n"
+                "PSP 0x%08"PRIx32"\n"
+                "MSP 0x%08"PRIx32"\n",
+                __get_CONTROL(), __get_PSP(), __get_MSP());
+    }
+
+    printf("\n\n-- 3. Setup dummy MPU(enable full access on FLASH / RAM / UART)\n");
+    {
+        void CmsisInitMPU(void);
+        CmsisInitMPU();
+    }
+
+    printf("\n\n-- 4. Switch to Unprivileged!\n");
+    {
+        __set_CONTROL(0x1);  // 切换到非特权级
+        printf("Is privileged : %d\n", (__get_CONTROL() & 0x1) == 0 );
+        get_current_mode();
+    }
 
     // See: https://developer.arm.com/documentation/ka004005/latest/
-    printf("\n\n-- 3. Raise SVC #0!\n");
-    asm volatile ("SVC #0");  // 触发特权切换
+    printf("\n\n-- 5. Raise SVC #0!\n");
+    {
+        asm volatile ("SVC #0");  // 触发特权切换
+    }
 
-    printf("\n\n-- 5. After SVC\n");
-    printf("Is privileged : %d\n", (__get_CONTROL() & 0x1) == 0 );
-    get_current_mode();
+    // SVC_Handler_Main will be called here
 
-    printf("\n\n-- 6. Print SCS Register\n");
-    void print_SCB_info(void);
-    void print_SCnSCB_info(void);
-    print_SCnSCB_info();
-    print_SCB_info();
+    printf("\n\n-- 6. After SVC\n");
+    {
+        printf("Is privileged : %d\n", (__get_CONTROL() & 0x1) == 0 );
+        get_current_mode();
+    }
+
+
+    printf("\n\n-- 7. Print SCS Register\n");
+    if (0) {
+        void print_SCB_info(void);
+        void print_SCnSCB_info(void);
+        print_SCnSCB_info();
+        print_SCB_info();
+    }
     while(1) {
         // printf("Now we are in SVC_Handler_Main\n");
     }
 
 }
+
+void CmsisInitMPU(void) {
+    ARM_MPU_Disable();
+
+    // Note: if a symbol variable define in linker script,
+    // in C world, should treat that in that a symbol in there(like enum)
+    extern void * __ROM_BASE;
+    extern void * __ROM_SIZE;
+    printf("ROMBASE is %p\n", &__ROM_BASE);
+    printf("ROMSIZE is %p\n", &__ROM_SIZE); // and convert it to ARM_MPU_REGION_SIZE
+    ARM_MPU_SetRegionEx(
+            0UL                           /* Region Number */,
+            (uintptr_t)&__ROM_BASE        /* Base Address  */,
+            ARM_MPU_RASR(0UL              /* DisableExec */, // ROM region content all code
+                                                             //
+                ARM_MPU_AP_FULL           /* AccessPermission*/,
+                0UL                       /* TypeExtField*/,
+                0UL                       /* IsShareable*/,
+                0UL                       /* IsCacheable*/,
+                0UL                       /* IsBufferable*/,
+                0x00UL                    /* SubRegionDisable*/,
+                ARM_MPU_REGION_SIZE_256KB /* Size*/)
+            );
+            // DisableExec change to 1, will cause
+            //   Taking exception 3 [Prefetch Abort]
+            //   ...with CFSR.IACCVIOL
+            //   ...taking pending nonsecure exception 4
+            //   Taking exception 3 [Prefetch Abort]
+            //   ...with CFSR.IACCVIOL
+            //   ...taking pending nonsecure exception 3
+            //   Taking exception 3 [Prefetch Abort]
+            //   ...with CFSR.IACCVIOL
+            //   qemu: fatal: Lockup: can't escalate 3 to HardFault (current priority -1)
+
+    extern void * __RAM_BASE;
+    extern void * __RAM_SIZE;
+    printf("ROMBASE is %p\n", &__RAM_BASE);
+    printf("ROMSIZE is %p\n", &__RAM_SIZE); // and convert it to ARM_MPU_REGION_SIZE
+    ARM_MPU_SetRegionEx(
+            1UL                           /* Region Number */,
+            (uintptr_t)&__RAM_BASE        /* Base Address  */,
+            ARM_MPU_RASR(1UL              /* DisableExec */, // RAM region should not content code
+                ARM_MPU_AP_FULL           /* AccessPermission*/,
+                0UL                       /* TypeExtField*/,
+                0UL                       /* IsShareable*/,
+                0UL                       /* IsCacheable*/,
+                0UL                       /* IsBufferable*/,
+                0x00UL                    /* SubRegionDisable*/,
+                ARM_MPU_REGION_SIZE_128KB /* Size*/)
+            );
+
+    #define UART0_ADDRESS                         ( 0x40004000UL )
+    ASSERT(UART0_ADDRESS % (4 * 1024) == 0, "MPU need to aligin to it's size");
+    ARM_MPU_SetRegionEx(
+            2UL                          /* Region Number */,
+            (uintptr_t)UART0_ADDRESS     /* Base Address  */,
+            ARM_MPU_RASR(1UL             /* DisableExec */,
+                ARM_MPU_AP_FULL          /* AccessPermission*/,
+                0UL                      /* TypeExtField*/,
+                0UL                      /* IsShareable*/,
+                0UL                      /* IsCacheable*/,
+                0UL                      /* IsBufferable*/,
+                0x00UL                   /* SubRegionDisable*/,
+                ARM_MPU_REGION_SIZE_4KB  /* Size*/) // 4K should be already cover all USART register
+                                                    //
+                                                    // If change to 256K,  cause that(qemu should add `-d int,cpu_reset` ):
+                                                    //    Taking exception 4 [Data Abort]
+                                                    //    ...with CFSR.DACCVIOL and MMFAR 0x40004004
+            );
+
+    ARM_MPU_Enable(MPU_CTRL_PRIVDEFENA_Msk
+            | MPU_CTRL_HFNMIENA_Msk
+            | MPU_CTRL_ENABLE_Msk);
+}
+
+
 
 /* Macro to extract bitfield from register */
 // #define EXTRACT_BITFIELD(reg, field) ((reg & field##_Msk) >> field##_Pos)
