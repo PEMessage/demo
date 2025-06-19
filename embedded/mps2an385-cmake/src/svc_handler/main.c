@@ -69,6 +69,9 @@ void SVC_Handler_Main( unsigned int *svc_args )
     }
 }
 
+// MPU must align to it's size
+char PSP_STACK[256] __attribute__((aligned(256))) = {};
+
 
 int main() {
 
@@ -81,8 +84,14 @@ int main() {
     printf("\n\n-- 1. After Init complete\n");
     printf("Is privileged : %d\n", (__get_CONTROL() & 0x1) == 0 );
     get_current_mode();
+    // set theading mode -- psp stack
+    __set_PSP((uint32_t)(PSP_STACK+sizeof(PSP_STACK)));
+    printf("Control 0x%08"PRIx32"\n"
+            "PSP 0x%08"PRIx32"\n"
+            "MSP 0x%08"PRIx32"\n",
+            __get_CONTROL(), __get_PSP(), __get_MSP());
 
-    printf("\n\n-- 2. Switch to privileged!\n");
+    printf("\n\n-- 2. Switch to Unprivileged!\n");
     __set_CONTROL(0x1);  // 切换到非特权级
     printf("Is privileged : %d\n", (__get_CONTROL() & 0x1) == 0 );
     get_current_mode();
