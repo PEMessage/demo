@@ -20,6 +20,13 @@ void Error_Handler(const char* step) {
 #define STEP_1_ENABLE     0x87654321U
 #define STEP_2_ENABLE     0xABCDEF12U
 #define STEP_3_ENABLE     0x34567890U
+#ifdef SOME_FEATURE
+#define STEP_4_ENABLE     0x55667788U
+#else
+#define STEP_4_ENABLE     0x00000000U  // if this feature disable, add dummy 0
+                                       // No effect on control flow
+#endif
+#define STEP_5_ENABLE     0xBACBAC77U
 
 #define STEP_1_CHECK      0x11111111U
 #define STEP_2_CHECK      0x22222222U
@@ -29,6 +36,8 @@ void Error_Handler(const char* step) {
 #define CTRL_AFTER_STEP_1 (INIT_VALUE ^ STEP_1_ENABLE)
 #define CTRL_AFTER_STEP_2 (CTRL_AFTER_STEP_1 ^ STEP_2_ENABLE)
 #define CTRL_AFTER_STEP_3 (CTRL_AFTER_STEP_2 ^ STEP_3_ENABLE)
+#define CTRL_AFTER_STEP_4 (CTRL_AFTER_STEP_3 ^ STEP_4_ENABLE)
+#define CTRL_AFTER_STEP_5 (CTRL_AFTER_STEP_4 ^ STEP_5_ENABLE)
 
 /* 流程控制宏 */
 #define FLOW_STEP(CURRENT, STEP, EXPECTED) \
@@ -52,25 +61,33 @@ void Error_Handler(const char* step) {
 
 int main() {
     uint32_t uFlowValue = INIT_VALUE;
-    
+
     printf("=== XOR Chain Flow Control Demo ===\n");
     printf("Initial flow value: 0x%08X\n\n", uFlowValue);
-    
+
     /* 第一阶段：执行步骤 */
     FLOW_STEP(uFlowValue, STEP_1_ENABLE, CTRL_AFTER_STEP_1);
     FLOW_STEP(uFlowValue, STEP_2_ENABLE, CTRL_AFTER_STEP_2);
     FLOW_STEP(uFlowValue, STEP_3_ENABLE, CTRL_AFTER_STEP_3);
-    
+    #ifdef SOME_FEATURE
+    FLOW_STEP(uFlowValue, STEP_4_ENABLE, CTRL_AFTER_STEP_4);
+    #endif
+    FLOW_STEP(uFlowValue, STEP_5_ENABLE, CTRL_AFTER_STEP_5);
+
     /* 第二阶段：检查步骤 */
     printf("=== XOR Chain Flow Control reinit, skip step2 ===\n");
     uFlowValue = INIT_VALUE;
-    
-    
+
     FLOW_STEP(uFlowValue, STEP_1_ENABLE, CTRL_AFTER_STEP_1);
-    printf("Skip step2 to trigger error, (for example, we meet fault_injection)\n\n");
-    // FLOW_STEP(uFlowValue, STEP_2_ENABLE, CTRL_AFTER_STEP_2);
-    FLOW_STEP(uFlowValue, STEP_3_ENABLE, CTRL_AFTER_STEP_3);
-    
+    FLOW_STEP(uFlowValue, STEP_2_ENABLE, CTRL_AFTER_STEP_2);
+    printf("Skip step3 to trigger error, (for example, we meet fault_injection)\n\n");
+    // FLOW_STEP(uFlowValue, STEP_3_ENABLE, CTRL_AFTER_STEP_3);
+    #ifdef SOME_FEATURE
+    FLOW_STEP(uFlowValue, STEP_4_ENABLE, CTRL_AFTER_STEP_4);
+    #endif
+    FLOW_STEP(uFlowValue, STEP_5_ENABLE, CTRL_AFTER_STEP_5);
+
+
     printf("You should never get here!");
     return 0;
 }
