@@ -32,6 +32,13 @@ LOG_double_sharp(1, "%s")
 // result: __VA_ARGS__ not exists (will eat ',' before __VA_ARGS__)
 // (void)LOG_DEMO(LOG_ERROR, LABAL[1], "%s") // SUCCESS !! 
 
+// Since C++20 we have a better way
+#define log(format, ...) printf("LOG: " format __VA_OPT__(,) __VA_ARGS__)
+
+log("%d%f", 1, .2);    // -> printf("LOG: %d%f", 1, .2);
+log("hello world");    // -> printf("LOG: hello world");
+log("hello world", );  // -> printf("LOG: hello world");
+
 
 #define REGISTER_SYSTEM_ABILITY_BY_ID(abilityClassName, systemAbilityId, runOnCreate) \
     const bool abilityClassName##_##RegisterResult = \
@@ -69,3 +76,32 @@ void test_func() {
 
 PAIR((int) x)
 STRIP((int) x)
+
+
+
+// 预扫描 与 ## 拼接
+// See: https://zhuanlan.zhihu.com/p/152354031
+//      https://bot-man-jl.github.io/articles/2020/Macro-Programming-Art/macro-meta.cc
+//      https://gcc.gnu.org/onlinedocs/cpp/Argument-Prescan.html
+// 1. 在进入宏函数前，所有 宏参数 会先进行一次 预扫描 (prescan)，
+//    完全展开 未用于 拼接标识符 或 获取字面量 的所有参数
+// 2. 在宏函数展开时，用（预扫描展开后的）参数替换 展开目标里的 同名符号
+// 3. 在宏函数展开后，替换后的文本会进行 二次扫描(scan twice)，继续展开 结果里出现的宏
+#if 1
+    #define FOO(SYMBOL) foo_ ## SYMBOL
+    #define BAR() bar
+
+    FOO(bar)    // -> foo_bar
+    FOO(BAR())  // -> foo_BAR()
+    #undef FOO
+    #undef BAR
+#endif
+#if 1
+    #define PP_CONCAT(A, B) PP_CONCAT_IMPL(A, B)
+    #define PP_CONCAT_IMPL(A, B) A##B
+
+    #define FOO(N) PP_CONCAT(foo_, N)
+
+    FOO(bar)    // -> foo_bar
+    FOO(BAR())  // -> foo_bar
+#endif
