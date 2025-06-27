@@ -1,4 +1,3 @@
-
 use clap::Parser;
 
 /// Simple program to greet a person
@@ -14,10 +13,30 @@ struct Args {
     count: u8,
 }
 
-fn main() {
-    let args = Args::parse();
+trait Printable {
+    fn print(&self);
+}
 
-    for _ in 0..args.count {
-        println!("Hello, {}!", args.name);
+// Implement the trait for Args
+impl Printable for Args {
+    fn print(&self) {
+        println!("Printing Args:");
+        println!("- Name: {}", self.name);
+        println!("- Count: {}", self.count);
+    }
+}
+
+#[derive(Parser, Debug)]
+enum Subcmds {
+    Subcmd1(Args),
+    Subcmd2(Args),
+}
+
+fn main() {
+    // let args = Args::parse();
+    let subcmds = Subcmds::parse();
+    match subcmds {
+        Subcmds::Subcmd1(cmd) => cmd.print(),
+        Subcmds::Subcmd2(cmd) => cmd.print(),
     }
 }
