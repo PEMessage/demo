@@ -20,6 +20,9 @@ $(KEYS):
 		-genkey \
 		-out $(PREFIX_DIR)/$(KEY_ID)_private_key.pem \
 		-noout
+	# 生成der格式私钥
+	openssl pkey -in $(PREFIX_DIR)/$(KEY_ID)_private_key.pem \
+		-outform der -out $(PREFIX_DIR)/$(KEY_ID)_private_key.der
 	# 从私钥中导出公钥
 	openssl ec -in $(PREFIX_DIR)/$(KEY_ID)_private_key.pem \
 		-pubout -out $(PREFIX_DIR)/$(KEY_ID)_public_key.pem
