@@ -66,9 +66,9 @@ int main() {
 
     // Direct calls
     std::cout << "Direct calls:" << std::endl;
-    obj1.f1();
-    obj2.f1();
-    obj3.f1();
+    obj1.f1(); // Calls Base1::f1()
+    obj2.f1(); // Calls Base2::f1()
+    obj3.f1(); // Calls Final::f1()
 
     // 6. Create pointers to each class and call f1
     std::cout << "\nPointer calls:" << std::endl;
