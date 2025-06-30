@@ -1,2 +1,11 @@
 build
 out
+
+
+.repo
+compile_commands.json
+lib/FreeRTOS-GDB-Support/
+lib/FreeRTOS-Kernel-Config/src/
+lib/FreeRTOS-Kernel/code/
+lib/LVGL/lvgl/
+lib/newlib/newlib-src/

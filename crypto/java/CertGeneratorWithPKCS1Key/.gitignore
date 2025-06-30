@@ -1,0 +1,6 @@
+.gradle/
+bcpkix-jdk15on-1.70.jar
+bcprov-jdk15on-1.70.jar
+bcutil-jdk15on-1.70.jar
+target/
+test.der

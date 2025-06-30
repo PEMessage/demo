@@ -1,4 +1,5 @@
 **/*.swp
 .gdb_history
 .cache
+.aider.*
 build/
