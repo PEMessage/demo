@@ -19,19 +19,9 @@ def mfm_encode(data_bits, prev_bit=0):
 
     for current_bit in data_bits:
         if current_bit == 1:
-            if encoded_bits[-1] == 0:
-                # '1' is always encoded as 01
-                encoded_bits.extend([1, 0])
-            else:
-                encoded_bits.extend([0, 1])
+            encoded_bits.extend([0, 1] if encoded_bits[-1] else [1, 0])
         else:
-            # '0' depends on previous bit
-            if encoded_bits[-1] == 0:
-                encoded_bits.extend([1, 1])  # 0 after 0 -> 11
-            else:
-                encoded_bits.extend([0, 0])  # 0 after 1 -> 00
-
-        prev_bit = current_bit
+            encoded_bits.extend([0, 0] if encoded_bits[-1] else [1, 1])
 
     return encoded_bits[1:]  # remove prev_bit
 
@@ -69,6 +59,9 @@ if __name__ == '__main__':
     ]
 
     for original_bits in examples:
-        print(f"Original: {original_bits}")
+        print(f"Original    : {original_bits}")
+
+        original_bits_ext = [x for x in original_bits for _ in range(2)]
+        print(f"Original * 2: {original_bits_ext}")
         encoded = mfm_encode(original_bits)
-        print(f"Encoded: {encoded}\n")
+        print(f"Encoded     : {encoded}\n")
