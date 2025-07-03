@@ -17,29 +17,33 @@ void setup() {
     NVIC_Init();
 }
 
+
+void performance_update(TickType_t* timer);
+#if 0
+#define likely(x)       __builtin_expect(!!(x), 1)
+#define unlikely(x)     __builtin_expect(!!(x), 0)
+#else
+#define likely(x)       x
+#define unlikely(x)     x
+#endif
+
+
 void TaskHighSpeedPoll() {
     uint32_t cnt = 0;
-    TickType_t previous_time = xTaskGetTickCount();
-    TickType_t current_time;
+    TickType_t timer = 0;
 
     while(1) {
-        cnt ++;
-        if (cnt % 1000000 == 0) {
-            current_time = xTaskGetTickCount();
-
-            // Calculate time difference in milliseconds
-            TickType_t time_diff = (current_time - previous_time) * portTICK_PERIOD_MS;
-
-            printf("Current time: %u ms, Previous time: %u ms, Difference: %u ms\n",
-                    current_time * portTICK_PERIOD_MS,
-                    previous_time * portTICK_PERIOD_MS,
-                    time_diff);
-
-            // Save current time as previous for next iteration
-            previous_time = current_time;
+        if (unlikely(cnt % 100000 == 0)) {
+            performance_update(&timer);
             cnt = 0;
         }
-
+        // some payload here
+        printf("cnt is %d\n", cnt); // without unlikely: 2480 ms / 100000 == 0.0248 ms 
+                                    // with    unlikely: 3594 ms / 100000 == 0.0359 ms
+                                    // with      likely: 2424 ms / 100000 == 0.0242 ms
+                                    // Seem like unlikely not great for embedded?, what's likely or unlikely?
+        // some payload here
+        cnt ++;
     }
 }
 
@@ -56,3 +60,17 @@ int main() {
     vTaskStartScheduler();
     while(1);
 }
+
+
+void performance_update(TickType_t* timer) {
+    TickType_t current_time = xTaskGetTickCount();
+    TickType_t previous_time = *timer;
+    TickType_t time_diff = current_time - previous_time;
+    printf("Current time: %u ms, Previous time: %u ms, Difference: %u ms\n",
+            current_time * portTICK_PERIOD_MS,
+            previous_time * portTICK_PERIOD_MS,
+            time_diff * portTICK_PERIOD_MS);
+
+    *timer = xTaskGetTickCount();  // Update the timer
+}
+
