@@ -2,10 +2,10 @@
 
 #include <stdio.h>
 
-void count_calls() {
+void count_calls_simple(n) {
     static int cnt = 0;  // Static local variable (retains value between calls)
     cnt++;
-    if (cnt % 1000 != 0) { 
+    if (cnt % n != 0) { 
         printf("nr: %d\n", cnt); // Prints current count
         return ;
     }
@@ -15,8 +15,8 @@ void count_calls() {
 
 int main() {
     // Call the function 1000 times
-    for (int i = 0; i < 1000; i++) {
-        count_calls();
+    for (int i = 0; i < 5; i++) {
+        count_calls_simple(5);
     }
     return 0;
 }
