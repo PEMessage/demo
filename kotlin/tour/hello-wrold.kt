@@ -21,7 +21,8 @@ fun main(args : Array<String>) {
         // String templates 
         println("val a is $a") 
         // evaluate a piece of code in a template expression
-        println("var b + 1 is ${b + 1}")
+        
+        // println("var b + 1 is ${b + 1}") // NOTE: this not work for ubuntu22.04 kotlinc-jvm 1.3-SNAPSHOT
     }
 
     section("kotlin-tour-basic-types")
