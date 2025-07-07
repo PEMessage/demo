@@ -9,3 +9,5 @@ add_library(init_utils STATIC
 
 target_include_directories(init_utils PUBLIC . include)
 auto_target_link_libraries(init_utils PUBLIC misc libsec)
+
+target_compile_definitions(init_utils PRIVATE INIT_STDERR)

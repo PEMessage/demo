@@ -38,6 +38,27 @@
 #define BASE_YEAR 1900
 
 static InitLogLevel g_logLevel = INIT_INFO;
+
+#ifdef INIT_STDERR
+static void LogToStderr(const char *logFile, const char *tag, const char *info)
+{
+    struct timespec curr = {0};
+    if (clock_gettime(CLOCK_REALTIME, &curr) != 0) {
+        return;
+    }
+    FILE *outfile = stderr;
+    struct tm t;
+    char dateTime[80] = {"00-00-00 00:00:00"}; // 80 data time
+    if (localtime_r(&curr.tv_sec, &t) != NULL) {
+        strftime(dateTime, sizeof(dateTime), "%Y-%m-%d %H:%M:%S", &t);
+    }
+    (void)fprintf(outfile, "[%s.%ld][pid=%d %d][%s]%s \n", dateTime, curr.tv_nsec, getpid(), gettid(), tag, info);
+    (void)fflush(outfile);
+    (void)fclose(outfile);
+    return;
+}
+#endif
+
 #ifdef INIT_FILE
 static void LogToFile(const char *logFile, const char *tag, const char *info)
 {
@@ -115,6 +136,9 @@ static void PrintLog(InitLogLevel logLevel, unsigned int domain, const char *tag
 #endif
 #ifdef INIT_FILE
     LogToFile(INIT_LOG_PATH"begetctl.log", tag, logInfo);
+#endif
+#ifdef INIT_STDERR
+    LogToStderr(INIT_LOG_PATH"begetctl.log", tag, logInfo);
 #endif
 }
 
