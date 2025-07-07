@@ -23,7 +23,7 @@
 ```c
 .
 ├── include
-│   └── hilog_inner.h // HiLogPrintArgs
+│   └── hilog_inner.h // HiLogPrintArgs ***!!! the key function !!!***
 └── libhilog
     └── include
         ├── hilog_base.h //  message from libhilog to hilogd
