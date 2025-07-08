@@ -2,7 +2,7 @@
 
 #include <stdio.h>
 
-void count_calls_simple(n) {
+void count_calls_simple(int n) {
     static int cnt = 0;  // Static local variable (retains value between calls)
     cnt++;
     if (cnt % n != 0) { 
