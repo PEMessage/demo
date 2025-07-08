@@ -74,12 +74,23 @@ int main() {
 
     // Write a vector
     printf("------------------------------------\n");
-    printf("Write vector<int32_t>: 1 - 8\n");
+    printf("Write vector<int32_t>: 1 - 5\n");
     std::vector<int32_t> numbers = {1, 2, 3, 4, 5};
     parcel.WriteInt32Vector(numbers);
     DUMP_PARCEL(parcel);
     printf("------------------------------------\n\n\n");
     
+
+    // Write a vector<string>
+    printf("------------------------------------\n");
+    printf("Write vector<string>: This is string 1, This is string2\n");
+    std::vector<std::string> vs {
+        "This is string1",
+        "This is string2"
+    };
+    parcel.WriteStringVector(vs);
+    DUMP_PARCEL(parcel);
+    printf("------------------------------------\n\n\n");
 
 
     // Write a Parcelable object
@@ -116,6 +127,13 @@ int main() {
         std::cout << num << " ";
     }
     std::cout << std::endl;
+
+    std::vector<std::string> readvs;
+    parcel.ReadStringVector(&readvs);
+    std::cout << "Read vector: " << std::endl;
+    for (auto s : readvs) {
+        std::cout << s << std::endl;
+    }
     
     // Read Parcelable object
     MyParcelable *readParcelable = MyParcelable::Unmarshalling(parcel);
