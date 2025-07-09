@@ -4,8 +4,11 @@ add_library(hilog STATIC
     frameworks/libhilog/base/hilog_base.c
     frameworks/libhilog/hilog.cpp
     frameworks/libhilog/hilog_printf.cpp
+    frameworks/libhilog/vsnprintf/vsprintf_p.c
     frameworks/libhilog/vsnprintf/vsnprintf_s_p.c
     frameworks/libhilog/param/properties.cpp
+    frameworks/libhilog/utils/log_print.cpp
+    frameworks/libhilog/utils/log_utils.cpp
 )
 
 # fix CMake Error: Cannot determine link language for target "hilog".
@@ -20,4 +23,4 @@ target_include_directories(hilog PUBLIC
 )
 
 target_compile_definitions(hilog PRIVATE __LINUX__)
-auto_target_link_libraries(hilog PUBLIC libsec)
+auto_target_link_libraries(hilog PUBLIC libsec syspara)
