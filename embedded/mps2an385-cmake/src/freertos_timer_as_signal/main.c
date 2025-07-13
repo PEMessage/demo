@@ -60,8 +60,37 @@ int main() {
         return 1;
     }
 
+    // Create the timer reset task
+    void timer_reset_task(void *pvParameters);
+    xTaskCreate(
+        timer_reset_task,          // Task function
+        "TimerResetTask",         // Task name
+        configMINIMAL_STACK_SIZE, // Stack size
+        NULL,                     // Parameters
+        tskIDLE_PRIORITY + 1,    // Priority
+        NULL                      // Task handle
+    );
+
 
     vTaskStartScheduler();
     while(1);
+}
+
+
+// Task that periodically resets the timer
+void timer_reset_task(void *pvParameters) {
+    const TickType_t reset_period = pdMS_TO_TICKS(2500); // Reset every 2.5 seconds
+
+    while(1) {
+        vTaskDelay(reset_period);
+
+        printf("\n--- Resetting timer ---\n");
+        // using reset as a signal to triggle timer_callback
+        if(xTimerReset(auto_reload_timer, portMAX_DELAY) != pdPASS) {
+            printf("Timer reset failed!\n");
+        } else {
+            printf("Timer reset success!\n");
+        }
+    }
 }
 
