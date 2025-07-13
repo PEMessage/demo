@@ -2,7 +2,7 @@
 #include "CMSDK_CM3.h" // for SystemCoreClock
 #include "FreeRTOS.h"
 #include "task.h"
-#include "event_groups.h"
+#include "timers.h"
 
 
 void NVIC_Init() {
@@ -27,9 +27,12 @@ void print_current() {
     printf("Current Task: %s\n", pcTaskGetName(current_task));
 }
 
+
+TimerHandle_t auto_reload_timer = 0;
 // Timer callback function
 void timer_callback(TimerHandle_t xTimer) {
     print_current();
+    xTimerStop(auto_reload_timer, portMAX_DELAY);
 }
 
 int main() {
@@ -37,7 +40,7 @@ int main() {
     printf("Init complete\n");
     printf("SystemCoreClock is %u\n", SystemCoreClock);
 
-    TimerHandle_t auto_reload_timer = xTimerCreate(
+    auto_reload_timer = xTimerCreate(
             "AutoReloadTimer",          // Timer name (for debugging)
             pdMS_TO_TICKS(1000),       // Timer period in ticks (1000ms = 1s)
             pdTRUE,                    // Auto-reload (pdTRUE for auto-repeat)
