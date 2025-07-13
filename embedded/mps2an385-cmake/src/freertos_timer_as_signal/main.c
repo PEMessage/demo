@@ -54,11 +54,13 @@ int main() {
         return 1;
     }
 
-    // Start the timer
-    if (xTimerStart(auto_reload_timer, 0) != pdPASS) {
-        printf("Timer start failed!\n");
-        return 1;
-    }
+    // Reset will do something for TimerStart, we dont need to start first
+    //
+    // // Start the timer
+    // if (xTimerStart(auto_reload_timer, 0) != pdPASS) {
+    //     printf("Timer start failed!\n");
+    //     return 1;
+    // }
 
     // Create the timer reset task
     void timer_reset_task(void *pvParameters);
