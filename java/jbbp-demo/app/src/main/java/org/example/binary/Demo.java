@@ -3,6 +3,11 @@
  */
 package org.example.binary;
 
+import java.io.IOException;
+import java.io.InputStream;
+
+import java.util.Arrays; // for Arrays.equals
+
 import com.igormaznitsa.jbbp.JBBPParser;
 import com.igormaznitsa.jbbp.model.JBBPFieldArrayBit;
 import com.igormaznitsa.jbbp.io.JBBPBitOrder;
@@ -10,8 +15,11 @@ import com.igormaznitsa.jbbp.io.JBBPByteOrder;
 import com.igormaznitsa.jbbp.mapper.Bin;
 import com.igormaznitsa.jbbp.mapper.BinType;
 
+import static com.igormaznitsa.jbbp.io.JBBPOut.*;
+
 
 public class Demo {
+    // ---------------- DEMO 1 ----------------------
     private static void demoHelloWorld() {
         try {
             byte[] parsedBits = JBBPParser.prepare("bit:1 [_];").parse(new byte[]{1,2,3,4,5}).
@@ -23,7 +31,7 @@ public class Demo {
         }
     }
 
-
+    // ---------------- DEMO 2 ----------------------
     public static class MyData {
         @Bin byte first; 
         @Bin byte len;
@@ -31,14 +39,31 @@ public class Demo {
         int cmd; 
         @Bin byte[] buffer;
 
-        public static JBBPParser getParser() {
-            return JBBPParser.prepare(
+        static final String PARSE_PATTERN =
             "byte first;"
             + "byte len;"
             + "byte cmd;"
-            + "byte [len - 1] buffer;", // cmd also count as part of len 
-            JBBPBitOrder.LSB0
-            );
+            + "byte [len - 1] buffer;"; // cmd also count as part of len 
+
+        public static MyData fromBinary(InputStream input) throws IOException {
+            return JBBPParser.prepare(MyData.PARSE_PATTERN,
+                    JBBPBitOrder.LSB0
+                    ).parse(input).mapTo(new MyData());
+        }
+
+        public static MyData fromBinary(byte[] input) throws IOException {
+            return JBBPParser.prepare(MyData.PARSE_PATTERN,
+                    JBBPBitOrder.LSB0
+                    ).parse(input).mapTo(new MyData());
+        }
+
+        public byte[] toBinary() throws IOException {
+            return BeginBin().
+                Byte(first).
+                Byte(len).
+                Byte(cmd).
+                Byte(buffer).
+            End().toByteArray();
         }
     }
 
@@ -47,11 +72,16 @@ public class Demo {
             0x01,           // first  
             0x06,           // len
             0x02,           // cmd  
-            'H', 'e', 'l', 'l', 'o', '\0'  // buffer, '\0' should not be included
+            'H', 'e', 'l', 'l', 'o'   // buffer, '\0' should not be included
         };
         try {
             // Parse the binary data
-            MyData data = MyData.getParser().parse(binaryData).mapTo(new MyData());
+            MyData data = MyData.fromBinary(
+                    BytesUtils.concat(
+                        binaryData,
+                        new byte[] {'\0'} // this should not be include in data, only for testing
+                        )
+                    );
 
             // Print the parsed data
             System.out.println("Parsed data:");
@@ -65,6 +95,12 @@ public class Demo {
             System.out.println("  Command: " + data.cmd);
             System.out.println("  Buffer Len: " + data.buffer.length);
             System.out.println("  Buffer as string: " + new String(data.buffer).trim());
+
+            if (Arrays.equals(binaryData, data.toBinary())) {
+                System.out.println("binaryData, data.toBinary() are equal");
+            } else {
+                System.out.println("binaryData, data.toBinary() are not equal");
+            }
 
         } catch (Exception e) {
             e.printStackTrace();
