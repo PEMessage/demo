@@ -5,9 +5,14 @@ package org.example.binary;
 
 import com.igormaznitsa.jbbp.JBBPParser;
 import com.igormaznitsa.jbbp.model.JBBPFieldArrayBit;
+import com.igormaznitsa.jbbp.io.JBBPBitOrder;
+import com.igormaznitsa.jbbp.io.JBBPByteOrder;
+import com.igormaznitsa.jbbp.mapper.Bin;
+import com.igormaznitsa.jbbp.mapper.BinType;
+
 
 public class Demo {
-    public static void main(String[] args) {
+    private static void demoHelloWorld() {
         try {
             byte[] parsedBits = JBBPParser.prepare("bit:1 [_];").parse(new byte[]{1,2,3,4,5}).
                 findFieldForType(JBBPFieldArrayBit.class).getArray();
@@ -16,5 +21,62 @@ public class Demo {
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+
+    public static class MyData {
+        @Bin byte first; 
+        @Bin byte len;
+        @Bin(type = BinType.BYTE) // map byte -> int
+        int cmd; 
+        @Bin byte[] buffer;
+
+        public static JBBPParser getParser() {
+            return JBBPParser.prepare(
+            "byte first;"
+            + "byte len;"
+            + "byte cmd;"
+            + "byte [len - 1] buffer;", // cmd also count as part of len 
+            JBBPBitOrder.LSB0
+            );
+        }
+    }
+
+    private static void demoMapTo() {
+        byte[] binaryData = new byte[] {
+            0x01,           // first  
+            0x06,           // len
+            0x02,           // cmd  
+            'H', 'e', 'l', 'l', 'o', '\0'  // buffer, '\0' should not be included
+        };
+        try {
+            // Parse the binary data
+            MyData data = MyData.getParser().parse(binaryData).mapTo(new MyData());
+
+            // Print the parsed data
+            System.out.println("Parsed data:");
+            System.out.println(data);
+
+            // Access individual fields
+            System.out.println("");
+            System.out.println("Individual fields:");
+            System.out.println("  Type: " + data.first);
+            System.out.println("  Length: " + data.len);
+            System.out.println("  Command: " + data.cmd);
+            System.out.println("  Buffer Len: " + data.buffer.length);
+            System.out.println("  Buffer as string: " + new String(data.buffer).trim());
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    public static void main(String[] args) {
+        System.out.println("----------------------");
+        demoHelloWorld();
+
+        System.out.println("----------------------");
+        demoMapTo();
     }
 }
