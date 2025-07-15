@@ -5,6 +5,7 @@ package org.example.binary;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ByteArrayInputStream;
 
 import java.util.Arrays; // for Arrays.equals
 
@@ -72,16 +73,13 @@ public class Demo {
             0x01,           // first
             0x05 + 1,           // len
             0x02,           // cmd
-            'H', 'e', 'l', 'l', 'o'   // buffer, '\0' should not be included
+            'H', 'e', 'l', 'l', 'o',   // buffer, '\0' should not be included
+            'L', 'e', 'f', 't' // left char
         };
         try {
+            InputStream dataInputStream = new ByteArrayInputStream(binaryData);
             // Parse the binary data
-            MyData data = MyData.fromBinary(
-                    BytesUtils.concat(
-                        binaryData,
-                        new byte[] {'\0'} // this should not be include in data, only for testing
-                        )
-                    );
+            MyData data = MyData.fromBinary(dataInputStream);
 
             // Print the parsed data
             System.out.println("Parsed data:");
@@ -99,6 +97,15 @@ public class Demo {
                 System.out.println("binaryData, data.toBinary() are equal");
             } else {
                 System.out.println("binaryData, data.toBinary() are not equal");
+            }
+
+            // read following left
+            byte[] buffer = new byte[1024];
+            int readlength;
+            // int bytesRead;
+            while ((readlength = dataInputStream.read(buffer)) != -1) {
+                System.out.println("length: " + readlength);
+                System.out.print(new String(buffer));
             }
 
         } catch (Exception e) {
@@ -170,24 +177,42 @@ public class Demo {
             0x01,                       // st.no
             'H', 'e', 'l', 'l', 'o',    // st.buffer
             -1,                         // st.end    NOTE:  0xff (Bytes are signed in Java!)
+            'L', 'e', 'f', 't' // left char, shouldn't be readed
         };
         try {
-            MyRecursiveData data = MyRecursiveData.fromBinary(binaryData);
-            MyStruct st = data.st;
+            InputStream dataInputStream = new ByteArrayInputStream(binaryData);
+            MyRecursiveData data = MyRecursiveData.fromBinary(dataInputStream);
+
             System.out.println("Parsed data:");
             System.out.println("  " + data);
 
             System.out.println("Individual fields:");
+            System.out.println("  Type: " + data.first);
+            System.out.println("  Length: " + data.len);
+            System.out.println("  Command: " + data.cmd);
+
+            System.out.println("Individual fields:");
+            MyStruct st = data.st;
             System.out.println("  st.no: " + st.no);
             System.out.println("  st.buffer length: " + st.buffer.length);
             System.out.println("  st.buffer as String: " + new String(st.buffer));
             System.out.println("  st.end : " + (int)st.end);
+
+            // read following left,
+            // BUG: if we using 'st {...}', we cousume one more byte!!!, do not used it!!!
+            byte[] buffer = new byte[1024];
+            int readlength;
+            while ((readlength = dataInputStream.read(buffer)) != -1) {
+                System.out.println("length: " + readlength);
+                System.out.print(new String(buffer));
+            }
 
         } catch (Exception e) {
             e.printStackTrace();
         }
 
     }
+
 
     public static void main(String[] args) {
         System.out.println(  "----------------------");
