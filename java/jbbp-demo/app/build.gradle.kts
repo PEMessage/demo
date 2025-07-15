@@ -21,6 +21,7 @@ dependencies {
 
     // This dependency is used by the application.
     implementation(libs.guava)
+    implementation("com.igormaznitsa:jbbp:3.0.1")
 }
 
 // Apply a specific Java toolchain to ease working on different environments.
