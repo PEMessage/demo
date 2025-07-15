@@ -5,6 +5,16 @@
 guava = "33.4.5-jre"
 junit = "4.13.2"
 
+# Thanks to https://github.com/ballerina-platform/ballerina-lang/blob/36f027b98478e6e5cbca5f4bb8a1d652c0dd2b37/gradle/libs.versions.toml#L81
+kaitaiGradlePluginVersion = "0.1.1"
+kaitaiStructCompilerVersion = "0.9"
+kaitaiStructRuntimeVersion = "0.9"
+
 [libraries]
 guava = { module = "com.google.guava:guava", version.ref = "guava" }
 junit = { module = "junit:junit", version.ref = "junit" }
+kaitai-struct-runtime = { module = "io.kaitai:kaitai-struct-runtime", version.ref = "kaitaiStructRuntimeVersion"}
+
+
+[plugins]
+kaitai = { id = "name.valery1707.kaitai", version.ref = "kaitaiGradlePluginVersion"}

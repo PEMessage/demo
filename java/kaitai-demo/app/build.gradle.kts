@@ -8,7 +8,9 @@
 plugins {
     // Apply the application plugin to add support for building a CLI application in Java.
     application
+    alias(libs.plugins.kaitai)
 }
+
 
 repositories {
     // Use Maven Central for resolving dependencies.
@@ -20,6 +22,7 @@ dependencies {
     testImplementation(libs.junit)
 
     // This dependency is used by the application.
+    implementation(libs.kaitai.struct.runtime)
     implementation(libs.guava)
 }
 
@@ -33,4 +36,11 @@ java {
 application {
     // Define the main class for the application.
     mainClass = "org.example.App"
+}
+
+kaitai {
+    skip = false
+    packageName = "org.example"
+    // Thanks to https://github.com/kruton/ssh-proto/commit/f3be45ed90021737157d612dc8678ecf9d50e5e9
+    url = rootProject.file("prebuilt/kaitai-struct-compiler-0.10.zip").toURI().toURL()
 }
