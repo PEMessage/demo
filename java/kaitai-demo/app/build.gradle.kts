@@ -43,4 +43,22 @@ kaitai {
     packageName = "org.example"
     // Thanks to https://github.com/kruton/ssh-proto/commit/f3be45ed90021737157d612dc8678ecf9d50e5e9
     url = rootProject.file("prebuilt/kaitai-struct-compiler-0.10.zip").toURI().toURL()
+    // cacheDir = File("${project.gradle.gradleUserHomeDir}/kaitai-cache")
+}
+
+sourceSets {
+    main {
+        java {
+            // This will resolve relative to your build.gradle.kts location
+            srcDir(project.layout.buildDirectory.dir("generated/kaitai"))
+            // println(project.file("build/generated/kaitai"))
+        }
+    }
+}
+
+// Ensure Kaitai tasks run before compilation
+tasks {
+    compileJava {
+        dependsOn("kaitai")
+    }
 }

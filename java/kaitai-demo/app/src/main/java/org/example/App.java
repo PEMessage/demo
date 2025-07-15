@@ -3,12 +3,38 @@
  */
 package org.example;
 
+import java.io.File;
+import java.io.IOException;
+
 public class App {
     public String getGreeting() {
         return "Hello World!";
     }
 
     public static void main(String[] args) {
-        System.out.println(new App().getGreeting());
+        if (args.length == 0) {
+            for (String a: args) {
+                System.out.println("Error: arg number invalid");
+                System.out.println(a);
+            }
+            return;
+        }
+        try {
+            String filePath = args[0];
+            System.out.println("Input file is: " + filePath);
+            System.out.println("Current working directory: " + System.getProperty("user.dir"));
+            File file = new File(filePath);
+            if (file.exists()) {
+                System.out.println("File exists!");
+            } else {
+                System.out.println("File does not exist.");
+            }
+
+            Gif g = Gif.fromFile(filePath); // kaitai dont support File object
+            System.out.println("width = " + g.logicalScreen().imageWidth());
+            System.out.println("height = " + g.logicalScreen().imageHeight());
+        } catch ( IOException e ) {
+            e.printStackTrace();
+        }
     }
 }
