@@ -61,5 +61,16 @@ fun main() {
         }
     }
 
+    val myHtml_desugar = html({ // this in lambda /vs/ this in method???
+        this.head({
+            this.title("My Page")
+        })
+        this.body({
+            this.h1("Welcome")
+            this.p("This is a minimal Kotlin DSL example.")
+        })
+    })
+
     println(myHtml)
+    println(myHtml_desugar)
 }
