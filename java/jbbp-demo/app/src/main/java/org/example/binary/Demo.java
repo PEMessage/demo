@@ -33,17 +33,17 @@ public class Demo {
 
     // ---------------- DEMO 2 ----------------------
     public static class MyData {
-        @Bin byte first; 
+        @Bin byte first;
         @Bin byte len;
         @Bin(type = BinType.BYTE) // map byte -> int
-        int cmd; 
+        int cmd;
         @Bin byte[] buffer;
 
         static final String PARSE_PATTERN =
             "byte first;"
             + "byte len;"
             + "byte cmd;"
-            + "byte [len - 1] buffer;"; // cmd also count as part of len 
+            + "byte [len - 1] buffer;"; // cmd also count as part of len
 
         public static MyData fromBinary(InputStream input) throws IOException {
             return JBBPParser.prepare(MyData.PARSE_PATTERN,
@@ -69,9 +69,9 @@ public class Demo {
 
     private static void demoMapTo() {
         byte[] binaryData = new byte[] {
-            0x01,           // first  
-            0x06,           // len
-            0x02,           // cmd  
+            0x01,           // first
+            0x05 + 1,           // len
+            0x02,           // cmd
             'H', 'e', 'l', 'l', 'o'   // buffer, '\0' should not be included
         };
         try {
@@ -85,10 +85,9 @@ public class Demo {
 
             // Print the parsed data
             System.out.println("Parsed data:");
-            System.out.println(data);
+            System.out.println("  " + data);
 
             // Access individual fields
-            System.out.println("");
             System.out.println("Individual fields:");
             System.out.println("  Type: " + data.first);
             System.out.println("  Length: " + data.len);
@@ -107,12 +106,97 @@ public class Demo {
         }
     }
 
+    // ---------------- DEMO 3 ----------------------
+    public static class MyStruct {
+        @Bin(type = BinType.BYTE) // map byte -> int
+        int no;
+        @Bin byte[] buffer;
+        @Bin byte end;
+
+        static public String getParsePattern(String expr) {
+            return
+            "byte no;"
+            + "byte [" + expr + "] buffer;"
+            + "byte end;";
+        }
+    }
+
+    public static class MyRecursiveData {
+        @Bin byte first;
+        @Bin byte len;
+        @Bin(type = BinType.BYTE) // map byte -> int
+        int cmd;
+        @Bin MyStruct st;
+
+        static public String getParsePattern() {
+            return
+                "byte first;"
+                + "byte len;"
+                + "byte cmd;"
+                + "st {" + MyStruct.getParsePattern("len - 3") + "}";
+        }
+
+        public static MyRecursiveData fromBinary(InputStream input) throws IOException {
+            return JBBPParser.prepare(MyRecursiveData.getParsePattern(),
+                    JBBPBitOrder.LSB0
+                    ).parse(input).mapTo(new MyRecursiveData());
+        }
+
+        public static MyRecursiveData fromBinary(byte[] input) throws IOException {
+            return JBBPParser.prepare(MyRecursiveData.getParsePattern(),
+                    JBBPBitOrder.LSB0
+                    ).parse(input).mapTo(new MyRecursiveData());
+        }
+
+        public Object newInstance(Class<?> klazz){
+            return klazz == MyStruct.class ? new MyStruct() : null;
+        }
+
+
+        public byte[] toBinary() throws IOException {
+            return BeginBin().
+                Byte(first).
+                Byte(len).
+                Byte(cmd).
+            End().toByteArray();
+        }
+    }
+
+    private static void demoRecursive() {
+        byte[] binaryData = new byte[] {
+            0x01,                       // first
+            1 + 1 + 0x05 + 1,           // len
+            0x02,                       // cmd
+            0x01,                       // st.no
+            'H', 'e', 'l', 'l', 'o',    // st.buffer
+            -1,                         // st.end    NOTE:  0xff (Bytes are signed in Java!)
+        };
+        try {
+            MyRecursiveData data = MyRecursiveData.fromBinary(binaryData);
+            MyStruct st = data.st;
+            System.out.println("Parsed data:");
+            System.out.println("  " + data);
+
+            System.out.println("Individual fields:");
+            System.out.println("  st.no: " + st.no);
+            System.out.println("  st.buffer length: " + st.buffer.length);
+            System.out.println("  st.buffer as String: " + new String(st.buffer));
+            System.out.println("  st.end : " + (int)st.end);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+    }
 
     public static void main(String[] args) {
-        System.out.println("----------------------");
+        System.out.println(  "----------------------");
         demoHelloWorld();
 
-        System.out.println("----------------------");
+        System.out.println("\n----------------------");
         demoMapTo();
+
+        System.out.println("\n----------------------");
+        demoRecursive();
     }
 }
