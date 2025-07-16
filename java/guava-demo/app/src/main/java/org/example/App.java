@@ -3,6 +3,10 @@
  */
 package org.example;
 
+import com.google.common.primitives.Bytes;
+
+import java.util.List;
+
 public class App {
     public String getGreeting() {
         return "Hello World!";
@@ -10,5 +14,25 @@ public class App {
 
     public static void main(String[] args) {
         System.out.println(new App().getGreeting());
+        demoBytesAsList();
+    }
+
+    private static void demoBytesAsList() {
+        // Create a byte array with ASCII values for "Hello Guava"
+        byte[] bytes = {72, 101, 108, 108, 111, 32, 71, 117, 97, 118, 97, (byte)127, (byte)128, (byte)0xff};
+
+        // Convert byte array to List<Byte> using Guava
+        List<Byte> byteList = Bytes.asList(bytes);
+
+        System.out.println("\nDemo of Guava's Bytes.asList():");
+        System.out.println("Original byte array:");
+        for (byte b : bytes) {
+            System.out.print(b + " ");
+        }
+
+        System.out.println("\nByte list from Guava:");
+        for (Byte b : byteList) {
+            System.out.print(b + " ");
+        }
     }
 }
