@@ -7,6 +7,8 @@ import com.google.common.primitives.Bytes;
 
 import java.util.List;
 
+import org.example.frameworks.ClassScanner;
+
 public class App {
     public String getGreeting() {
         return "Hello World!";
@@ -15,6 +17,7 @@ public class App {
     public static void main(String[] args) {
         System.out.println(new App().getGreeting());
         demoBytesAsList();
+        ClassScanner.testClassScanner();
     }
 
     private static void demoBytesAsList() {
@@ -34,5 +37,6 @@ public class App {
         for (Byte b : byteList) {
             System.out.print(b + " ");
         }
+        System.out.print("\n");
     }
 }
