@@ -5,7 +5,7 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 
 // for App
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.lang.reflect.InvocationTargetException;
 
@@ -84,7 +84,9 @@ class ClassContainAnnotation {
 }
 
 class App {
-    private static final Map<String, Method> COMMAND_MAP = new HashMap<>();
+    // See: https://stackoverflow.com/questions/663374/java-ordered-map
+    // LinkedHashMap where the order is determined by the insertion order.
+    private static final Map<String, Method> COMMAND_MAP = new LinkedHashMap<>();
     static {
         try {
             Class<?> classes = Class.forName("SampleClass");
