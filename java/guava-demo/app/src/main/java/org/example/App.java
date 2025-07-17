@@ -29,11 +29,14 @@ public class App {
 
         System.out.println("\nDemo of Guava's Bytes.asList():");
         System.out.println("Original byte array:");
+        System.out.println("length is: " + bytes.length);
         for (byte b : bytes) {
             System.out.print(b + " ");
         }
+        System.out.print("\n");
 
         System.out.println("\nByte list from Guava:");
+        System.out.println("Size is: " + byteList.size());
         for (Byte b : byteList) {
             System.out.print(b + " ");
         }
