@@ -12,25 +12,40 @@ typedef struct {
     bool full;         // Flag indicating if buffer is full
 } RingBuffer;
 
-// Initialize a new ring buffer with the given size
-RingBuffer* ringbuffer_malloc(size_t size) {
-    if(size == 0 ) return NULL;
+void ringbuffer_init(RingBuffer *rb, char *buffer, size_t size) {
+    assert(rb != 0);
+    assert(buffer != 0);
+    assert(size != 0);
 
-    RingBuffer *rb = (RingBuffer *)malloc(sizeof(RingBuffer));
-    if (!rb) return NULL;
-    
-    rb->buffer = (char *)malloc(size);
-    if (!rb->buffer) {
-        free(rb);
-        return NULL;
-    }
-    
+    rb->buffer = buffer;
     rb->size = size;
     rb->head = 0;
     rb->tail = 0;
     rb->full = false;
+}
+
+// Initialize a new ring buffer with the given size
+RingBuffer* ringbuffer_malloc(size_t size) {
+    if(size == 0) {
+        return NULL;
+    }
+
+    RingBuffer *rb = (RingBuffer *)malloc(sizeof(RingBuffer));
+    if (!rb) {
+        return NULL;
+    }
+
+    char *buffer = (char *)malloc(size);
+    if (!buffer) {
+        free(rb);
+        return NULL;
+    }
+
+    ringbuffer_init(rb, buffer, size);
+
     return rb;
 }
+
 
 // Free the ring buffer and its resources
 void ringbuffer_free(RingBuffer *rb) {
