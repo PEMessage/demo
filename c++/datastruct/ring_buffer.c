@@ -58,7 +58,7 @@ void ringbuffer_free(RingBuffer *rb) {
 // Get the number of bytes available to read
 size_t ringbuffer_available_read(const RingBuffer *rb) {
     if (rb->full) return rb->size;
-    return (rb->tail >= rb->head) ? (rb->tail - rb->head) : (rb->size - rb->head + rb->tail);
+    return (rb->tail >= rb->head) ? (rb->tail - rb->head) : (rb->size + (rb->tail - rb->head));
 }
 
 // Get the number of bytes available to write
