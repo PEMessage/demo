@@ -13,7 +13,7 @@ typedef struct {
 } RingBuffer;
 
 // Initialize a new ring buffer with the given size
-RingBuffer* ringbuffer_init(size_t size) {
+RingBuffer* ringbuffer_malloc(size_t size) {
     if(size == 0 ) return NULL;
 
     RingBuffer *rb = (RingBuffer *)malloc(sizeof(RingBuffer));
@@ -162,7 +162,7 @@ char* ringbuffer_at_mut(RingBuffer *rb, size_t index) {
 
 void test_basic_operations() {
     printf("=== Testing basic operations ===\n");
-    RingBuffer *rb = ringbuffer_init(10);
+    RingBuffer *rb = ringbuffer_malloc(10);
     assert(rb != NULL);
 
     // Test initial state
@@ -190,7 +190,7 @@ void test_basic_operations() {
 
 void test_wrap_around() {
     printf("=== Testing wrap around ===\n");
-    RingBuffer *rb = ringbuffer_init(5);
+    RingBuffer *rb = ringbuffer_malloc(5);
     assert(rb != NULL);
 
     // Write 3 bytes (head=0, tail=3)
@@ -217,7 +217,7 @@ void test_wrap_around() {
 
 void test_full_and_empty() {
     printf("=== Testing full and empty conditions ===\n");
-    RingBuffer *rb = ringbuffer_init(3);
+    RingBuffer *rb = ringbuffer_malloc(3);
     assert(rb != NULL);
 
     // Fill buffer completely
@@ -245,7 +245,7 @@ void test_full_and_empty() {
 
 void test_random_access() {
     printf("=== Testing random access ===\n");
-    RingBuffer *rb = ringbuffer_init(8);
+    RingBuffer *rb = ringbuffer_malloc(8);
     assert(rb != NULL);
 
     // Write some data
@@ -277,7 +277,7 @@ void test_random_access() {
 void test_edge_cases() {
     printf("=== Testing edge cases ===\n");
     // Test zero size buffer
-    RingBuffer *rb = ringbuffer_init(0);
+    RingBuffer *rb = ringbuffer_malloc(0);
     assert(rb == NULL);
 
     // Test NULL pointer handling
@@ -285,7 +285,7 @@ void test_edge_cases() {
     assert(ringbuffer_read(NULL, NULL, 10) == 0);
 
     // Test with NULL data pointer (should be handled safely)
-    rb = ringbuffer_init(10);
+    rb = ringbuffer_malloc(10);
     assert(ringbuffer_write(rb, NULL, 5) == 0);
     assert(ringbuffer_read(rb, NULL, 5) == 0);
     ringbuffer_free(rb);
@@ -295,7 +295,7 @@ void test_edge_cases() {
 
 void test_peek_operations() {
     printf("=== Testing peek operations ===\n");
-    RingBuffer *rb = ringbuffer_init(5);
+    RingBuffer *rb = ringbuffer_malloc(5);
     assert(rb != NULL);
 
     // Test peek on empty buffer
