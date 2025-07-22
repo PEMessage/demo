@@ -57,14 +57,12 @@ int&& foo_rref();
 int foo_value();
 
 
-#define PRINT_TYPE(expr) \
-    std::cout << "decltype(" #expr ") is: " << type_name<decltype(expr)>() << std::endl
 
 // decltype rule: https://zhuanlan.zhihu.com/p/152154499
 // 1. exp 是标识符、类访问表达式，decltype(exp) 和 exp 的类型一致。
 // 2. exp 是函数调用，decltype(exp) 和返回值的类型一致。
 // 3. exp 若 exp 是一个左值，则 decltype(exp) 是 exp 类型的左值引用, 则和exp 类型一致
-int main() {
+void test_vartype() {
     int i = 0;
     const int ci = 0;
 
@@ -86,9 +84,29 @@ int main() {
     // universal reference: https://zhuanlan.zhihu.com/p/99524127
     // 如果一个变量或者参数被声明为T&&，其中T是被推导的类型，那这个变量或者参数就是一个universal reference。
     auto &&j = 0;
-    PRINT_TYPE(j);
+    std::cout << "decltype(static_cast<int>(j)) is " << type_name<decltype(j)>() << '\n';
     auto &&k = i;
-    PRINT_TYPE(k);
-
+    std::cout << "decltype(static_cast<int>(k)) is " << type_name<decltype(k)>() << '\n';
 }
 
+template<typename T>
+void func(T&& args){
+    std::cout << "==============================" << std::endl;
+    std::cout << "| decltype(args) is: " << type_name<decltype(args)>() << std::endl;
+    std::cout << "| T is: " << type_name<T>() << std::endl;
+}
+
+void test_templatetype() {
+    int x=27;                       //x是int
+    func(x);
+    const int cx=x;                 //cx是const int
+    func(cx);
+    const int& rx=x;                //rx是指向作为const int的x的引用
+    func(rx);
+    func(27);
+}
+
+int main() {
+    test_vartype();
+    test_templatetype();
+}
