@@ -67,6 +67,7 @@ int foo_value();
 int main() {
     int i = 0;
     const int ci = 0;
+
     std::cout << "decltype(i) is " << type_name<decltype(i)>() << '\n'; // due to rule1
     std::cout << "decltype(ci) is " << type_name<decltype(ci)>() << '\n'; // due to rule1
     std::cout << "decltype((i)) is " << type_name<decltype((i))>() << '\n';  // due to rule3
@@ -82,6 +83,12 @@ int main() {
     std::cout << "decltype(static_cast<int&&>(i)) is " << type_name<decltype(static_cast<int&&>(i))>() << '\n';
     std::cout << "decltype(static_cast<int>(i)) is " << type_name<decltype(static_cast<int>(i))>() << '\n';
 
-    PRINT_TYPE(i);
+    // universal reference: https://zhuanlan.zhihu.com/p/99524127
+    // 如果一个变量或者参数被声明为T&&，其中T是被推导的类型，那这个变量或者参数就是一个universal reference。
+    auto &&j = 0;
+    PRINT_TYPE(j);
+    auto &&k = i;
+    PRINT_TYPE(k);
+
 }
 
