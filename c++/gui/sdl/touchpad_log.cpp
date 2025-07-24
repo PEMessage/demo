@@ -7,9 +7,15 @@
 #include <algorithm>
 #include <fcntl.h>
 
+// In device
+const int SCREEN_WIDTH = 800;
+const int SCREEN_HEIGHT = 1680;
+
+// For display
 const int WINDOW_WIDTH = 800;
 const int WINDOW_HEIGHT = 600;
-const int POINT_HISTORY = 2000;
+
+const int POINT_HISTORY = 5000;
 const Uint32 POINT_LIFETIME = 2000; // milliseconds
 
 // Expected format: DEVTODO:x:XXX:y:XXX
@@ -26,7 +32,7 @@ struct TouchPoint {
 std::vector<TouchPoint> points;
 
 bool parseLine(const std::string& line, int& x, int& y) {
-    if (line.substr(0, sizeof(HEADER_MAGIC) - 1) != "DEVTODO:") {
+    if (line.substr(0, sizeof(HEADER_MAGIC) - 1) != "DEVTODO:") { // '\0' count 1 in sizeof
         return false;
     }
 
@@ -47,10 +53,22 @@ bool parseLine(const std::string& line, int& x, int& y) {
 
 void addPoint(int x, int y, Uint32 timestamp) {
     // Convert coordinates to screen space (assuming input is 0-1000 range)
-    int screenX = std::clamp(x * WINDOW_WIDTH / 1000, 0, WINDOW_WIDTH - 1);
-    int screenY = std::clamp(y * WINDOW_HEIGHT / 1000, 0, WINDOW_HEIGHT - 1);
+    if (x < 0 || x >= SCREEN_WIDTH) {
+        std::cout << "ERROR: x coordinate " << x << " out of SCREEN_WIDTH range [0, " << SCREEN_WIDTH << "]" ;
+        std::cout << " {x: " << x << ", y:" << y << "}" << std::endl;
+    }
+    if (y < 0 || y >= SCREEN_HEIGHT) {
+        std::cout << "ERROR: y coordinate " << y << " out of SCREEN_HEIGHT range [0, " << SCREEN_HEIGHT << "]" ;
+        std::cout << " {x: " << x << ", y:" << y << "}" << std::endl;
+    }
 
-    points.push_back({screenX, screenY, timestamp, true});
+    // int screenX = std::clamp(x * WINDOW_WIDTH / 1000, 0, WINDOW_WIDTH - 1);
+    // int screenY = std::clamp(y * WINDOW_HEIGHT / 1000, 0, WINDOW_HEIGHT - 1);
+    // Convert coordinates to window space
+    int windowX = std::clamp(static_cast<int>(static_cast<float>(x) * WINDOW_WIDTH / SCREEN_WIDTH), 0, WINDOW_WIDTH - 1);
+    int windowY = std::clamp(static_cast<int>(static_cast<float>(y) * WINDOW_HEIGHT / SCREEN_HEIGHT), 0, WINDOW_HEIGHT - 1);
+
+    points.push_back({windowX, windowY, timestamp, true});
 
     // Remove old points
     while (points.size() > POINT_HISTORY) {
