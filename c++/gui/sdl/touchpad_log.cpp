@@ -45,7 +45,7 @@ bool parseLine(const std::string& line, int& x, int& y) {
         x = std::stoi(line.substr(xPos + sizeof(X_MAGIC) - 1)); // '\0' count 1 in sizeof
         y = std::stoi(line.substr(yPos + sizeof(Y_MAGIC) - 1)); // '\0' count 1 in sizeof
     } catch (...) {
-        std::cerr << "[E]: Error format" << std::endl;
+        std::cerr << "ERROR: format stoi fail" << std::endl;
         return false;
     }
     return true;
@@ -118,7 +118,31 @@ void render(SDL_Renderer* renderer) {
     SDL_RenderPresent(renderer);
 }
 
+
+struct Option {
+    bool print = false;
+};
+
 int main(int argc, char* argv[]) {
+    Option option {};
+    for (int i = 0; i < argc; i++) {
+        std::string arg {argv[i]};
+
+        auto shift = [&]() {
+            if(i < argc) {
+                i++;
+                arg = argv[i];
+            } else {
+                std::cerr << "ERROR: Fail to parse option with arguement, not enough argv";
+                exit(1);
+            }
+        };
+
+        if ((arg == "--print") || (arg == "-p")) {
+            option.print = true;
+        }
+    }
+
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         std::cerr << "SDL could not initialize! SDL_Error: " << SDL_GetError() << std::endl;
         return 1;
@@ -171,6 +195,10 @@ int main(int argc, char* argv[]) {
             int x, y;
             if (parseLine(line, x, y)) {
                 addPoint(x, y, SDL_GetTicks());
+            } else if (option.print) { // parse error and option.print is true
+                std::cout << line << std::endl;
+            } else {
+                // do nothing pass
             }
         }
 
