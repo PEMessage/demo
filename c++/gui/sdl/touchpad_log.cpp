@@ -1,3 +1,4 @@
+// q-gcc: -lSDL2 --
 #include <SDL2/SDL.h>
 #include <iostream>
 #include <string>
@@ -11,6 +12,11 @@ const int WINDOW_HEIGHT = 600;
 const int POINT_HISTORY = 2000;
 const Uint32 POINT_LIFETIME = 2000; // milliseconds
 
+// Expected format: DEVTODO:x:XXX:y:XXX
+constexpr char HEADER_MAGIC[] = "DEVTODO:";
+const char X_MAGIC[] = ":x:";
+const char Y_MAGIC[] = ":y:";
+
 struct TouchPoint {
     int x, y;
     Uint32 timestamp;
@@ -20,30 +26,32 @@ struct TouchPoint {
 std::vector<TouchPoint> points;
 
 bool parseLine(const std::string& line, int& x, int& y) {
-    // Expected format: DEVTODO:x:XXX:y:XXX
-    if (line.substr(0, 8) != "DEVTODO:") return false;
-    
-    size_t xPos = line.find(":x:");
-    size_t yPos = line.find(":y:");
-    
-    if (xPos == std::string::npos || yPos == std::string::npos) return false;
-    
-    try {
-        x = std::stoi(line.substr(xPos + 3, yPos - (xPos + 3)));
-        y = std::stoi(line.substr(yPos + 3));
-        return true;
-    } catch (...) {
+    if (line.substr(0, sizeof(HEADER_MAGIC) - 1) != "DEVTODO:") {
         return false;
     }
+
+    size_t xPos = line.find(X_MAGIC);
+    size_t yPos = line.find(Y_MAGIC);
+
+    if (xPos == std::string::npos || yPos == std::string::npos) return false;
+
+    try {
+        x = std::stoi(line.substr(xPos + sizeof(X_MAGIC) - 1)); // '\0' count 1 in sizeof
+        y = std::stoi(line.substr(yPos + sizeof(Y_MAGIC) - 1)); // '\0' count 1 in sizeof
+    } catch (...) {
+        std::cerr << "[E]: Error format" << std::endl;
+        return false;
+    }
+    return true;
 }
 
 void addPoint(int x, int y, Uint32 timestamp) {
     // Convert coordinates to screen space (assuming input is 0-1000 range)
     int screenX = std::clamp(x * WINDOW_WIDTH / 1000, 0, WINDOW_WIDTH - 1);
     int screenY = std::clamp(y * WINDOW_HEIGHT / 1000, 0, WINDOW_HEIGHT - 1);
-    
+
     points.push_back({screenX, screenY, timestamp, true});
-    
+
     // Remove old points
     while (points.size() > POINT_HISTORY) {
         points.erase(points.begin());
@@ -62,16 +70,16 @@ void render(SDL_Renderer* renderer) {
     // Clear screen
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
-    
+
     // Draw grid
     SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
     for (int i = 1; i < 10; ++i) {
-        SDL_RenderDrawLine(renderer, i * WINDOW_WIDTH / 10, 0, 
+        SDL_RenderDrawLine(renderer, i * WINDOW_WIDTH / 10, 0,
                           i * WINDOW_WIDTH / 10, WINDOW_HEIGHT);
-        SDL_RenderDrawLine(renderer, 0, i * WINDOW_HEIGHT / 10, 
+        SDL_RenderDrawLine(renderer, 0, i * WINDOW_HEIGHT / 10,
                           WINDOW_WIDTH, i * WINDOW_HEIGHT / 10);
     }
-    
+
     // Draw points
     Uint32 current_time = SDL_GetTicks();
     for (const auto& point : points) {
@@ -88,7 +96,7 @@ void render(SDL_Renderer* renderer) {
         SDL_SetRenderDrawColor(renderer, 0, 255, 0, alpha);
         SDL_RenderDrawPoint(renderer, point.x, point.y);
     }
-    
+
     SDL_RenderPresent(renderer);
 }
 
@@ -104,7 +112,7 @@ int main(int argc, char* argv[]) {
         WINDOW_WIDTH, WINDOW_HEIGHT,
         SDL_WINDOW_SHOWN
     );
-    
+
     if (!window) {
         std::cerr << "Window could not be created! SDL_Error: " << SDL_GetError() << std::endl;
         SDL_Quit();
@@ -120,7 +128,11 @@ int main(int argc, char* argv[]) {
     }
 
     // Enable non-blocking stdin read
-    fcntl(0, F_SETFL, O_NONBLOCK);
+    // NOTICE: this will let getline not work(read 0, and set eof, must be reset by cin.clear())
+    // it seem like no easy way to setup cin for none-blocking mode
+    //  See: https://stackoverflow.com/questions/41558908/how-can-i-use-getline-without-blocking-for-input
+    //
+    // fcntl(0, F_SETFL, O_NONBLOCK);
 
     bool quit = false;
     SDL_Event e;
@@ -136,12 +148,11 @@ int main(int argc, char* argv[]) {
 
         // Read input from stdin
         std::string line;
-        while (std::getline(std::cin, line)) {
-            if (!line.empty()) {
-                int x, y;
-                if (parseLine(line, x, y)) {
-                    addPoint(x, y, SDL_GetTicks());
-                }
+        std::getline(std::cin, line);
+        if (!line.empty()) {
+            int x, y;
+            if (parseLine(line, x, y)) {
+                addPoint(x, y, SDL_GetTicks());
             }
         }
 
