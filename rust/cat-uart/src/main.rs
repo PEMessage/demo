@@ -5,7 +5,8 @@ use std::io::{self, Read, Write};
 #[clap(author, version, about)]
 struct Args {
     /// Serial device path (e.g., /dev/ttyUSB0)
-    device: String,
+    #[clap(required_unless_present("list_ports"))]
+    device: Option<String>,
 
     /// Baud rate (e.g., 9600, 115200)
     #[clap(short, long, default_value_t = 115200)]
@@ -14,6 +15,10 @@ struct Args {
     /// Stop bits (1 or 2)
     #[clap(long, default_value_t = 1)]
     stop_bits: u32,
+
+    /// List available serial ports
+    #[clap(short, long)]
+    list_ports: bool,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -29,11 +34,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
+    if args.list_ports {
+        let ports = serialport::available_ports().expect("No ports found!");
+        println!("Available ports:");
+        for p in ports {
+            println!("  {}", p.port_name);
+        }
+        return Ok(());
+    }
+
     // Open serial port
-    let mut port = serialport::new(&args.device, args.baud)
+    let device = args
+        .device
+        .expect("Device path is required when not listing ports");
+    let mut port = serialport::new(&device, args.baud)
         .stop_bits(stop_bits)
         .open()
-        .map_err(|e| format!("Failed to open {}: {}", args.device, e))?;
+        .map_err(|e| format!("Failed to open {}: {}", device, e))?;
 
     // Buffer for reading data
     let mut buffer = [0u8; 1024];
@@ -50,7 +67,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 continue;
             }
             Err(e) => {
-                eprintln!("Error reading from {}: {}", args.device, e);
+                eprintln!("Error reading from {}: {}", device, e);
                 std::process::exit(1);
             }
         }
