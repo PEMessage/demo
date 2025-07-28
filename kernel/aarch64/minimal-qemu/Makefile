@@ -23,6 +23,9 @@ $(KDIR):
 	@echo "Download $(KDIR)"
 	@wget -c $(KSRC_URL) && tar -xf $(KDIR).tar.xz
 
+modules:
+	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) modules
+
 # $(KDIR)/.config:
 # 	make defconfig
 
@@ -96,6 +99,6 @@ qemu: $(KIMG) $(DTB)
 debug: $(KIMG) $(DTB)
 	qemu-system-aarch64 -M virt -cpu cortex-a53 -smp 2 -m 2048 -kernel $(KIMG) -nographic -S -s
 
-PHONY += dtb all defconfig qemu debug menuconfig
+PHONY += dtb all defconfig qemu debug menuconfig modules
 .PHONY: $(PHONY)
 
