@@ -1,5 +1,6 @@
-// q-gcc: -lSDL2 --
+// q-gcc: -lSDL2 -lSDL2_ttf --
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_ttf.h>
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -30,6 +31,9 @@ struct TouchPoint {
 };
 
 std::vector<TouchPoint> points;
+int points_in_last_second = 0;
+int points_in_current_second = 0;
+Uint32 last_second_timestamp = 0;
 
 bool parseLine(const std::string& line, int& x, int& y) {
     if (line.substr(0, sizeof(HEADER_MAGIC) - 1) != "DEVTODO:") { // '\0' count 1 in sizeof
@@ -70,6 +74,15 @@ void addPoint(int x, int y, Uint32 timestamp) {
 
     points.push_back({windowX, windowY, timestamp, true});
 
+    // Update PPS counter
+    if (timestamp - last_second_timestamp >= 1000) {
+        last_second_timestamp = timestamp;
+        points_in_last_second = points_in_current_second;
+        points_in_current_second = 1;
+    } else {
+        points_in_current_second++;
+    }
+
     // Remove old points
     while (points.size() > POINT_HISTORY) {
         points.erase(points.begin());
@@ -84,7 +97,7 @@ void updatePoints(Uint32 current_time) {
     }
 }
 
-void render(SDL_Renderer* renderer) {
+void render(SDL_Renderer* renderer, TTF_Font* font) {
     // Clear screen
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
@@ -115,12 +128,29 @@ void render(SDL_Renderer* renderer) {
         SDL_RenderDrawPoint(renderer, point.x, point.y);
     }
 
+    // Render PPS counter
+    if (font) {
+        std::string pps_text = "PPS: " + std::to_string(points_in_last_second);
+        SDL_Color white = {255, 255, 255, 255};
+        SDL_Surface* surface = TTF_RenderText_Solid(font, pps_text.c_str(), white);
+        if (surface) {
+            SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+            if (texture) {
+                SDL_Rect rect = {WINDOW_WIDTH - surface->w - 10, 10, surface->w, surface->h};
+                SDL_RenderCopy(renderer, texture, NULL, &rect);
+                SDL_DestroyTexture(texture);
+            }
+            SDL_FreeSurface(surface);
+        }
+    }
+
     SDL_RenderPresent(renderer);
 }
 
 
 struct Option {
     bool print = false;
+    std::string font = "";
 };
 
 int main(int argc, char* argv[]) {
@@ -140,11 +170,20 @@ int main(int argc, char* argv[]) {
 
         if ((arg == "--print") || (arg == "-p")) {
             option.print = true;
+        } else if ((arg == "--font") || (arg == "-f")) {
+            shift();
+            option.font = argv[i];
         }
     }
 
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         std::cerr << "SDL could not initialize! SDL_Error: " << SDL_GetError() << std::endl;
+        return 1;
+    }
+
+    if (TTF_Init() == -1) {
+        std::cerr << "TTF could not initialize! TTF_Error: " << TTF_GetError() << std::endl;
+        SDL_Quit();
         return 1;
     }
 
@@ -157,6 +196,7 @@ int main(int argc, char* argv[]) {
 
     if (!window) {
         std::cerr << "Window could not be created! SDL_Error: " << SDL_GetError() << std::endl;
+        TTF_Quit();
         SDL_Quit();
         return 1;
     }
@@ -165,20 +205,24 @@ int main(int argc, char* argv[]) {
     if (!renderer) {
         std::cerr << "Renderer could not be created! SDL_Error: " << SDL_GetError() << std::endl;
         SDL_DestroyWindow(window);
+        TTF_Quit();
         SDL_Quit();
         return 1;
     }
 
-    // Enable non-blocking stdin read
-    // NOTICE: this will let getline not work(read 0, and set eof, must be reset by cin.clear())
-    // it seem like no easy way to setup cin for none-blocking mode
-    //  See: https://stackoverflow.com/questions/41558908/how-can-i-use-getline-without-blocking-for-input
-    //
-    // fcntl(0, F_SETFL, O_NONBLOCK);
+    TTF_Font *font = nullptr;
+    if (option.font != "" ) {
+        font = TTF_OpenFont(option.font.c_str(), 24);
+        if (!font) {
+            std::cerr << "Failed to load font! Using fallback. TTF_Error: " << TTF_GetError() << std::endl;
+            // Continue without font - we just won't show the PPS counter
+        }
+    }
 
     bool quit = false;
     SDL_Event e;
     Uint32 last_update = SDL_GetTicks();
+    last_second_timestamp = SDL_GetTicks();
 
     while (!quit) {
         // Handle events
@@ -206,15 +250,19 @@ int main(int argc, char* argv[]) {
         Uint32 current_time = SDL_GetTicks();
         if (current_time - last_update > 16) {
             updatePoints(current_time);
-            render(renderer);
+            render(renderer, font);
             last_update = current_time;
         } else {
             SDL_Delay(1);
         }
     }
 
+    if (font) {
+        TTF_CloseFont(font);
+    }
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
+    TTF_Quit();
     SDL_Quit();
     return 0;
 }
