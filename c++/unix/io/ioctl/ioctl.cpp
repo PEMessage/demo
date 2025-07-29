@@ -3,15 +3,18 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
-#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/types.h>
+#include <iostream>
+#include "visit_struct/visit_struct.hpp"
 
 #define IOCTL_CMD     TIOCGWINSZ
 typedef struct winsize IOCTL_STRUCT;
+VISITABLE_STRUCT(IOCTL_STRUCT, ws_row, ws_col, ws_xpixel, ws_ypixel);
+
 #define IOCTL_FILE "/dev/tty"
 
 
@@ -27,6 +30,13 @@ void print_buffer(void *ptr, size_t len) {
         }
     }
     printf("\n");
+}
+void debug_print(const IOCTL_STRUCT & my_struct) {
+    visit_struct::for_each(my_struct,
+        [](const char * name, const auto & value) {
+            std::cerr << name << ": " << value << std::endl;
+        }
+    );
 }
 
 int main() {
@@ -49,6 +59,7 @@ int main() {
     }
 
     print_buffer(&buffer, sizeof(buffer));
+    debug_print(buffer);
 
     return EXIT_SUCCESS;
 }
