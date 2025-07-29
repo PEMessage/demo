@@ -6,11 +6,15 @@ CROSS_COMPILE := aarch64-linux-gnu-
 KDIR = linux-5.18.2
 KSRC_URL = mirrors.tuna.tsinghua.edu.cn/kernel/v5.x/$(KDIR).tar.xz
 
-KIMG = $(KDIR)/arch/arm64/boot/Image
 
-all: $(KDIR) $(KDIR)/.config
-	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) Image -j8
-	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) scripts_gdb
+# relative path to -C $(KDIR)
+BUILD_DIR=build
+
+KIMG = $(KDIR)/$(BUILD_DIR)/arch/arm64/boot/Image
+
+all: $(KDIR) $(KDIR)/.config 
+	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) Image -j8
+	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) scripts_gdb
 
 $(KIMG):
 	make all
@@ -19,8 +23,11 @@ $(KDIR):
 	@echo "Download $(KDIR)"
 	@wget -c $(KSRC_URL) && tar -xf $(KDIR).tar.xz
 
-$(KDIR)/.config:
-	make defconfig
+# $(KDIR)/.config:
+# 	make defconfig
+
+$(KDIR)/.config: defconfig
+	
 
 # Come from https://www.kernel.org/doc/html/v6.9/dev-tools/gdb-kernel-debugging.html
 EXTRA_DEFCONFIG := --enable CONFIG_DEBUG_INFO 
@@ -59,13 +66,13 @@ EXTRA_DEFCONFIG += --disable ANDROID_BINDER_IPC_SELFTEST
 
 # 默认配置并开启调试功能
 defconfig: Makefile $(KDIR)
-	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) defconfig
-		$(KDIR)/scripts/config --file $(KDIR)/.config \
+	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) defconfig
+		$(KDIR)/scripts/config --file $(KDIR)/$(BUILD_DIR)/.config \
 		$(EXTRA_DEFCONFIG)
-	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) oldconfig
+	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) oldconfig
 
 menuconfig:
-	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) menuconfig
+	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) menuconfig
 
 # Update: QEMU should pass to kernel, not need for us to generate, but nice as a note
 # 
