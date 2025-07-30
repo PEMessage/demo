@@ -5,7 +5,7 @@
 using namespace std;
 using namespace std::chrono;
 
-const string HEADER = "DEVTODO:";
+// const string HEADER = "DEVTODO:";
 
 int main() {
     int lines_in_current_second = 0;
@@ -15,9 +15,9 @@ int main() {
 
     string line;
     while (getline(cin, line)) {
-        if (line.substr(0, HEADER.size()) != HEADER) {
-            continue;
-        }
+        // if (line.substr(0, HEADER.size()) != HEADER) {
+        //     continue;
+        // }
         auto current_time = steady_clock::now();
         auto elapsed_ms = duration_cast<milliseconds>(current_time - last_second_timestamp).count();
 
@@ -39,3 +39,7 @@ int main() {
 
     return 0;
 }
+
+// For NDK See: https://developer.android.com/ndk/guides/other_build_systems?hl=zh-cn
+// Must add -static-libstdc++ for old version of android: https://stackoverflow.com/questions/55184167/clang-linking-so-library-libc-shared-so
+// /opt/android-sdk/ndk/25.1.8937393/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi21-clang++ countline.cpp -o countline  -static-libstdc++
