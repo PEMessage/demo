@@ -9,10 +9,13 @@ KDIR := linux
 # relative path to -C $(KDIR)
 BUILD_DIR := build
 
+# also relative to KDIR/BUILD_DIR
+ROOTFS_DIR := rootfs
+
 KIMG := $(KDIR)/$(BUILD_DIR)/arch/arm64/boot/Image
 KDOTCONFIG := $(KDIR)/$(BUILD_DIR)/.config
 # Come from https://www.kernel.org/doc/html/v6.9/dev-tools/gdb-kernel-debugging.html
-EXTRA_DEFCONFIG := --enable CONFIG_DEBUG_INFO 
+EXTRA_DEFCONFIG := --enable CONFIG_DEBUG_INFO
 EXTRA_DEFCONFIG += --enable CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT
 EXTRA_DEFCONFIG += --enable CONFIG_GDB_SCRIPTS
 # KASLR disable
@@ -49,9 +52,13 @@ EXTRA_DEFCONFIG += --disable ANDROID_BINDER_IPC_SELFTEST
 EXTRA_DEFCONFIG += --disable CONFIG_TRIM_UNUSED_KSYMS
 # @@META CONFIG END
 
+PWD := $(shell pwd)
 
 .PHONY: default
 default: modules
+
+.PHONY: all
+all: default headers
 
 .PHONY: download
 download: $(KDIR)
@@ -71,13 +78,13 @@ $(KDOTCONFIG): $(KDIR) Makefile
 		$(EXTRA_DEFCONFIG)
 	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) oldconfig
 	# dump var
-	cat Makefile | ./dumppart.awk -v begin_pattern="@@META CONFIG START" -v end_pattern="@@META CONFIG END" | tee $(KDIR)/$(BUILD_DIR)/dumpvar.mk 
+	cat Makefile | ./dumppart.awk -v begin_pattern="@@META CONFIG START" -v end_pattern="@@META CONFIG END" | tee $(KDIR)/$(BUILD_DIR)/dumpvar.mk
 	# touch $(KDOTCONFIG)
 
 .PHONY: menuconfig
 menuconfig:
 	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) menuconfig
-	
+
 # add KIMG to phony, to always run it, linux make will run fast if not change
 .PHONY: build $(KIMG)
 build: $(KIMG)
@@ -89,7 +96,7 @@ $(KIMG): config
 	$(KDIR)/scripts/clang-tools/gen_compile_commands.py -d $(KDIR)/$(BUILD_DIR)
 
 # Update: QEMU should pass to kernel, not need for us to generate, but nice as a note
-# 
+#
 # DTB = mydtb/my.dto
 # DTS = $(DTB:.dto=.dts)
 #
@@ -105,7 +112,13 @@ $(KIMG): config
 modules: build
 	# we must built modules for generate Modules.symvar
 	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) modules -j8
+	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) modules_install INSTALL_MOD_PATH=$(ROOTFS_DIR)
 	$(KDIR)/scripts/clang-tools/gen_compile_commands.py -d $(KDIR)/$(BUILD_DIR)
+
+.PHONY: headers
+headers:
+	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) headers_install INSTALL_HDR_PATH=$(ROOTFS_DIR)/usr/include/linux
+
 
 .PHONY: qemu
 qemu: build
