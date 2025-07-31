@@ -29,6 +29,9 @@ $(SRC_DIR)/$(BUILD_DIR)/.config:
 .PHONY: build
 build:
 	make -C busybox-src ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) -j8
+	# create build/_install as rootfs
+	make -C busybox-src ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) install
+
 
 
 # See: https://stackoverflow.com/questions/4219255/how-do-you-get-the-list-of-targets-in-a-makefile
