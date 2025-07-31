@@ -43,11 +43,15 @@ EXTRA_DEFCONFIG += --enable CONFIG_STAGING
 EXTRA_DEFCONFIG += --enable CONFIG_ASHMEM
 EXTRA_DEFCONFIG += --disable ANDROID_BINDER_IPC_SELFTEST
 
+
+# See: https://blog.csdn.net/weixin_52027058/article/details/132019367
+# Usual function not founded, when compile module  _printk、kfree、kmalloc、memset
+EXTRA_DEFCONFIG += --disable CONFIG_TRIM_UNUSED_KSYMS
 # @@META CONFIG END
 
 
 .PHONY: default
-default: build
+default: modules
 
 .PHONY: download
 download: $(KDIR)
@@ -81,6 +85,8 @@ $(KIMG): config
 	@echo "||====== build $(KIMG)"
 	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) Image -j8
 	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) scripts_gdb
+	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) modules_prepare
+	$(KDIR)/scripts/clang-tools/gen_compile_commands.py -d $(KDIR)/$(BUILD_DIR)
 
 # Update: QEMU should pass to kernel, not need for us to generate, but nice as a note
 # 
@@ -95,9 +101,11 @@ $(KIMG): config
 # 	dtc -I dts -O dtb $< -o $(DTB)
 # $(DTB):
 # 	make dtb
-.PHONY: module
+.PHONY: modules
 modules: build
-	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) modules
+	# we must built modules for generate Modules.symvar
+	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) modules -j8
+	$(KDIR)/scripts/clang-tools/gen_compile_commands.py -d $(KDIR)/$(BUILD_DIR)
 
 .PHONY: qemu
 qemu: build

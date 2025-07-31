@@ -7,3 +7,4 @@ bullseye*
 modules/**/*
 !modules/**/*.c
 !modules/**/Makefile
+compile_commands.json
