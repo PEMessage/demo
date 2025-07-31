@@ -3,14 +3,14 @@
 ARCH ?= arm64
 CROSS_COMPILE ?= aarch64-linux-gnu-
 
-KDIR = linux
+KDIR := linux
 # KDIR = linux-5.18.2
 # KSRC_URL = mirrors.tuna.tsinghua.edu.cn/kernel/v5.x/$(KDIR).tar.xz
 # relative path to -C $(KDIR)
-BUILD_DIR=build
+BUILD_DIR := build
 
-KIMG = $(KDIR)/$(BUILD_DIR)/arch/arm64/boot/Image
-KDOTCONFIG = $(KDIR)/$(BUILD_DIR)/.config
+KIMG := $(KDIR)/$(BUILD_DIR)/arch/arm64/boot/Image
+KDOTCONFIG := $(KDIR)/$(BUILD_DIR)/.config
 # Come from https://www.kernel.org/doc/html/v6.9/dev-tools/gdb-kernel-debugging.html
 EXTRA_DEFCONFIG := --enable CONFIG_DEBUG_INFO 
 EXTRA_DEFCONFIG += --enable CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT
@@ -66,13 +66,14 @@ $(KDOTCONFIG): $(KDIR) Makefile
 		$(KDIR)/scripts/config --file $(KDIR)/$(BUILD_DIR)/.config \
 		$(EXTRA_DEFCONFIG)
 	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) oldconfig
-	touch $(KDOTCONFIG)
+	# dump var
+	cat Makefile | ./dumppart.awk -v begin_pattern="@@META CONFIG START" -v end_pattern="@@META CONFIG END" | tee $(KDIR)/$(BUILD_DIR)/dumpvar.mk 
+	# touch $(KDOTCONFIG)
 
 .PHONY: menuconfig
 menuconfig:
 	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) menuconfig
 	
-
 # add KIMG to phony, to always run it, linux make will run fast if not change
 .PHONY: build $(KIMG)
 build: $(KIMG)
