@@ -3,8 +3,9 @@
 ARCH := arm64
 CROSS_COMPILE := aarch64-linux-gnu-
 
-KDIR = linux-5.18.2
-KSRC_URL = mirrors.tuna.tsinghua.edu.cn/kernel/v5.x/$(KDIR).tar.xz
+KDIR = linux
+# KDIR = linux-5.18.2
+# KSRC_URL = mirrors.tuna.tsinghua.edu.cn/kernel/v5.x/$(KDIR).tar.xz
 
 
 # relative path to -C $(KDIR)
@@ -21,7 +22,8 @@ $(KIMG):
 
 $(KDIR):
 	@echo "Download $(KDIR)"
-	@wget -c $(KSRC_URL) && tar -xf $(KDIR).tar.xz
+	# @wget -c $(KSRC_URL) && tar -xf $(KDIR).tar.xz
+	git clone https://github.com/torvalds/linux.git --branch v5.18-rc2 --depth 1
 
 modules:
 	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) modules

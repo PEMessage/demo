@@ -1,0 +1,9 @@
+
+mydtb
+*.xz
+linux
+linux-*
+bullseye*
+modules/**/*
+!modules/**/*.c
+!modules/**/Makefile
