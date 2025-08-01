@@ -7,21 +7,27 @@ SRC_DIR := busybox-src
 # relateive to SRC
 BUILD_DIR := build
 
-.PHONY: all
-all: rootfs.cpio.gz
-
-
-$(SRC_DIR):
-	git clone https://github.com/mirror/busybox.git --depth 1 --branch 1_36_1 $(SRC_DIR)
-
+BUSYBOX_CONFIG := $(SRC_DIR)/$(BUILD_DIR)/.config
 
 EXTRA_DEFCONFIG :=
 EXTRA_DEFCONFIG += --enable CONFIG_STATIC
 EXTRA_DEFCONFIG += --enable CONFIG_DEBUG
 EXTRA_DEFCONFIG += --enable CONFIG_FEATURE_VI_REGEX_SEARCH
+EXTRA_DEFCONFIG += --disable CONFIG_TC
+
+.PHONY: all
+all: rootfs.cpio.gz
+
+
+.PHONY: download
+download: $(SRC_DIR)
+$(SRC_DIR):
+	git clone https://github.com/mirror/busybox.git --depth 1 --branch 1_36_1 $(SRC_DIR)
+
+
 .PHONY: defconfig
-defconfig: $(SRC_DIR)/$(BUILD_DIR)/.config
-$(SRC_DIR)/$(BUILD_DIR)/.config: Makefile
+defconfig: $(BUSYBOX_CONFIG)
+$(BUSYBOX_CONFIG): Makefile download
 	mkdir -p $(SRC_DIR)/$(BUILD_DIR)
 	make -C busybox-src ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) defconfig
 	./config --file $(SRC_DIR)/$(BUILD_DIR)/.config \
@@ -30,7 +36,7 @@ $(SRC_DIR)/$(BUILD_DIR)/.config: Makefile
 
 
 .PHONY: build
-build: $(SRC_DIR)/$(BUILD_DIR)/.config
+build: defconfig
 	make -C busybox-src ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) -j8
 	# create build/_install as rootfs
 	make -C busybox-src ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) install
@@ -38,8 +44,6 @@ build: $(SRC_DIR)/$(BUILD_DIR)/.config
 
 rootfs.cpio.gz: build
 	fakeroot -s rootfs.fakeroot bash build-rootfs.sh $(SRC_DIR)/$(BUILD_DIR)/_install rootfs
-
-
 
 
 # See: https://stackoverflow.com/questions/4219255/how-do-you-get-the-list-of-targets-in-a-makefile
