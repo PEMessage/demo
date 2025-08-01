@@ -29,7 +29,7 @@ $(SRC_DIR):
 
 .PHONY: defconfig
 defconfig: $(BUSYBOX_CONFIG)
-$(BUSYBOX_CONFIG): Makefile download
+$(BUSYBOX_CONFIG): Makefile $(SRC_DIR)
 	mkdir -p $(SRC_DIR)/$(BUILD_DIR)
 	make -C busybox-src ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) defconfig
 	./config --file $(SRC_DIR)/$(BUILD_DIR)/.config \
@@ -45,8 +45,11 @@ build: defconfig
 
 
 rootfs.cpio.gz: build
-	fakeroot -s rootfs.fakeroot bash build-rootfs.sh $(SRC_DIR)/$(BUILD_DIR)/_install rootfs
+	fakeroot -s rootfs.fakeroot bash build-rootfs.sh rootfs $(SRC_DIR)/$(BUILD_DIR)/_install
 
+.PHONY: list
+repack-nodep:
+	fakeroot -s rootfs.fakeroot bash build-rootfs.sh rootfs
 
 # See: https://stackoverflow.com/questions/4219255/how-do-you-get-the-list-of-targets-in-a-makefile
 .PHONY: list

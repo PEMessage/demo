@@ -2,11 +2,9 @@
 
 # example : fakeroot -s rootfs.fakeroot bash build-rootfs.sh busybox-src/build/_install rootfs
 # Credit: https://zhuanlan.zhihu.com/p/626683569
-ROOTFS_PREV="$1"
-ROOTFS_POST="$2"
-ROOTFS_IMG_NAME="$(basename "$ROOTFS_POST")"
-
-
+ROOTFS_OUT="$1"
+ROOTFS_IMG_NAME="$(basename "$ROOTFS_OUT")"
+shift
 
 set -e
 runcmd() {
@@ -15,8 +13,15 @@ runcmd() {
 }
 
 cp_rootfs() {
-    runcmd mkdir -p "$ROOTFS_POST"
-    runcmd cp -raf $ROOTFS_PREV/* "$ROOTFS_POST"
+    runcmd mkdir -p "$ROOTFS_OUT"
+    for x in "$@" 
+    do
+        if [ -d "$x" ] ; then
+            runcmd cp -raf $x/* "$ROOTFS_OUT"
+        else
+            echo "-- $x is not a dir, skip..."
+        fi
+    done
 }
 
 
@@ -63,7 +68,7 @@ root_require() {
 
 prepare() {
     (
-        runcmd cd "$ROOTFS_POST"
+        runcmd cd "$ROOTFS_OUT"
         runcmd rm linuxrc
         runcmd ln -s bin/busybox init || echo "ignore error"
         runcmd mkdir -p dev
@@ -83,9 +88,10 @@ prepare() {
 
         root_require
 
+        echo "Now packing cpio..."
         find . | cpio -o -H newc | gzip > ../$ROOTFS_IMG_NAME.cpio.gz
     )
 }
 
- cp_rootfs &&
+ cp_rootfs "$@" &&
  prepare
