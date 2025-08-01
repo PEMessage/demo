@@ -44,19 +44,19 @@ mount -o rw,remount /' > etc/init.d/rcS
 
 root_require() {
     (
-        runcmd rm dev/console
+        runcmd rm dev/console || echo "ignore error"
         runcmd mknod -m 600 dev/console c 5 1
 
-        runcmd rm dev/tty1
+        runcmd rm dev/tty1 || echo "ignore error"
         runcmd mknod -m 666 dev/tty1 c 4 1
 
-        runcmd rm dev/tty2
+        runcmd rm dev/tty2 || echo "ignore error"
         runcmd mknod -m 666 dev/tty2 c 4 2
 
-        runcmd rm dev/tty3
+        runcmd rm dev/tty3 || echo "ignore error"
         runcmd mknod -m 666 dev/tty3 c 4 3
 
-        runcmd rm dev/tty4
+        runcmd rm dev/tty4 || echo "ignore error"
         runcmd mknod -m 666 dev/tty4 c 4 4
     )
 }
@@ -86,10 +86,6 @@ prepare() {
         find . | cpio -o -H newc | gzip > ../$ROOTFS_IMG_NAME.cpio.gz
     )
 }
-
-
-
-
 
  cp_rootfs &&
  prepare
