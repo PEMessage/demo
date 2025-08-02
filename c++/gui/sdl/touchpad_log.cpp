@@ -35,6 +35,41 @@ int points_in_last_second = 0;
 int points_in_current_second = 0;
 Uint32 last_second_timestamp = 0;
 
+// https://stackoverflow.com/questions/41558908/how-can-i-use-getline-without-blocking-for-input
+bool getline_async(std::istream& is, std::string& str, char delim = '\n') {
+
+    static std::string lineSoFar;
+    char inChar;
+    int charsRead = 0;
+    bool lineRead = false;
+    str = "";
+
+    do {
+        charsRead = is.readsome(&inChar, 1);
+        if (charsRead == 1) {
+            // if the delimiter is read then return the string so far
+            if (inChar == delim) {
+                str = lineSoFar;
+                lineSoFar = "";
+                lineRead = true;
+            } else {  // otherwise add it to the string so far
+                lineSoFar.append(1, inChar);
+            }
+        }
+    } while (charsRead != 0 && !lineRead);
+
+    return lineRead;
+}
+
+bool getline(std::istream& is, std::string& str, bool isasync) {
+    if (isasync) {
+        return getline_async(is, str);
+    } else {
+        std::getline(is, str);
+        return !str.empty();
+    }
+}
+
 bool parseLine(const std::string& line, int& x, int& y) {
     if (line.substr(0, sizeof(HEADER_MAGIC) - 1) != "DEVTODO:") { // '\0' count 1 in sizeof
         return false;
@@ -151,6 +186,7 @@ void render(SDL_Renderer* renderer, TTF_Font* font) {
 struct Option {
     bool print = false;
     std::string font = "";
+    bool async = false;
 };
 
 int main(int argc, char* argv[]) {
@@ -173,6 +209,8 @@ int main(int argc, char* argv[]) {
         } else if ((arg == "--font") || (arg == "-f")) {
             shift();
             option.font = argv[i];
+        } else if ((arg == "--async") || (arg == "-a")) {
+            option.async = true;
         }
     }
 
@@ -224,6 +262,10 @@ int main(int argc, char* argv[]) {
     Uint32 last_update = SDL_GetTicks();
     last_second_timestamp = SDL_GetTicks();
 
+    // Async must set this to work
+    // https://stackoverflow.com/questions/41558908/how-can-i-use-getline-without-blocking-for-input
+    std::ios_base::sync_with_stdio(false);
+
     while (!quit) {
         // Handle events
         while (SDL_PollEvent(&e)) {
@@ -234,8 +276,7 @@ int main(int argc, char* argv[]) {
 
         // Read input from stdin
         std::string line;
-        std::getline(std::cin, line);
-        if (!line.empty()) {
+        if (getline(std::cin, line, option.async)) {
             int x, y;
             if (parseLine(line, x, y)) {
                 addPoint(x, y, SDL_GetTicks());
