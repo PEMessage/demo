@@ -45,7 +45,7 @@ build: defconfig
 
 
 rootfs.cpio.gz: build
-	fakeroot -s rootfs.fakeroot bash build-rootfs.sh rootfs $(SRC_DIR)/$(BUILD_DIR)/_install
+	fakeroot -s rootfs.fakeroot bash build-rootfs.sh rootfs $(SRC_DIR)/$(BUILD_DIR)/_install rootfs_overlay/*
 
 .PHONY: list
 repack-nodep:

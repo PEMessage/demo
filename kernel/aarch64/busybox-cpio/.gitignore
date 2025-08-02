@@ -1,3 +1,4 @@
 busybox-src
 rootfs*
+!rootfs_overlay
 rootfs
