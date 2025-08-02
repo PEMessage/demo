@@ -69,7 +69,7 @@ root_require() {
 prepare() {
     (
         runcmd cd "$ROOTFS_OUT"
-        runcmd rm linuxrc
+        # runcmd rm linuxrc || echo "ignore error"
         runcmd ln -s bin/busybox init || echo "ignore error"
         runcmd mkdir -p dev
         runcmd mkdir -p proc

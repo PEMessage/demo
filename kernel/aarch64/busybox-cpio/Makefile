@@ -49,7 +49,7 @@ rootfs.cpio.gz: build
 
 .PHONY: list
 repack-nodep:
-	fakeroot -s rootfs.fakeroot bash build-rootfs.sh rootfs
+	fakeroot -s rootfs.fakeroot bash build-rootfs.sh rootfs rootfs_overlay/*
 
 # See: https://stackoverflow.com/questions/4219255/how-do-you-get-the-list-of-targets-in-a-makefile
 .PHONY: list
