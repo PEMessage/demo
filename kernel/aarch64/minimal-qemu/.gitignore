@@ -4,7 +4,17 @@ mydtb
 linux
 linux-*
 bullseye*
-modules/**/*
+
+# Common pattern for white list
+# See: https://git-scm.com/docs/gitignore/zh_HANS-CN
+# 1. ignore all file
+modules/**
+# 2. reinclude all dir(thus file match work)
+!modules/**/
+
 !modules/**/*.c
+modules/**/*.mod.c
+
+!modules/**/*.mk
 !modules/**/Makefile
 compile_commands.json
