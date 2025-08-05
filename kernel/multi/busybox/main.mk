@@ -36,11 +36,14 @@ $(my_src_dir):
 defconfig_$(LOCAL_ARCH): $(my_config_file)
 
 
+$(my_config_file): Makefile $(my_src_dir)
+
 # Must using private, VARIABLE inside target are lazy eval(even if using :=)
 $(my_config_file): private_my_build_dir := $(my_build_dir)
 $(my_config_file): private_my_config_file := $(my_config_file)
 $(my_config_file): private_my_make := $(my_make)
-$(my_config_file): Makefile $(my_src_dir)
+
+$(my_config_file):
 	# Create build directory
 	mkdir -p $(private_my_build_dir)
 	
@@ -54,3 +57,15 @@ $(my_config_file): Makefile $(my_src_dir)
 	
 	$(private_my_make) oldconfig
 
+build_$(LOCAL_ARCH): defconfig_$(LOCAL_ARCH)
+build_$(LOCAL_ARCH): private_my_make := $(my_make)
+build_$(LOCAL_ARCH):
+	$(private_my_make) -j8
+	$(private_my_make) install
+
+
+rootfs_$(LOCAL_ARCH): build_$(LOCAL_ARCH)
+rootfs_$(LOCAL_ARCH): private_my_build_dir := $(my_build_dir)
+rootfs_$(LOCAL_ARCH):
+	fakeroot -s $(private_my_build_dir)/rootfs.fakeroot bash \
+		build-rootfs.sh $(private_my_build_dir)/rootfs $(private_my_build_dir)/_install
