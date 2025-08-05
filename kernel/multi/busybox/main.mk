@@ -24,11 +24,14 @@ all_$(LOCAL_ARCH): rootfs_$(LOCAL_ARCH)
 # --------------------------
 download_$(LOCAL_ARCH): $(my_src_dir)
 
+ifndef GUARD_MAIN_MK_DOWNLOAD_SRC
+GUARD_MAIN_MK_DOWNLOAD_SRC := 1
 # Use private variable to capture current LOCAL_SRC_DIR
 $(my_src_dir): private_my_src_dir := $(my_src_dir)
 $(my_src_dir):
 	git clone https://github.com/mirror/busybox.git \
 		--depth 1 --branch 1_36_1 $(private_my_src_dir)
+endif # GUARD_MAIN_MK_DOWNLOAD_SRC
 
 # --------------------------
 # Configuration Target
