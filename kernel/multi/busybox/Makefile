@@ -31,3 +31,11 @@ include main.mk
 # --------------------------
 .PHONY: clean
 clean: clean_arm clean_arm64
+
+# See: https://stackoverflow.com/questions/4219255/how-do-you-get-the-list-of-targets-in-a-makefile
+.PHONY: list
+list:
+	# -p (Print Database)
+	# -R (Disable Built-in Rules/Variables)
+	# -q (Question Mode) Instead of running commands, make -q checks whether targets are up to date
+	@LC_ALL=C $(MAKE) -pRrq -f $(firstword $(MAKEFILE_LIST)) : 2>/dev/null | awk -v RS= -F: '/(^|\n)# Files(\n|$$)/,/(^|\n)# Finished Make data base/ {if ($$1 !~ "^[#.]") {print $$1}}' | sort | grep -E -v -e '^[^[:alnum:]]' -e '^$@$$'
