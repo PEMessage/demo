@@ -13,6 +13,9 @@
  * limitations under the License.
  */
 
+
+#include <limits.h> // PEM Modify
+#include <algorithm> // PEM Modify
 #include "string_ex.h"
 #include "unicode_ex.h"
 #include "utils_log.h"
@@ -296,7 +299,7 @@ int Char16ToChar8(const u16string& str16, char *buffer, int bufferLen)
     const char16_t *utf16Str = str16.c_str();
     int utf8Len = Utf16ToUtf8Length(utf16Str, str16Len);
     if (utf8Len < 0 || utf8Len >= INT_MAX || (utf8Len + 1) > bufferLen) {
-        UTILS_LOGD("utf8buffer len:%{public}d, actual buffer len:%{public}d!", utf8Len + 1, bufferLen);
+        UTILS_LOGD("utf8buffer len:%d, actual buffer len:%d!", utf8Len + 1, bufferLen);
         return CHAR16_TO_CHAR8_INSUFFICIENT_BUFFER;
     }
     StrncpyStr16ToStr8(utf16Str, str16Len, buffer, utf8Len + 1);

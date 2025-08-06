@@ -13,6 +13,7 @@
  * limitations under the License.
  */
 
+#include <limits.h> // PEM Modify
 #include "unicode_ex.h"
 
 #include "utils_log.h"
@@ -50,9 +51,6 @@ constexpr char32_t UTF8_FIRST_BYTE_MARK[] = {
     0x00000000, 0x00000000, 0x000000C0, 0x000000E0, 0x000000F0
 };
 }
-// PEM MODIFY
-#include "limits.h"
-// PEM MODIFY
 
 #define UTF8_LENGTH_INVALID 0
 #define UTF8_LENGTH_1 1
