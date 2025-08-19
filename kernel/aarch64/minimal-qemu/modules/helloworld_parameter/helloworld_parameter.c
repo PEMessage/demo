@@ -16,6 +16,7 @@ module_param_array(numbers, int, &size, S_IRUGO);
 
 
 // Test method: `insmod helloworld_parameter.ko prompt='New message' number=88 numbers=1,2,3`
+// Also check /sys/module/helloworld_parameter/parameters
 static int __init simple_init(void)
 {
     pr_info("Hello, Kernel World!\n");

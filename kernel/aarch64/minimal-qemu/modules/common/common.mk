@@ -2,8 +2,10 @@ MODULE_BUILD_DIR ?= build
 PWD ?= $(shell pwd)
 MO ?= $(PWD)/$(MODULE_BUILD_DIR) # in submake, MO will not be reassign
 
-$(info [OBJM]: $(notdir $(shell dirname $(MO))).o)
-obj-m := $(notdir $(shell dirname $(MO))).o
+SRC_FILES := $(wildcard $(PWD)/*.c)
+OBJ_FILES := $(notdir $(SRC_FILES:.c=.o))
+$(info [MY OBJM]: $(OBJ_FILES))
+obj-m := $(OBJ_FILES)
 
 KDIR := ../../linux/
 
