@@ -3,6 +3,7 @@ PWD ?= $(shell pwd)
 MO ?= $(PWD)/$(MODULE_BUILD_DIR) # in submake, MO will not be reassign
 
 SRC_FILES := $(wildcard $(PWD)/*.c)
+SRC_FILES := $(filter-out %.mod.c, $(SRC_FILES))
 OBJ_FILES := $(notdir $(SRC_FILES:.c=.o))
 $(info [MY OBJM]: $(OBJ_FILES))
 obj-m := $(OBJ_FILES)
