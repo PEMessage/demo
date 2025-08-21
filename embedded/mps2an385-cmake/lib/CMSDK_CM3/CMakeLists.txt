@@ -4,12 +4,28 @@ project(CMSDK_CM3 LANGUAGES C ASM)
 
 # Source files
 set(SRCS
-    Source/hard_fault.c
     Source/startup_CMSDK_CM3.c
     Source/system_CMSDK_CM3.c
     Source/stdout_USART.c
     Source/USART_V2M-MPS2.c
 )
+
+# See: https://jefflongo.dev/posts/cmake-weak-symbol-oddities/
+# Put strong symbol in obj, and wrap it in INTERFACE library
+# ------
+# 1. use object library
+# ------
+add_library(obj_hard_fault OBJECT Source/hard_fault.c)
+    # This case only part
+    target_include_directories(obj_hard_fault PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Include) # this case only
+    target_link_libraries(obj_hard_fault PRIVATE CMSIS)
+# ------
+# 2. wrap in interface,
+# Interface libraries do not compile sources, and do not produce output libraries, but can track dependencies and have properties
+# ------
+add_library(iface_hard_fault INTERFACE)
+target_link_libraries(iface_hard_fault INTERFACE obj_hard_fault $<TARGET_OBJECTS:obj_hard_fault>)
+# ------
 
 # Include directories
 
@@ -21,7 +37,8 @@ target_include_directories(CMSDK_CM3
     ${CMAKE_CURRENT_SOURCE_DIR}/Include
 )
 
-target_link_libraries(CMSDK_CM3 CMSIS)
+target_link_libraries(CMSDK_CM3 PRIVATE iface_hard_fault)
+target_link_libraries(CMSDK_CM3 PUBLIC CMSIS)
 
 # Linker script
 set_target_properties(CMSDK_CM3 PROPERTIES

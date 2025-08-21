@@ -53,10 +53,33 @@ __NO_RETURN void Reset_Handler  (void);
  *----------------------------------------------------------------------------*/
 /* Exceptions */
 void NMI_Handler            (void) __attribute__ ((weak, alias("Default_Handler")));
-// void HardFault_Handler      (void) __attribute__ ((weak)); 
-// for same reason, if `__attribute__ ((weak))` was added, HardFault_Handler, must within this file
-// Even if we comment HardFault_Handler within this file, it will not work
-void HardFault_Handler      (void);
+// Problem:
+//      for same reason, if `__attribute__ ((weak))` was added, HardFault_Handler, must within this file
+//      Even if we comment HardFault_Handler within this file, it will not work
+// Why:
+//      When we boundle weak symbol and strong symbol in same .a file(two object file)
+//      we will got two symbol compiled `nm -a libCMSDK_CM3.a | grep Hard`
+//          00000001 T HardFault_Handler (Text section)
+//          00000001 W HardFault_Handler (Weak symbol)
+//          Uppercase: global symbol
+//          lowercase: local symbol
+//          B: Bss -- D: Data -- R: Readonly -- C: Common
+//
+//      But in the link time, linker consider .a file as special .o file
+//          if .o in .a has require symbol, link it
+//          if .o in .a not have require symbol, skip it
+//          if .o file, always link it
+//
+//          weak for static linker means: will not report duplicate define error!!!
+//                                        but do not change the meaning of linker, 
+//          weak for dynamic linker means: strong will replace weak!!!
+//
+//          so if a weak HandFault is used by this same file who need it
+//          and strong HardFault in same .a, the strong will always be skip
+//
+// Also See: https://jefflongo.dev/posts/cmake-weak-symbol-oddities/
+//           https://stackoverflow.com/questions/70683623/why-does-weak-attribute-in-gcc-work-differently-in-static-library-than-for-objec
+void HardFault_Handler      (void) __attribute__ ((weak));
 void MemManage_Handler      (void) __attribute__ ((weak, alias("Default_Handler")));
 void BusFault_Handler       (void) __attribute__ ((weak, alias("Default_Handler")));
 void UsageFault_Handler     (void) __attribute__ ((weak, alias("Default_Handler")));
@@ -406,10 +429,10 @@ __NO_RETURN void Reset_Handler(void)
 /*----------------------------------------------------------------------------
   Hard Fault Handler
  *----------------------------------------------------------------------------*/
-// void HardFault_Handler(void)
-// {
-//   while(1);
-// }
+void HardFault_Handler(void)
+{
+  while(1);
+}
 
 /*----------------------------------------------------------------------------
   Default Handler for Exceptions / Interrupts
