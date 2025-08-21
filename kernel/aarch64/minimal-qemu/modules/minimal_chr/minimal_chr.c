@@ -29,10 +29,14 @@ int minor = DEFAULT_MINOR;
 int nr = DEFAULT_NR;
 char *name = DEFAULT_NAME;
 
+bool config_sysfs = true;
+
 module_param(major, int, S_IRUGO);
 module_param(minor, int, S_IRUGO);
 module_param(nr, int, S_IRUGO);
 module_param(name, charp, S_IRUGO);
+
+module_param(config_sysfs, bool, S_IRUGO);
 
 dev_t major_minor; // 高12位是主设备号，低20位是次设备号
 
@@ -40,6 +44,9 @@ struct private_dev { // 实际的字符设备结构，类似于面向对象的�
         struct cdev cdev;
         char c;
 };
+
+// sysfs
+struct class *cls; // add cls
 
 static int do_open(struct inode *inode, struct file *filp) {
     printk(KERN_INFO "do open: inode is %d, minor is %d\n", iminor(inode),
@@ -103,6 +110,7 @@ static int __init mc_do_init(void) {
     pr_info("name is: %s\n", name);
     pr_info("nr is: %d\n", nr);
     pr_info("major_minor is: %d\n", major_minor);
+    pr_info("config_sysfs is: %d\n", config_sysfs);
 
     // 2. kzalloc private_dev
     // 2. cdev_init and cdev_add
@@ -126,6 +134,21 @@ static int __init mc_do_init(void) {
             goto step3_fail;
         }
     }
+
+
+    // 4. sysfs[optional]: class_create, device_create
+    // --------------------------------------
+    pr_info("create sysfs1...");
+    if (config_sysfs) {
+        pr_info("create sysfs...");
+        cls = class_create(THIS_MODULE, DEFAULT_NAME);
+        for (i=0; i < nr; i++) {
+            device_create(cls, NULL, MKDEV(major, minor + i), NULL, DEFAULT_NAME "%d", i);
+        }
+    } else {
+        pr_info("config_sysfs disabled: %d\n", config_sysfs);
+    }
+
 /* success: */
     return 0;
 
@@ -144,6 +167,14 @@ step1_fail:
 
 static void __exit mc_do_exit(void) {
     pr_info("Enter mc_do_exit\n");
+
+    if(config_sysfs) {
+        for (int i = 0; i < nr; i++) {
+            device_destroy(cls, MKDEV(major, minor + i));
+        }
+        class_destroy(cls);
+    }
+
     unregister_chrdev_region(major_minor, nr); // 移除模块时释放设备号
     for (int j = 0; j < nr; j++) {
         cdev_del(&pdev[j].cdev);
