@@ -24,70 +24,43 @@ cp_rootfs() {
     done
 }
 
+# Thanks to https://gist.github.com/m13253/e4c3e3a56a23623d2e7e6796678b9e58
+do_init() {
+    echo '#!/bin/busybox sh
+# 1. prepare dir
+busybox mkdir -p /etc/init.d /proc /root /sbin /sys /usr/bin /usr/sbin /dev
+busybox mount -t proc proc /proc
+busybox mount -t sysfs sys /sys
 
-inittab() {
-    echo '
-::sysinit:/etc/init.d/rcS
-::askfirst:-/bin/sh
-::restart:/sbin/init
-::ctrlaltdel:/sbin/reboot
-::shutdown:/bin/umount -a -r
-::shutdown:/sbin/swapoff -a
-' >  etc/inittab
-}
+# 2. inittab(will used by linuxrc)
+echo ::sysinit:/etc/init.d/rcS > /etc/inittab
+# this is key !!!!
+echo ::askfirst:-/bin/sh >> /etc/inittab
+echo tty1::respawn:/sbin/getty 0 tty1 >> /etc/inittab
 
-rcS() {
-    echo '#!/bin/sh
-export PATH=/sbin:/bin:/usr/bin:/usr/sbin;
-echo "minisystem start..."
-mount -t sysfs sysfs /sys
-mount -t proc procfs /proc
-mount -t debugfs debugfsfs /debug
-mount -t configfs configfs /config
-mount -o rw,remount /' > etc/init.d/rcS
-}
+# 3. rcS(sysinit stage will call this)
+echo #!/bin/sh > etc/init.d/rcS
+echo export PATH=/sbin:/bin:/usr/bin:/usr/sbin >> etc/init.d/rcS
+busybox chmod a+x etc/init.d/rcS
 
-root_require() {
-    (
-        runcmd rm dev/console || echo "ignore error"
-        runcmd mknod -m 600 dev/console c 5 1
-
-        runcmd rm dev/tty1 || echo "ignore error"
-        runcmd mknod -m 666 dev/tty1 c 4 1
-
-        runcmd rm dev/tty2 || echo "ignore error"
-        runcmd mknod -m 666 dev/tty2 c 4 2
-
-        runcmd rm dev/tty3 || echo "ignore error"
-        runcmd mknod -m 666 dev/tty3 c 4 3
-
-        runcmd rm dev/tty4 || echo "ignore error"
-        runcmd mknod -m 666 dev/tty4 c 4 4
-    )
+# 4. others
+    # echo Login with root and no password. > /etc/issue
+    # echo >> /etc/issue
+    # echo root::0:0:root:/root:/bin/sh > /etc/passwd
+busybox mdev -s
+    # we already do it in host by make install
+    # busybox --install
+hostname localhost
+ip link set lo up
+exec /linuxrc' > init
+runcmd chmod a+x init
 }
 
 prepare() {
     (
         runcmd cd "$ROOTFS_OUT"
-        # runcmd rm linuxrc || echo "ignore error"
-        runcmd ln -s bin/busybox init || echo "ignore error"
-        runcmd mkdir -p dev
-        runcmd mkdir -p proc
-        runcmd mkdir -p sys
-        runcmd mkdir -p config
-        runcmd mkdir -p debug
 
-        runcmd mkdir -p etc
-        runcmd touch etc/inittab
-        inittab
-
-        runcmd mkdir -p etc/init.d/
-        runcmd touch etc/init.d/rcS
-        runcmd chmod +x etc/init.d/rcS
-        rcS
-
-        root_require
-
+        do_init
         echo "Now packing cpio..."
         find . | cpio -o -H newc | gzip > ../$ROOTFS_IMG_NAME.cpio.gz
     )
