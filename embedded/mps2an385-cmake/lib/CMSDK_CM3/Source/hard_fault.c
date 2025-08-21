@@ -77,10 +77,14 @@ void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
     // Optional: Print related system registers for detailed debug
     printf("\n[Hard Fault - System Registers(SCB)]\n");
 
-    // Bus Fault Address Register (BFAR)
-    // Holds the data bus fault address if BFARVALID in CFSR is set.
-    printf("BFAR = 0x%08lX  // Bus Fault Address Register\n",
-            SCB->BFAR);
+    // HardFault Status Register (HFSR)
+    // Indicates source of a hard fault.
+    // Bit 30 (FORCED): Set if fault escalated from a configurable fault.
+    //                  if 0x40000000, mean you need find why in CFSR
+    // See:
+    //  https://developer.arm.com/documentation/dui0552/a/cortex-m3-peripherals/system-control-block/hardfault-status-register
+    printf("HFSR = 0x%08lX  // HardFault Status Register\n",
+            SCB->HFSR);
 
     // Configurable Fault Status Register (CFSR)
     // Combines UsageFault, BusFault, and MemManage status bits.
@@ -91,11 +95,10 @@ void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
     printf("CFSR = 0x%08lX  // Configurable Fault Status Register\n",
             SCB->CFSR);
 
-    // HardFault Status Register (HFSR)
-    // Indicates source of a hard fault.
-    // Bit 30 (FORCED): Set if fault escalated from a configurable fault.
-    printf("HFSR = 0x%08lX  // HardFault Status Register\n",
-            SCB->HFSR);
+    // Bus Fault Address Register (BFAR)
+    // Holds the data bus fault address if BFARVALID in CFSR is set.
+    printf("BFAR = 0x%08lX  // Bus Fault Address Register\n",
+            SCB->BFAR);
 
     // Debug Fault Status Register (DFSR)
     // Shows if a debug event caused the exception.
@@ -107,11 +110,6 @@ void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
     // Vendor-specific additional fault information.
     printf("AFSR = 0x%08lX  // Auxiliary Fault Status Register\n",
             SCB->AFSR);
-
-    // System Handler Control and State Register (SHCSR)
-    // Contains enable/disable/status bits for system exceptions.
-    printf("SHCSR = 0x%08lX  // System Handler Control and State Register\n",
-            SCB->SHCSR);
 
     /* When the following line is hit, the variables contain the register values. */
     for( ;; );
