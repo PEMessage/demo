@@ -137,10 +137,12 @@ static int __init mc_do_init(void) {
 
 
     // 4. sysfs[optional]: class_create, device_create
+    // using `mdev -s` to refresh and auto gen device node
     // --------------------------------------
-    pr_info("create sysfs1...");
     if (config_sysfs) {
-        pr_info("create sysfs...");
+        // NOTE !!! if missing a newline character
+        // it gets buffered and may not appear immediately in the kernel log
+        pr_info("create sysfs...\n");
         cls = class_create(THIS_MODULE, DEFAULT_NAME);
         for (i=0; i < nr; i++) {
             device_create(cls, NULL, MKDEV(major, minor + i), NULL, DEFAULT_NAME "%d", i);
