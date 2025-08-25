@@ -329,7 +329,7 @@ char16_t* Char8ToChar16(const char* str8, size_t str8Len)
     char16_t* str16 = nullptr;
     int utf16Len = Utf8ToUtf16Length(str8, str8Len);
     if (utf16Len < 0 || utf16Len >= INT_MAX) {
-        UTILS_LOGE("Get str16 length failed,length is: %{public}d", utf16Len);
+        UTILS_LOGE("Get str16 length failed,length is: %d", utf16Len);
         return nullptr;
     }
 
