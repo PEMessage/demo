@@ -6,7 +6,7 @@ add_library(hilog STATIC
     frameworks/libhilog/hilog_printf.cpp
     frameworks/libhilog/vsnprintf/vsprintf_p.c
     frameworks/libhilog/vsnprintf/vsnprintf_s_p.c
-    frameworks/libhilog/param/properties.cpp
+    # frameworks/libhilog/param/properties.cpp
     frameworks/libhilog/utils/log_print.cpp
     frameworks/libhilog/utils/log_utils.cpp
 )
@@ -19,8 +19,12 @@ target_include_directories(hilog PUBLIC
     interfaces/native/innerkits/include
     frameworks/libhilog/utils/include
     frameworks/libhilog/vsnprintf/include
-    frameworks/libhilog/param/include
+    # frameworks/libhilog/param/include
 )
 
+# It will include "log_print.h", in hilog_printf.cpp for LogPrintWithFormat
+# log_print.h default out is std::cout
+# PrintLog will used it for none-ohos platform,
 target_compile_definitions(hilog PRIVATE __LINUX__)
-auto_target_link_libraries(hilog PUBLIC libsec syspara)
+# auto_target_link_libraries(hilog PUBLIC libsec syspara)
+auto_target_link_libraries(hilog PUBLIC libsec)
