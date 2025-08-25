@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 project(hilog LANGUAGES CXX C)
 add_library(hilog STATIC
-    frameworks/libhilog/base/hilog_base.c
+    # frameworks/libhilog/base/hilog_base.c
     frameworks/libhilog/hilog.cpp
     frameworks/libhilog/hilog_printf.cpp
     frameworks/libhilog/vsnprintf/vsprintf_p.c
