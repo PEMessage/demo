@@ -61,7 +61,7 @@
 #endif
 
 /* TODO TraceRecorder (Step 4): Enable configUSE_TRACE_FACILITY in FreeRTOSConfig.h. */
-#define configUSE_TRACE_FACILITY                 0
+#define configUSE_TRACE_FACILITY                 1
 
 #define configUSE_16_BIT_TICKS                   0
 #define configIDLE_SHOULD_YIELD                  0
@@ -73,7 +73,10 @@
 #define configUSE_QUEUE_SETS                     1
 #define configUSE_COUNTING_SEMAPHORES            1
 
-#define configMAX_PRIORITIES                     ( 6UL )
+// Low priority numbers denote low priority tasks
+// https://www.freertos.org/Documentation/02-Kernel/02-Kernel-features/01-Tasks-and-co-routines/03-Task-priorities
+// max 32 for configUSE_PORT_OPTIMISED_TASK_SELECTION
+#define configMAX_PRIORITIES                     ( 32UL )
 #define configMAX_CO_ROUTINE_PRIORITIES          ( 2 )
 #define configQUEUE_REGISTRY_SIZE                10
 #define configSUPPORT_STATIC_ALLOCATION          0
