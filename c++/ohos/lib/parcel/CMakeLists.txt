@@ -5,4 +5,4 @@ add_library(parcel STATIC
 )
 
 target_include_directories(parcel PUBLIC .)
-auto_target_link_libraries(parcel PUBLIC misc refbase libsec)
+auto_target_link_libraries(parcel PUBLIC misc refbase libsec nocopyable)
