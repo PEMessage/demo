@@ -6,7 +6,7 @@ target_include_directories(freertos_config SYSTEM
     TraceRecorderConfig
 )
 
-target_link_libraries(freertos_config INTERFACE CMSDK_CM3)
+target_link_libraries(freertos_config INTERFACE CMSDK_CM3 TraceRecorder)
 
 target_compile_definitions(freertos_config
   INTERFACE

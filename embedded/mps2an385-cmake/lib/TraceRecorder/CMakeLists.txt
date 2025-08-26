@@ -1,5 +1,6 @@
 include(FetchContent)
 
+# See: https://www.freertos.org/Documentation/03-Libraries/02-FreeRTOS-plus/05-FreeRTOS_plus_Trace/01-Percepio_View
 # Fetch content using git clone
 set(TRACERECORDER_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/code")
 
@@ -61,4 +62,17 @@ target_include_directories(TraceRecorder PUBLIC
     ${TRACERECORDER_SOURCE_DIR}/include
 )
 
-target_link_libraries(TraceRecorder PUBLIC freertos_kernel freertos_config CMSIS)
+# Do not link to freertos_kernel
+# it will be circle loop:
+#     CMake Error: The inter-target dependency graph contains the following strongly connected component (cycle):
+#       "freertos_kernel" of type STATIC_LIBRARY
+#         depends on "TraceRecorder" (weak)
+#         depends on "freertos_kernel_port" (weak)
+#       "freertos_kernel_port" of type OBJECT_LIBRARY
+#         depends on "TraceRecorder" (weak)
+#         depends on "freertos_kernel" (weak)
+#       "TraceRecorder" of type STATIC_LIBRARY
+#         depends on "freertos_kernel" (weak)
+#         depends on "freertos_kernel_port" (weak)
+# target_link_libraries(TraceRecorder PUBLIC freertos_kernel)
+target_link_libraries(TraceRecorder PUBLIC freertos_kernel_include freertos_kernel_port_headers)
