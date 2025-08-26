@@ -29,8 +29,8 @@
 namespace OHOS {
 
 /* dfx interface,type is 0 for string */
-extern "C" uintptr_t DFX_SetCrashObj(uint8_t type, uintptr_t addr);
-extern "C" void DFX_ResetCrashObj(uintptr_t crashObj);
+// extern "C" uintptr_t DFX_SetCrashObj(uint8_t type, uintptr_t addr); PEM Modify
+// extern "C" void DFX_ResetCrashObj(uintptr_t crashObj);  PEM Modify
 
 struct CrashObjDumper {
 public:
@@ -39,11 +39,11 @@ public:
         if (str == nullptr) {
             return;
         }
-        ptr_ = DFX_SetCrashObj(0, reinterpret_cast<uintptr_t>(str));
+        // ptr_ = DFX_SetCrashObj(0, reinterpret_cast<uintptr_t>(str)); // PEM Modify
     }
     ~CrashObjDumper()
     {
-        DFX_ResetCrashObj(ptr_);
+        // DFX_ResetCrashObj(ptr_); PEM Modify
     }
 private:
     uintptr_t ptr_ = 0;

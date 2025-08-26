@@ -42,14 +42,14 @@ using namespace IPC_SINGLE;
 
 static std::string GetSid()
 {
-    char *con = nullptr;
-    int ret = getcon(&con);
-    if (ret < 0) {
+    // char *con = nullptr; PEM Modify
+    // int ret = getcon(&con); PEM Modify
+    // if (ret < 0) { PEM Modify
         return "";
-    }
-    std::string context = con;
-    freecon(con);
-    return context;
+    // }
+    // std::string context = con;
+    // freecon(con);
+    // return context;
 }
 
 void IPCSkeleton::JoinWorkThread()

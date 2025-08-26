@@ -21,7 +21,7 @@
 #include <sys/syscall.h>
 
 #include "binder_invoker.h"
-#include "ffrt.h"
+// #include "ffrt.h"
 #include "hilog/log_c.h"
 #include "hilog/log_cpp.h"
 #include "invoker_factory.h"
@@ -94,12 +94,13 @@ void IPCThreadSkeleton::GetVaildInstance(IPCThreadSkeleton *&instance)
     // 1. a FFRT task may be executed on multiple threads in different time periods.
     // 2. a thread can executed multiple FFRT tasks in different time periods.
     auto tid = gettid();
-    auto taskId = ffrt_this_task_get_id();
-    if (tid != instance->tid_ && taskId != instance->ffrtTaskId_) {
-        ZLOGE(LOG_LABEL, "TLS mismatch, curTid:%{public}d tlsTid:%{public}d, curTaskId:%{public}" PRIu64
-            " tlsTaskId:%{public}" PRIu64 ", key:%{public}u instance:%{public}u threadName:%{public}s",
-            tid, instance->tid_, taskId, instance->ffrtTaskId_, TLSKey_, ProcessSkeleton::ConvertAddr(instance),
-            instance->threadName_.c_str());
+    // auto taskId = ffrt_this_task_get_id(); // PEM Modify
+    if (tid != instance->tid_ /* && taskId != instance->ffrtTaskId_ */) {
+        // PEM Modify
+        // ZLOGE(LOG_LABEL, "TLS mismatch, curTid:%{public}d tlsTid:%{public}d, curTaskId:%{public}" PRIu64
+            // " tlsTaskId:%{public}" PRIu64 ", key:%{public}u instance:%{public}u threadName:%{public}s",
+            // tid, instance->tid_, taskId, instance->ffrtTaskId_, TLSKey_, ProcessSkeleton::ConvertAddr(instance),
+            // instance->threadName_.c_str());
         pthread_setspecific(TLSKey_, nullptr);
         instance = new (std::nothrow) IPCThreadSkeleton();
     }
@@ -135,7 +136,7 @@ IPCThreadSkeleton *IPCThreadSkeleton::GetCurrent()
     return current;
 }
 
-IPCThreadSkeleton::IPCThreadSkeleton() : tid_(gettid()), ffrtTaskId_(ffrt_this_task_get_id())
+IPCThreadSkeleton::IPCThreadSkeleton() : tid_(gettid()) /*, ffrtTaskId_(ffrt_this_task_get_id()) */ // PEM Modify
 {
     pthread_setspecific(TLSKey_, this);
     char name[MAX_THREAD_NAME_LEN] = { 0 };
