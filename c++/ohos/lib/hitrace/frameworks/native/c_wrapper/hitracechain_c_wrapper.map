@@ -1,0 +1,22 @@
+{
+  global:
+    extern "C" {
+        "HiTraceChainTracepointExWrapper";
+        "HiTraceChainTracepointExWithDomainWrapper";
+        "HiTraceChainIsFlagEnabledWrapper";
+        "HiTraceChainEnableFlagWrapper";
+        "HiTraceChainIsValidWrapper";
+        "HiTraceChainSetFlagsWrapper";
+        "HiTraceChainGetFlagsWrapper";
+        "HiTraceChainSetChainIdWrapper";
+        "HiTraceChainGetChainIdWrapper";
+        "HiTraceChainSetSpanIdWrapper";
+        "HiTraceChainGetSpanIdWrapper";
+        "HiTraceChainSetParentSpanIdWrapper";
+        "HiTraceChainGetParentSpanIdWrapper";
+        "HiTraceChainIdToBytesWrapper";
+        "HiTraceChainBytesToIdWrapper";
+    };
+  local:
+    *;
+};
