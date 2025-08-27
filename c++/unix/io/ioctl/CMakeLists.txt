@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 add_subdirectory(visit_struct)
+add_compile_options(-O0 -ggdb -g3)
 
 add_executable(ioctl ioctl.cpp)
 target_link_libraries(ioctl PUBLIC visit_struct)
