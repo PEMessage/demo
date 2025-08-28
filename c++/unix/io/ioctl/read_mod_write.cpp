@@ -1,3 +1,5 @@
+#include <iomanip>
+#include <stdexcept>
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -16,6 +18,8 @@
 
 using namespace std;
 
+const string INDENT = "  ";
+
 template<typename K, typename V>
 std::ostream& operator<<(std::ostream& os, const std::map<K, V>& map) {
     os << "{";
@@ -32,15 +36,44 @@ template<typename T,
 std::ostream& operator<<(std::ostream& os, const T& t)
 {
     int i = 0;
-    os << "{";
+    os << "{\n";
     visit_struct::for_each(t, [&](const char* name, const auto& value) {
-        if (i != 0) {os << ", ";}
-        os << name << ":" << value;
-        i++;
+        using MemberType = std::remove_cv_t<std::remove_reference_t<decltype(value)>>;
+        using ElementType = std::remove_extent_t<MemberType>;
+        if constexpr (is_array_v<MemberType>) {
+            constexpr size_t array_size = std::extent_v<MemberType>;
+            // print in hex format of buffer
+            // Print array in hex format
+            if (i != 0) { os << ", \n"; }
+            os << INDENT;
+            os << name << ": [";
+
+            // Save original stream flags
+            std::ios_base::fmtflags original_flags = os.flags();
+            os << std::hex << std::uppercase << std::setfill('0');
+
+            // Print each element in hex
+            for (size_t j = 0; j < array_size; ++j) {
+                if (j != 0) { os << " "; }
+                os << std::setw(sizeof(ElementType) * 2) << static_cast<uint64_t>(value[j]);
+            }
+
+            // Restore stream flags
+            os.flags(original_flags);
+            os << "]";
+            i++;
+            
+        } else {
+            if (i != 0) {os << ", \n";}
+            os << INDENT;
+            os << name << ": " << value;
+            i++;
+        }
     });
-    os << "}";
+    os << "\n}";
     return os;
 }
+
 
 using KVMaps = map<std::string, std::string>;
 struct Options {
@@ -117,12 +150,18 @@ void modify_field(T& struct_instance, const KVMaps& kv_pairs) {
         std::string field_name(name);
         auto it = kv_pairs.find(field_name);
         if (it != kv_pairs.end()) {
-            using MemberType = std::decay_t<decltype(member)>;
-            member = string_to_value<MemberType>(it->second);
+            // NOTE: if directly `using MemberType = decltype(member)`
+            // std::is_array_v<MemberType> will be false
+            using MemberType = std::remove_cv_t<std::remove_reference_t<decltype(member)>>;
+            if constexpr (std::is_array_v<MemberType>) {
+                throw runtime_error("TODO: Modify array not implment yet: " + field_name);
+            } else {
+                cout << "Setting " << field_name << ": " << it->second  << endl;
+                member = string_to_value<MemberType>(it->second);
+            }
         }
     });
 }
-
 
 vector<char> readfile(const string& file_path) {
     ifstream file {file_path, std::ios::binary | std::ios::ate};
@@ -160,6 +199,7 @@ int main(int argc, char* argv[]) {
         auto [op, kv] = parse_key_value_args(argc, argv);
         cout << "Option: " << op << endl;
         cout << "KVMaps: " << kv << endl;
+        cout << "-----------------------" << endl;
 
         vector<char> content = readfile(op.input);
         if (op.offset + sizeof(FILE_FORMAT) > content.size()) { 
@@ -173,10 +213,12 @@ int main(int argc, char* argv[]) {
         cout << "Format: " << object << endl;
 
         if (!kv.empty()) {
+            cout << "-----------------------" << endl;
             modify_field(object, kv);
             cout << "Format After Modify: " << object << endl;
         }
         if(!op.output.empty()) {
+            cout << "-----------------------" << endl;
             writefile(op.output, content);
             cout << "Write to file: " << op.output << endl;
         }
