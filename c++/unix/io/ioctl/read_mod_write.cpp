@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
+#include <type_traits>
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <iostream>
@@ -47,8 +48,9 @@ struct Options {
     string input;
     string output;
     int offset;
+    bool test;
 };
-VISITABLE_STRUCT(Options, input, output, offset);
+VISITABLE_STRUCT(Options, input, output, offset, test);
 
 
 template<typename T>
@@ -69,22 +71,42 @@ pair<Options, KVMaps> parse_key_value_args(int argc, char* argv[]) {
         string arg = argv[i];
         if (arg.empty()) {continue;}
 
-        size_t pos = arg.find('=');
-        if (pos != string::npos) {
-            string key = arg.substr(0, pos);
-            string value = arg.substr(pos + 1);
-            kv[key] = value;
-        } else if (arg.find('@') == 0 ) {
+        // Split arg by = and @
+        size_t equal_pos = arg.find('=');
+        size_t at_pos = arg.find('@');
+        bool is_option = false;
+
+        string key {};
+        string value {};
+
+        if (equal_pos != string::npos) {
+            key = arg.substr(0, equal_pos);
+            value = arg.substr(equal_pos + 1);
+        } else {
+            key = arg;
+        }
+
+        if (at_pos == 0  ) {
+            key = key.substr(at_pos + 1);
+            is_option = true;
+        }
+
+        if (is_option) {
             visit_struct::for_each(op, [&](const char* name, auto& member) {
                 string field_name(name);
                 using field_type = std::decay_t<decltype(member)>;
-
-                if ( "@" + field_name == arg ) {
-                    member = string_to_value<field_type>(arg);
+                if (field_name == key) {
+                    if constexpr (std::is_same_v<field_type, bool>) {
+                        member = true;
+                    } else {
+                        member = string_to_value<field_type>(value);
+                    }
                 }
             });
+        } else if (!key.empty() && !value.empty()) {
+            kv[key] = value;
         } else {
-            (void)0; // empty pass
+           (void) 0; // pass
         }
     }
     return ret;
@@ -92,7 +114,7 @@ pair<Options, KVMaps> parse_key_value_args(int argc, char* argv[]) {
 
 int main(int argc, char* argv[]) {
     auto [op, kv] = parse_key_value_args(argc, argv);
-    cout << kv;
-    cout << op;
+    cout << "Option: " << op << endl;
+    cout << "KVMaps: " << kv << endl;
 
 }
