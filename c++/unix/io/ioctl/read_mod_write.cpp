@@ -1,4 +1,3 @@
-#include <memory>
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -7,11 +6,11 @@
 #include <sys/ioctl.h>
 #include <iostream>
 #include <sstream>
+#include <fstream>
 #include <string>
 #include <map>
 #include <cstring>
 #include <vector>
-#include <memory>
 #include "visit_struct/visit_struct.hpp"
 
 
@@ -112,9 +111,80 @@ pair<Options, KVMaps> parse_key_value_args(int argc, char* argv[]) {
     return ret;
 }
 
+template<typename T>
+void modify_field(T& struct_instance, const KVMaps& kv_pairs) {
+    visit_struct::for_each(struct_instance, [&](const char* name, auto& member) {
+        std::string field_name(name);
+        auto it = kv_pairs.find(field_name);
+        if (it != kv_pairs.end()) {
+            using MemberType = std::decay_t<decltype(member)>;
+            member = string_to_value<MemberType>(it->second);
+        }
+    });
+}
+
+
+vector<char> readfile(const string& file_path) {
+    ifstream file {file_path, std::ios::binary | std::ios::ate};
+    if (!file.is_open()) {
+        throw std::runtime_error("Failed to open file for readling: " + file_path);
+    }
+    const auto file_size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    std::vector<char> buffer(file_size);
+    if (!file.read(buffer.data(), file_size)) {
+        throw runtime_error("Failed to read file: " + file_path);
+    }
+
+    return buffer;
+}
+
+void writefile(const string& file_path, const vector<char>& content) {
+    std::ofstream file(file_path, std::ios::binary);
+    if (!file.is_open()) {
+        throw runtime_error("Failed to open file for writing: " + file_path);
+    }
+
+    if (!file.write(content.data(), content.size())) {
+        throw runtime_error("Failed to write to file: " + file_path);
+    }
+}
+
+
+VISITABLE_STRUCT(winsize, ws_row, ws_col, ws_xpixel, ws_ypixel);
+using FILE_FORMAT = winsize;
+
 int main(int argc, char* argv[]) {
-    auto [op, kv] = parse_key_value_args(argc, argv);
-    cout << "Option: " << op << endl;
-    cout << "KVMaps: " << kv << endl;
+    try {
+        auto [op, kv] = parse_key_value_args(argc, argv);
+        cout << "Option: " << op << endl;
+        cout << "KVMaps: " << kv << endl;
+
+        vector<char> content = readfile(op.input);
+        if (op.offset + sizeof(FILE_FORMAT) > content.size()) { 
+            throw runtime_error(string("Not enough bytes to process ") +
+                    ". Offset: " + to_string(op.offset) +
+                    ", Required: " + to_string(sizeof(FILE_FORMAT)) +
+                    ", Available: " + to_string(content.size()));
+        }
+
+        FILE_FORMAT &object = *reinterpret_cast<FILE_FORMAT *>(content.data() + op.offset);
+        cout << "Format: " << object << endl;
+
+        if (!kv.empty()) {
+            modify_field(object, kv);
+            cout << "Format After Modify: " << object << endl;
+        }
+        if(!op.output.empty()) {
+            writefile(op.output, content);
+            cout << "Write to file: " << op.output << endl;
+        }
+
+    } catch (const std::exception& e) {
+        cerr << "Error: " << e.what() << endl;
+        // throw;
+        return 1;
+    }
 
 }
