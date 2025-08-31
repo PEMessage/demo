@@ -74,15 +74,25 @@ std::ostream& operator<<(std::ostream& os, const T& t)
     return os;
 }
 
+class LogStream {
+private:
+    bool verbose;
+public:
+    LogStream(bool verbose = false) : verbose(verbose) {}
+    template<typename T>
+    LogStream& operator<<(const T& value) { if (verbose) { cout << value; } return *this; }
+    LogStream& operator<<(std::ostream& (*manip)(std::ostream&)) { if (verbose) { manip(cout); } return *this; }
+};
+
 
 using KVMaps = map<std::string, std::string>;
 struct Options {
     string input;
     string output;
     int offset;
-    bool test;
+    bool verbose = true;
 };
-VISITABLE_STRUCT(Options, input, output, offset, test);
+VISITABLE_STRUCT(Options, input, output, offset, verbose);
 
 
 template<typename T>
@@ -129,7 +139,11 @@ pair<Options, KVMaps> parse_key_value_args(int argc, char* argv[]) {
                 using field_type = std::decay_t<decltype(member)>;
                 if (field_name == key) {
                     if constexpr (std::is_same_v<field_type, bool>) {
-                        member = true;
+                        if (equal_pos == string::npos) {
+                            member = true;
+                        } else {
+                            member = string_to_value<field_type>(value);
+                        }
                     } else {
                         member = string_to_value<field_type>(value);
                     }
@@ -156,7 +170,7 @@ void modify_field(T& struct_instance, const KVMaps& kv_pairs) {
             if constexpr (std::is_array_v<MemberType>) {
                 throw runtime_error("TODO: Modify array not implment yet: " + field_name);
             } else {
-                cout << "Setting " << field_name << ": " << it->second  << endl;
+                // cout << "Setting " << field_name << ": " << it->second  << endl;
                 member = string_to_value<MemberType>(it->second);
             }
         }
@@ -197,9 +211,10 @@ using FILE_FORMAT = winsize;
 int main(int argc, char* argv[]) {
     try {
         auto [op, kv] = parse_key_value_args(argc, argv);
-        cout << "Option: " << op << endl;
-        cout << "KVMaps: " << kv << endl;
-        cout << "-----------------------" << endl;
+        LogStream logger {op.verbose};
+        logger << "Option: " << op << endl;
+        logger << "KVMaps: " << kv << endl;
+        logger << "-----------------------" << endl;
 
         vector<char> content = readfile(op.input);
         if (op.offset + sizeof(FILE_FORMAT) > content.size()) { 
@@ -210,17 +225,17 @@ int main(int argc, char* argv[]) {
         }
 
         FILE_FORMAT &object = *reinterpret_cast<FILE_FORMAT *>(content.data() + op.offset);
-        cout << "Format: " << object << endl;
+        logger << "Format: " << object << endl;
 
         if (!kv.empty()) {
-            cout << "-----------------------" << endl;
+            logger << "-----------------------" << endl;
             modify_field(object, kv);
-            cout << "Format After Modify: " << object << endl;
+            logger << "Format After Modify: " << object << endl;
         }
         if(!op.output.empty()) {
-            cout << "-----------------------" << endl;
+            logger << "-----------------------" << endl;
             writefile(op.output, content);
-            cout << "Write to file: " << op.output << endl;
+            logger << "Write to file: " << op.output << endl;
         }
 
     } catch (const std::exception& e) {
