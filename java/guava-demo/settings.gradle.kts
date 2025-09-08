@@ -14,6 +14,7 @@ rootProject.name = "guava-demo"
 
 val projects = listOf(
     "BytesDemo" to "app/BytesDemo",
+    "Tree" to "app/Tree",
 )
 
 // See: https://docs.gradle.org/8.14.2/userguide/multi_project_builds.html#multi_project_layout
