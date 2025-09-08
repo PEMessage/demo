@@ -8,6 +8,4 @@ public class Leaf extends Item {
     public String toString() {
         return super.toString() + " [*]";
     }
-
-
 }

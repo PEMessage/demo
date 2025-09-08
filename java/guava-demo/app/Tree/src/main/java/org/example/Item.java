@@ -1,24 +1,20 @@
 package org.example;
-import com.google.common.collect.TreeTraverser;
+
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterators;
-import com.google.common.collect.Maps;
+import com.google.common.graph.Traverser;
 
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
+import java.util.HashMap;
 import java.util.stream.Collectors;
-
-import com.google.common.graph.Traverser;
-import java.util.Iterator;
 
 class Item {
     public String name;
     public Item parent = null;
-    public Map<String, Item> children = Maps.newHashMap();
+    public Map<String, Item> children = new HashMap<String, Item>();
 
     // Optional field
     public int depth = 0;
@@ -81,37 +77,29 @@ class Item {
 
     public String toStringAll(int indent) {
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < indent; i++) {
-            sb.append(" ");
-        }
-        sb.append(toString()); 
-        sb.append("\n"); 
 
-        sb.append(toStringChildren(indent + 2));
+        // Use Traverser for breadth-first traversal
+        Traverser.<Item>forTree(item -> item.children.values())
+            .breadthFirst(this)
+            .forEach(item -> {
+                // Calculate indentation based on depth
+                int depth = item.depth - this.depth;
+                int currentIndent = indent + (depth * 2);
+
+                // Add indentation
+                for (int i = 0; i < currentIndent; i++) {
+                    sb.append(" ");
+                }
+
+                // Add item representation
+                sb.append(item.toString());
+                sb.append("\n");
+            });
+
         return sb.toString();
     }
 
     public String toString() {
         return "Item{name='" + name + "'}: " + String.join(".", getPathString()) + ": " + this.depth;
     }
-
-    protected final String toStringChildren(int indent) {
-        if (children.isEmpty()) {
-            return "";
-        }
-
-        StringBuilder sb = new StringBuilder();
-
-        boolean first = true;
-        for (Item child : children.values()) {
-
-            // Convert child to string and indent each line for proper tree formatting
-            String childStr = child.toStringAll(indent);
-            sb.append(childStr);
-            first = false;
-        }
-
-        return sb.toString();
-    }
-    
 }
