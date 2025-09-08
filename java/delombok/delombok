@@ -1,0 +1,23 @@
+#!/bin/bash
+
+# Delombok download and execution script
+set -e
+
+# Configuration
+DELOMBOK_VERSION="1.18.30"
+DELOMBOK_JAR="lombok-${DELOMBOK_VERSION}.jar"
+DELOMBOK_URL="https://projectlombok.org/downloads/${DELOMBOK_JAR}"
+TEMP_DIR="/tmp/delombok"
+JAVA_CMD="java"
+
+# Create temp directory
+mkdir -p "$TEMP_DIR"
+cd "$TEMP_DIR"
+
+# Download Delombok if not already present
+if [ ! -f "$DELOMBOK_JAR" ]; then
+    echo "Downloading Delombok version ${DELOMBOK_VERSION}..."
+    curl -L -o "$DELOMBOK_JAR" "$DELOMBOK_URL"
+fi
+
+"$JAVA_CMD" -jar "$DELOMBOK_JAR" delombok "$@"
