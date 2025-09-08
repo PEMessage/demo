@@ -6,7 +6,7 @@ public class Leaf extends Item {
         super(name);
     }
     public String toString() {
-        return "Leaf{name='" + name + "'}: " + String.join(".", getPathString());
+        return super.toString() + " [*]";
     }
 
 

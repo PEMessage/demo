@@ -17,8 +17,11 @@ import java.util.Iterator;
 
 class Item {
     public String name;
-    public Item parent;
+    public Item parent = null;
     public Map<String, Item> children = Maps.newHashMap();
+
+    // Optional field
+    public int depth = 0;
     
     public Item(String name) {
         this.name = name;
@@ -28,6 +31,12 @@ class Item {
         Preconditions.checkArgument(!children.containsKey(child.name), 
             "Item with name '%s' already exists", child.name);
         child.parent = this;
+
+        Traverser.<Item>forTree(item -> item.children.values())
+            .breadthFirst(child)
+            .forEach(item -> {
+                item.depth += this.depth + 1;
+            });
         children.put(child.name, child);
     }
 
@@ -83,7 +92,7 @@ class Item {
     }
 
     public String toString() {
-        return "Item{name='" + name + "'}: " + String.join(".", getPathString());
+        return "Item{name='" + name + "'}: " + String.join(".", getPathString()) + ": " + this.depth;
     }
 
     protected final String toStringChildren(int indent) {
