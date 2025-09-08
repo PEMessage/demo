@@ -1,5 +1,4 @@
 package org.example;
-import com.google.common.collect.TreeTraverser;
 
 public class App {
     public String getGreeting() {
@@ -18,8 +17,11 @@ public class App {
         root.addChild(downloads);
         root.addChild(pictures);
 
-        Leaf p1 = new Leaf("p1");
-        pictures.addChild(p1);
+        Leaf l1 = new Leaf("Leaf1");
+        pictures.addChild(l1);
+
+        Leaf l2 = new Leaf("Leaf2");
+        downloads.addChild(l2, "2025-09-09/news".split("/"));
 
         System.out.println(root.toStringAll());
     }

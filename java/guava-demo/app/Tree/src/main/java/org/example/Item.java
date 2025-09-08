@@ -31,10 +31,18 @@ class Item {
         children.put(child.name, child);
     }
 
-    // public void addChild(Item child, String<String> path) {
-    //     Item current = this;
-    //     for path 
-    // }
+    public void addChild(Item child, String[] rpath) {
+        Item current = this;
+
+        for (String segment : rpath) {
+            if (!current.children.containsKey(segment)) {
+                Item newItem = new Item(segment);
+                current.addChild(newItem);
+            }
+            current = current.children.get(segment);
+        }
+        current.addChild(child);
+    }
     
     public Iterator<Item> parentChainIterator() {
         return Traverser.<Item>forTree(item -> {
