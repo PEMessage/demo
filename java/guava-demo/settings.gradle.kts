@@ -11,4 +11,13 @@ plugins {
 }
 
 rootProject.name = "guava-demo"
-include("app")
+
+val projects = listOf(
+    "BytesDemo" to "app/BytesDemo",
+)
+
+// See: https://docs.gradle.org/8.14.2/userguide/multi_project_builds.html#multi_project_layout
+projects.forEach { (name, path) ->
+    include(":$name")
+    project(":$name").projectDir = File(path)
+}
