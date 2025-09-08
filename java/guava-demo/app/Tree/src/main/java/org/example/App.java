@@ -18,20 +18,10 @@ public class App {
         root.addChild(downloads);
         root.addChild(pictures);
 
+        Leaf p1 = new Leaf("p1");
+        pictures.addChild(p1);
 
-        TreeTraverser<Item> traverser = new TreeTraverser<Item>() {
-            @Override
-            public Iterable<Item> children(Item node) {
-                return node.children.values();
-            }
-        };
-
-        System.out.println("=== Pre-order Traversal ===");
-        traverser.preOrderTraversal(root).forEach(node -> 
-            System.out.println(node.name)
-        );
-
-
+        System.out.println(root.toStringAll());
     }
 }
 

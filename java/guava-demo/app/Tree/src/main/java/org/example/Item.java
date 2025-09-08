@@ -10,6 +10,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.stream.Collectors;
 
 import com.google.common.graph.Traverser;
 import java.util.Iterator;
@@ -29,6 +30,11 @@ class Item {
         child.parent = this;
         children.put(child.name, child);
     }
+
+    // public void addChild(Item child, String<String> path) {
+    //     Item current = this;
+    //     for path 
+    // }
     
     public Iterator<Item> parentChainIterator() {
         return Traverser.<Item>forTree(item -> {
@@ -39,14 +45,56 @@ class Item {
         }).breadthFirst(this).iterator();
     }
     
-    /**
-     * Alternative: Get path using parent chain traverser
-     */
-    public List<Item> getPathUsingTraverser() {
+    public List<Item> getPath() {
         List<Item> path = new ArrayList<>();
-        parentChainIterator().forEachRemaining(path::add);
+        parentChainIterator().forEachRemaining(v -> path.add(0,v));
         return path;
     }
 
+    public List<String> getPathString() {
+        return getPath().stream()
+                   .map(x -> x.name)
+                   .collect(Collectors.toList());
+
+    }
+
+    public String toStringAll() {
+        return toStringAll(0);
+    }
+
+    public String toStringAll(int indent) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < indent; i++) {
+            sb.append(" ");
+        }
+        sb.append(toString()); 
+        sb.append("\n"); 
+
+        sb.append(toStringChildren(indent + 2));
+        return sb.toString();
+    }
+
+    public String toString() {
+        return "Item{name='" + name + "'}: " + String.join(".", getPathString());
+    }
+
+    protected final String toStringChildren(int indent) {
+        if (children.isEmpty()) {
+            return "";
+        }
+
+        StringBuilder sb = new StringBuilder();
+
+        boolean first = true;
+        for (Item child : children.values()) {
+
+            // Convert child to string and indent each line for proper tree formatting
+            String childStr = child.toStringAll(indent);
+            sb.append(childStr);
+            first = false;
+        }
+
+        return sb.toString();
+    }
     
 }
