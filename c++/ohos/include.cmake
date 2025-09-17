@@ -4,6 +4,9 @@ set(CMAKE_BUILD_TYPE Debug CACHE INTERNAL "" FORCE)
 set(CMAKE_C_FLAGS_DEBUG "-g3 -ggdb -O0" CACHE STRING "C Compiler Flags" FORCE)
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}" CACHE STRING "C++ Compiler Flags" FORCE)
 
+set(CMAKE_C_STANDARD 17)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
 function(find_project_root out_var)
     # Start from current source directory
     set(current_dir "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -41,9 +44,17 @@ macro(auto_target_link_libraries target visibility)
     endif()
 
     foreach(libname IN LISTS libnames)
+        # Extract the part before the first colon for search path
+        string(FIND "${libname}" "+" colon_pos)
+        if(colon_pos GREATER_EQUAL 0)
+            string(SUBSTRING "${libname}" 0 ${colon_pos} search_name)
+        else()
+            set(search_name "${libname}")
+        endif()
+
         # Use find command to locate the library directory
         execute_process(
-            COMMAND find "${PROJECT_ROOT}/lib" -name "${libname}" -type d
+            COMMAND find "${PROJECT_ROOT}/lib" -name "${search_name}" -type d
             OUTPUT_VARIABLE LIBDIRS
             OUTPUT_STRIP_TRAILING_WHITESPACE
             ERROR_QUIET  # Suppress error output if not found
@@ -53,18 +64,18 @@ macro(auto_target_link_libraries target visibility)
         string(REPLACE "\n" ";" LIBDIR_LIST ${LIBDIRS})
 
         if(NOT LIBDIR_LIST)
-            message(FATAL_ERROR "Could not find library directory for: ${libname}")
+            message(FATAL_ERROR "Could not find library directory for: ${search_name}")
         endif()
 
         list(GET LIBDIR_LIST 0 LIBDIR)
 
-        message(STATUS "Found ${libname} at: ${LIBDIR}")
+        message(STATUS "Found ${search_name} at: ${LIBDIR}")
 
         # Check if we've already added this subdirectory
         get_property(subdirs_added GLOBAL PROPERTY AUTO_TARGET_LINK_LIBRARIES_ADDED_DIR)
         if(NOT ${LIBDIR} IN_LIST subdirs_added)
             # Add subdirectory and link library
-            add_subdirectory(${LIBDIR} ${libname})
+            add_subdirectory(${LIBDIR} ${search_name})
             set_property(GLOBAL APPEND PROPERTY AUTO_TARGET_LINK_LIBRARIES_ADDED_DIR
                 ${LIBDIR})
         endif()
