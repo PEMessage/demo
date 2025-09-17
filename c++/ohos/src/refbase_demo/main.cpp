@@ -1,5 +1,6 @@
 #include "refbase.h"
 #include "stdio.h"
+#include <iostream>
 
 using namespace OHOS;
 using namespace std;
@@ -13,28 +14,25 @@ struct A: RefBase {
     }
 };
 
+#define PRT(code) \
+    std::cout << "\033[1;34m" << #code << "\033[0m" << std::endl; \
+    code
+
+#define header() std::cout \
+    << "\033[1;31m" \
+    << "--------------------" << std::endl \
+    << __func__ << std::endl \
+    << "--------------------" << std::endl \
+    << "\033[0m"
 
 void test_normal() {
-    printf("--------------------------------------\n");
-    printf("Func: %s\n", __func__);
-    printf("--------------------------------------\n");
-    printf("=================\n");
-    printf("Create a in Stack\n");
-    printf("=================\n");
-    A a;
-    printf("=================\n");
-    printf("Create sptr pa(Create A in heap, and assgin it to pa)\n");
-    printf("=================\n");
-    sptr<A> pa = sptr<A>::MakeSptr();
-    printf("=================\n");
-    printf("Create sptr pb\n");
-    printf("=================\n");
-    sptr<A> pc = pa;
-
-    printf("=================\n");
-    printf("return\n");
-    printf("=================\n");
+    header();
+    PRT(sptr<A> pa = sptr<A>::MakeSptr();)
+    PRT(sptr<A> pb = pa;)
+    PRT(pb = NULL;)
+    PRT(return;)
 }
+
 
 void test_create_in_stack() {
     // if you create some refbase in stack, it should never be !!!never!!! mangered by sptr
