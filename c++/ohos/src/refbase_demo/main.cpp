@@ -33,6 +33,15 @@ void test_normal() {
     PRT(return;)
 }
 
+void test_swap() {
+    header();
+    PRT(sptr<A> pa = sptr<A>::MakeSptr();)
+    PRT(sptr<A> pb = sptr<A>::MakeSptr();)
+    PRT(sptr<A> pc = pa;)
+    PRT(pc = pb;)
+    PRT(return;)
+}
+
 
 void test_create_in_stack() {
     // if you create some refbase in stack, it should never be !!!never!!! mangered by sptr
@@ -45,6 +54,7 @@ void test_create_in_stack() {
 
 int main (int argc, char *argv[]) {
     test_normal();
+    test_swap();
     // test_create_in_stack(); // THIS will cause dounle free
     return 0;
 }
