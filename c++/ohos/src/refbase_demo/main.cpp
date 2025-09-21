@@ -29,6 +29,9 @@ void test_normal() {
     header();
     PRT(sptr<A> pa = sptr<A>::MakeSptr();)
     PRT(sptr<A> pb = pa;)
+    PRT(cout << "PB SptrRefCount: " <<  pb->GetSptrRefCount() << endl);
+    PRT(cout << "PB WptrRefCount: " <<  pb->GetWptrRefCount() << endl);
+
     PRT(pb = NULL;)
     PRT(return;)
 }
