@@ -19,7 +19,12 @@ static int __init my_module_init(void)
     pr_info("Delayed work module loaded\n");
     
     // Create a workqueue
-    my_wq = create_singlethread_workqueue("my_delayed_workqueue");
+    // See: https://docs.kernel.org/core-api/workqueue.html
+    //     While the combination of @max_active of 1 and WQ_UNBOUND used to achieve this behavior,
+    //     this is no longer the case. Use alloc_ordered_workqueue() instead.
+    // my_wq = create_singlethread_workqueue("my_delayed_workqueue");
+    my_wq = alloc_ordered_workqueue("my_delayed_workqueue", 0 /*extra flag for alloc_workqueue, not used set to 0*/);
+
     if (!my_wq) {
         pr_err("Failed to create workqueue\n");
         return -ENOMEM;
