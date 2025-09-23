@@ -7,6 +7,8 @@ SRC_FILES := $(filter-out %.mod.c, $(SRC_FILES))
 OBJ_FILES := $(notdir $(SRC_FILES:.c=.o))
 $(info [MY OBJM]: $(OBJ_FILES))
 obj-m := $(OBJ_FILES)
+# See: https://stackoverflow.com/a/44095831 to debug kernel module
+ccflags-y += -g -DDEBUG
 
 KDIR := ../../linux/
 

@@ -18,7 +18,11 @@ KDOTCONFIG := $(KDIR)/$(BUILD_DIR)/.config
 EXTRA_DEFCONFIG := --enable CONFIG_DEBUG_INFO
 EXTRA_DEFCONFIG += --enable CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT
 EXTRA_DEFCONFIG += --enable CONFIG_GDB_SCRIPTS
+# See: https://stackoverflow.com/a/33203642 , but may duplicate
+EXTRA_DEFCONFIG += --enable CONFIG_DEBUG_KERNEL
+
 # KASLR disable
+# or `qemu-system ... -append nokaslr` disable it from cmdline
 EXTRA_DEFCONFIG += --disable CONFIG_RANDOMIZE_BASE
 
 # some config generate when run oldconfig
@@ -136,7 +140,11 @@ qemu-fast-ko:
 # qemu-system-aarch64 -M virt -cpu cortex-a53 -smp 2 -m 2048 -kernel linux-5.18.2/arch/arm64/boot/Image -dtb mydtb/my.dto -nographic -hda bullseye.img -append "root=/dev/vda"  -netdev user,id=mynet -device virtio-net-device,netdev=mynet
 .PHONY: debug
 debug:
-	qemu-system-aarch64 $(QEMU_MACHINE) -kernel $(KIMG) -nographic -S -s
+	@echo gdb-multiarch -ex \'add-auto-load-safe-path $(KDIR)\' -ex \'target remote localhost:1234\' $(KDIR)/$(BUILD_DIR)/vmlinux
+	qemu-system-aarch64 $(QEMU_MACHINE) -kernel $(KIMG) -nographic --initrd ../busybox-cpio/rootfs.cpio.gz \
+		-monitor telnet:localhost:11234,server,nowait \
+		-nographic -S -s \
+
 
 .PHONY: qemu-dumpdts
 qemu-dumpdts:
