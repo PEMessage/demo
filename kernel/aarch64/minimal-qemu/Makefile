@@ -120,18 +120,27 @@ headers:
 	make -C $(KDIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) O=$(BUILD_DIR) headers_install INSTALL_HDR_PATH=$(ROOTFS_DIR)/usr/include/linux
 
 
+
+QEMU_MACHINE := -M virt -cpu cortex-a53 -smp 2 -m 4096
 .PHONY: qemu
 qemu:
-	qemu-system-aarch64 -M virt -cpu cortex-a53 -smp 2 -m 4096 -kernel $(KIMG) -nographic --initrd ../busybox-cpio/rootfs.cpio.gz
+	qemu-system-aarch64 $(QEMU_MACHINE) -kernel $(KIMG) -nographic --initrd ../busybox-cpio/rootfs.cpio.gz
 
 .PHONY: qemu-fast-ko
 qemu-fast-ko:
 	make -C ../busybox-cpio/ repack-nodep
-	qemu-system-aarch64 -M virt -cpu cortex-a53 -smp 2 -m 4096 -kernel $(KIMG) -nographic --initrd ../busybox-cpio/rootfs.cpio.gz
+	qemu-system-aarch64 $(QEMU_MACHINE) -kernel $(KIMG) -nographic --initrd ../busybox-cpio/rootfs.cpio.gz \
+		-monitor telnet:localhost:11234,server,nowait
 
 # qemu-system-aarch64 -M virt -cpu cortex-a53 -smp 2 -m 2048 -kernel linux-5.18.2/arch/arm64/boot/Image -dtb mydtb/my.dto -nographic -hda bullseye.img -append "root=/dev/vda"
 # qemu-system-aarch64 -M virt -cpu cortex-a53 -smp 2 -m 2048 -kernel linux-5.18.2/arch/arm64/boot/Image -dtb mydtb/my.dto -nographic -hda bullseye.img -append "root=/dev/vda"  -netdev user,id=mynet -device virtio-net-device,netdev=mynet
 .PHONY: debug
 debug:
-	qemu-system-aarch64 -M virt -cpu cortex-a53 -smp 2 -m 2048 -kernel $(KIMG) -nographic -S -s
+	qemu-system-aarch64 $(QEMU_MACHINE) -kernel $(KIMG) -nographic -S -s
 
+.PHONY: qemu-dumpdts
+qemu-dumpdts:
+	mkdir -p dts
+	qemu-system-aarch64 $(QEMU_MACHINE) -machine dumpdtb=dts/vm.dtb
+	dtc -I dtb -O dts -o dts/vm.dts dts/vm.dtb
+	rm dts/vm.dtb -rf
