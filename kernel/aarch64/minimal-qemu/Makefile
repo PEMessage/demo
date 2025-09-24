@@ -138,6 +138,22 @@ qemu-fast-ko:
 
 # qemu-system-aarch64 -M virt -cpu cortex-a53 -smp 2 -m 2048 -kernel linux-5.18.2/arch/arm64/boot/Image -dtb mydtb/my.dto -nographic -hda bullseye.img -append "root=/dev/vda"
 # qemu-system-aarch64 -M virt -cpu cortex-a53 -smp 2 -m 2048 -kernel linux-5.18.2/arch/arm64/boot/Image -dtb mydtb/my.dto -nographic -hda bullseye.img -append "root=/dev/vda"  -netdev user,id=mynet -device virtio-net-device,netdev=mynet
+#
+# How to debug module_init
+# 	https://stackoverflow.com/questions/2606711/how-to-debug-problems-in-linux-kernel-module-init
+# 	https://stackoverflow.com/a/49841048/20689546
+#
+# 	0. compile ko, notice rm __init and __exit to make gdb work
+# 	1. set breakpoint on `do_init_module and
+# 	2. re-load symbol by
+# 		lx-symbol to load ko
+# 		or `add-symbol-file modules/gpio_handler/gpio_handler.ko 0xXXX` which is base addr of ko
+# 		```
+# 		(gdb) p mod->core_layout.base
+#       $5 = (void *) 0xffff800000f70000 <gpio_irq_handler>
+#       ```
+#   3. set breakpoint or step untill `ret = fn()`
+
 .PHONY: debug
 debug:
 	@echo gdb-multiarch -ex \'add-auto-load-safe-path $(KDIR)\' -ex \'target remote localhost:1234\' $(KDIR)/$(BUILD_DIR)/vmlinux
