@@ -126,6 +126,13 @@ headers:
 
 
 QEMU_MACHINE := -M virt -cpu cortex-a53 -smp 2 -m 4096
+
+# See: https://zhuanlan.zhihu.com/p/359573010
+# 9p virtfs, to share dir between host and guest
+# Runing this to mount: mount -t 9p -o trans=virtio,version=9p2000.L hostshare /tmp/host_files
+QEMU_MACHINE += -fsdev local,security_model=passthrough,id=fsdev0,path=.
+QEMU_MACHINE += -device virtio-9p-pci,id=fs0,fsdev=fsdev0,mount_tag=hostshare
+
 .PHONY: qemu
 qemu:
 	qemu-system-aarch64 $(QEMU_MACHINE) -kernel $(KIMG) -nographic --initrd ../busybox-cpio/rootfs.cpio.gz

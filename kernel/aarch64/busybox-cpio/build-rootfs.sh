@@ -29,6 +29,7 @@ do_init() {
     echo '#!/bin/busybox sh
 # 1. prepare dir
 busybox mkdir -p /etc/init.d /proc /root /sbin /sys /usr/bin /usr/sbin /dev
+busybox mkdir -p /tmp/host_files
 busybox mount -t proc proc /proc
 busybox mount -t sysfs sys /sys
 
