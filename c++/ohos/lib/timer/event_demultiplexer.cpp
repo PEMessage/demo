@@ -22,6 +22,8 @@
 #include <vector>
 #include <sys/epoll.h>
 
+#include <strings.h> // PEM Modify
+
 namespace OHOS {
 namespace Utils {
 

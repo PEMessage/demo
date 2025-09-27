@@ -20,6 +20,8 @@
 #include <sys/prctl.h>
 #include "timer_event_handler.h" /* for INVALID_TIMER_FD */
 #include "utils_log.h"
+
+#include <atomic> // PEM Modify
 namespace OHOS {
 namespace Utils {
 

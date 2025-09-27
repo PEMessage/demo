@@ -22,6 +22,8 @@
 #include <mutex>
 #include <list>
 
+#include <functional> // PEM Modify
+
 namespace OHOS {
 namespace Utils {
 

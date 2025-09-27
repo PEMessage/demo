@@ -25,6 +25,9 @@
 #include <thread>
 #include <vector>
 
+#include <memory> // PEM Modify
+#include <functional> // PEM Modify
+
 namespace OHOS {
 namespace Utils {
 class EventReactor;
