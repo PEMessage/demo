@@ -97,7 +97,7 @@ uint32_t EventDemultiplexer::Update(int operation, EventHandler* handler)
     event.data.fd = handler->GetHandle();
 
     if (epoll_ctl(epollFd_, operation, handler->GetHandle(), &event) != 0) {
-        UTILS_LOGE("epoll_ctl %{public}d  operation %{public}d on handle %{public}d failed, errno %{public}d",
+        UTILS_LOGE("epoll_ctl %d  operation %d on handle %d failed, errno %d",
             epollFd_, operation, handler->GetHandle(), errno);
 
         if (epollCtlErrQueue_.size() < QUEUE_MAX_SIZE) {
@@ -120,7 +120,7 @@ int EventDemultiplexer::Polling(int timeout /* ms */)
     }
     if (nfds == -1) {
         if (errno != INTERRUPTED_SYS_CALL) {
-            UTILS_LOGE("epoll_wait failed, errno %{public}d, epollFd_: %{public}d, pollEvents.size: %{public}zu",
+            UTILS_LOGE("epoll_wait failed, errno %d, epollFd_: %d, pollEvents.size: %zu",
                 errno, epollFd_, epollEvents.size());
         }
         if (errno == EPOLL_ERROR_BADF || errno == EPOLL_ERROR_EINVAL) {
@@ -141,11 +141,11 @@ int EventDemultiplexer::Polling(int timeout /* ms */)
                 taskQue.emplace_back(itor->second);
                 eventQue.emplace_back(events);
             } else {
-                UTILS_LOGE("fd not found in eventHandlers_, fd=%{public}d, events=%{public}d", targetFd, events);
+                UTILS_LOGE("fd not found in eventHandlers_, fd=%d, events=%d", targetFd, events);
                 
                 while (!epollCtlErrQueue_.empty()) {
                     auto [operation, errnoNum, fd] = epollCtlErrQueue_.front();
-                    UTILS_LOGE("epoll_ctl: %{public}d, errno: %{public}d, handle: %{public}d", operation, errnoNum, fd);
+                    UTILS_LOGE("epoll_ctl: %d, errno: %d, handle: %d", operation, errnoNum, fd);
                     epollCtlErrQueue_.pop();
                 }
             }
@@ -179,7 +179,7 @@ uint32_t EventDemultiplexer::Reactor2Epoll(uint32_t reactorEvent)
         case EventReactor::READ_EVENT:
             return EPOLLIN | EPOLLPRI;
         default:
-            UTILS_LOGD("invalid event %{public}u.", reactorEvent);
+            UTILS_LOGD("invalid event %u.", reactorEvent);
             return TIMER_ERR_DEAL_FAILED;
     }
 }

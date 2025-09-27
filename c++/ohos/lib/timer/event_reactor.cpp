@@ -73,7 +73,7 @@ void EventReactor::RunLoop(int timeout) const
 
     while (loopReady_ && switch_) {
         if (demultiplexer_->Polling(timeout) == EPOLL_CRITICAL_ERROR) {
-            UTILS_LOGD("polling critical error occure: %{public}d", timeout);
+            UTILS_LOGD("polling critical error occure: %d", timeout);
             break;
         }
     }
@@ -98,7 +98,7 @@ uint32_t EventReactor::ScheduleTimer(const TimerCallback& cb, uint32_t interval,
     handler->SetTimerCallback(cb);
     uint32_t ret = handler->Initialize();
     if (ret != TIMER_ERR_OK) {
-        UTILS_LOGD("ScheduleTimer %{public}d initialize failed", interval);
+        UTILS_LOGD("ScheduleTimer %d initialize failed", interval);
         return ret;
     }
 
@@ -109,7 +109,7 @@ uint32_t EventReactor::ScheduleTimer(const TimerCallback& cb, uint32_t interval,
 
 void EventReactor::CancelTimer(int timerFd)
 {
-    UTILS_LOGD("Cancel timer, timerFd: %{public}d.", timerFd);
+    UTILS_LOGD("Cancel timer, timerFd: %d.", timerFd);
     std::lock_guard<std::recursive_mutex> lock(mutex_);
     auto itor = timerEventHandlers_.begin();
     for (; itor != timerEventHandlers_.end(); ++itor) {

@@ -62,10 +62,10 @@ void Timer::Shutdown(bool useJoin)
 
             int tmpTimerFd = INVALID_TIMER_FD;
             uint32_t ret = reactor_->ScheduleTimer([](int unused) {
-                UTILS_LOGD("%{public}s:Pseudo-task invoked to get thread exited.", __func__);
+                UTILS_LOGD("%s:Pseudo-task invoked to get thread exited.", __func__);
             }, 0, tmpTimerFd, true); // Add a task to avoid eternally blocking of epoll_wait
             if (ret == TIMER_ERR_OK) {
-                UTILS_LOGD("%{public}s:Pseudo-task need to be scheduled.", __func__);
+                UTILS_LOGD("%s:Pseudo-task need to be scheduled.", __func__);
             }
 
             thread_.detach();
@@ -87,7 +87,7 @@ uint32_t Timer::Register(const TimerCallback& callback, uint32_t interval /* ms 
     if (timerFd == INVALID_TIMER_FD) {
         uint32_t ret = DoRegister([this](int fd) { this->OnTimer(fd); }, interval, once, timerFd);
         if (ret != TIMER_ERR_OK) {
-            UTILS_LOGE("do register interval timer %{public}d failed, return %{public}u", interval, ret);
+            UTILS_LOGE("do register interval timer %d failed, return %u", interval, ret);
             return TIMER_ERR_DEAL_FAILED;
         }
     }
@@ -108,7 +108,7 @@ uint32_t Timer::Register(const TimerCallback& callback, uint32_t interval /* ms 
     intervalToTimers_[interval].push_back(entry);
     timerToEntries_[entry->timerId] = entry;
 
-    UTILS_LOGD("register timer %{public}u with %{public}u ms interval.", entry->timerId, entry->interval);
+    UTILS_LOGD("register timer %u with %u ms interval.", entry->timerId, entry->interval);
     return entry->timerId;
 }
 
@@ -116,17 +116,17 @@ void Timer::Unregister(uint32_t timerId)
 {
     std::lock_guard<std::mutex> lock(mutex_);
     if (timerToEntries_.find(timerId) == timerToEntries_.end()) {
-        UTILS_LOGD("timer %{public}u does not exist", timerId);
+        UTILS_LOGD("timer %u does not exist", timerId);
         return;
     }
 
     auto entry = timerToEntries_[timerId];
-    UTILS_LOGD("deregister timer %{public}u with %{public}u ms interval", timerId, entry->interval);
+    UTILS_LOGD("deregister timer %u with %u ms interval", timerId, entry->interval);
 
     auto itor = intervalToTimers_[entry->interval].begin();
     for (; itor != intervalToTimers_[entry->interval].end(); ++itor) {
         if ((*itor)->timerId == timerId) {
-            UTILS_LOGD("erase timer %{public}u.", timerId);
+            UTILS_LOGD("erase timer %u.", timerId);
             if ((*itor)->once) {
                 reactor_->CancelTimer((*itor)->timerFd);
                 timers_.erase((*itor)->timerFd);
@@ -137,7 +137,7 @@ void Timer::Unregister(uint32_t timerId)
     }
 
     if (intervalToTimers_[entry->interval].empty()) {
-        UTILS_LOGD("deregister timer interval: %{public}u.", entry->interval);
+        UTILS_LOGD("deregister timer interval: %u.", entry->interval);
         intervalToTimers_.erase(entry->interval);
         DoUnregister(entry->interval);
     }
@@ -158,7 +158,7 @@ uint32_t Timer::DoRegister(const TimerListCallback& callback, uint32_t interval,
     std::function<void(int)> cb = [this, callback](int fd) { this->DoTimerListCallback(callback, fd); };
     uint32_t ret = reactor_->ScheduleTimer(cb, interval, timerFd, once);
     if ((ret != TIMER_ERR_OK) || (timerFd < 0)) {
-        UTILS_LOGE("ScheduleTimer failed!ret:%{public}d, timerFd:%{public}d", ret, timerFd);
+        UTILS_LOGE("ScheduleTimer failed!ret:%d, timerFd:%d", ret, timerFd);
         return ret;
     }
     timers_[timerFd] = interval;

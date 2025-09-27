@@ -98,7 +98,7 @@ void TimerEventHandler::TimeOut()
     uint64_t expirations = 0;
     ssize_t n = ::read(GetHandle(), &expirations, sizeof(expirations));
     if (n != sizeof(expirations)) {
-        UTILS_LOGE("epoll_loop::on_timer() reads %{public}d bytes instead of 8, errno=%{public}d", static_cast<int>(n),
+        UTILS_LOGE("epoll_loop::on_timer() reads %d bytes instead of 8, errno=%d", static_cast<int>(n),
             errno);
     }
     if (callback_) {
