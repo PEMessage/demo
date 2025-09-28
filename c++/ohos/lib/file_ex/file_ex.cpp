@@ -108,14 +108,14 @@ bool LoadStringFromFile(const string& filePath, string& content)
 {
     ifstream file(filePath.c_str());
     if (!file.is_open()) {
-        UTILS_LOGD("open file failed! filePath:%{public}s", filePath.c_str());
+        UTILS_LOGD("open file failed! filePath:%s", filePath.c_str());
         return false;
     }
 
     file.seekg(0, ios::end);
     const long long fileLength = file.tellg();
     if (fileLength > MAX_FILE_LENGTH) {
-        UTILS_LOGD("invalid file length(%{public}lld)!", fileLength);
+        UTILS_LOGD("invalid file length(%lld)!", fileLength);
         return false;
     }
 
@@ -136,7 +136,7 @@ string GetFileNameByFd(const int fd)
 
     ssize_t ret = readlink(fdPath.c_str(), fileName, PATH_MAX);
     if (ret < 0 || ret > PATH_MAX) {
-        UTILS_LOGD("Get fileName failed, ret is: %{public}d!", ret);
+        UTILS_LOGD("Get fileName failed, ret is: %ld!", ret);
         return string();
     }
     fileName[ret] = '\0';
@@ -161,13 +161,13 @@ bool LoadStringFromFdToFile(int fd, string& content)
 bool LoadStringFromFd(int fd, string& content)
 {
     if (fd <= 0) {
-        UTILS_LOGD("invalid fd:%{public}d", fd);
+        UTILS_LOGD("invalid fd:%d", fd);
         return false;
     }
 
     const off_t fileLength = lseek(fd, 0, SEEK_END);
     if (fileLength > MAX_FILE_LENGTH) {
-        UTILS_LOGE("invalid file length(%{public}jd)!", static_cast<intmax_t>(fileLength));
+        UTILS_LOGE("invalid file length(%jd)!", static_cast<intmax_t>(fileLength));
         return false;
     }
 
@@ -189,7 +189,7 @@ bool LoadStringFromFd(int fd, string& content)
 
     const ssize_t len = read(fd, content.data(), fileLength);
     if (len != fileLength) {
-        UTILS_LOGE("the length read from file is not equal to fileLength!len:%{public}zd,fileLen:%{public}jd",
+        UTILS_LOGE("the length read from file is not equal to fileLength!len:%zd,fileLen:%jd",
             len, static_cast<intmax_t>(fileLength));
         return false;
     }
@@ -212,13 +212,13 @@ bool SaveStringToFile(const std::string& filePath, const std::string& content, b
     }
 
     if (!file.is_open()) {
-        UTILS_LOGD("open file failed! filePath:%{private}s", filePath.c_str());
+        UTILS_LOGD("open file failed! filePath:%s", filePath.c_str());
         return false;
     }
 
     file.write(content.c_str(), content.length());
     if (file.fail()) {
-        UTILS_LOGE("write content to file failed!file:%{private}s, content:%{private}s",
+        UTILS_LOGE("write content to file failed!file:%s, content:%s",
             filePath.c_str(), content.c_str());
         return false;
     }
@@ -228,7 +228,7 @@ bool SaveStringToFile(const std::string& filePath, const std::string& content, b
 bool SaveStringToFd(int fd, const std::string& content)
 {
     if (fd <= 0) {
-        UTILS_LOGD("invalid fd:%{public}d", fd);
+        UTILS_LOGD("invalid fd:%d", fd);
         return false;
     }
 
@@ -239,12 +239,12 @@ bool SaveStringToFd(int fd, const std::string& content)
 
     const ssize_t len = write(fd, content.c_str(), content.length());
     if (len < 0) {
-        UTILS_LOGE("write file failed!errno:%{public}d, err:%{public}s", errno, strerror(errno));
+        UTILS_LOGE("write file failed!errno:%d, err:%s", errno, strerror(errno));
         return false;
     }
 
     if (static_cast<unsigned long>(len) != content.length()) {
-        UTILS_LOGE("the length write to file is not equal to fileLength!len:%{public}zd, fileLen:%{public}zu",
+        UTILS_LOGE("the length write to file is not equal to fileLength!len:%zd, fileLen:%zu",
             len, content.length());
         return false;
     }
@@ -256,13 +256,13 @@ bool LoadBufferFromNodeFile(const string& filePath, vector<char>& content)
 {
     string realPath;
     if (!PathToRealPath(filePath, realPath)) {
-        UTILS_LOGD("filePath to realPath failed! filePath:%{private}s", filePath.c_str());
+        UTILS_LOGD("filePath to realPath failed! filePath:%s", filePath.c_str());
         return false;
     }
 
     FILE *fp = fopen(realPath.c_str(), "r");
     if (fp == nullptr) {
-        UTILS_LOGD("open file failed! filePath:%{private}s", realPath.c_str());
+        UTILS_LOGD("open file failed! filePath:%s", realPath.c_str());
         return false;
     }
 
@@ -270,7 +270,7 @@ bool LoadBufferFromNodeFile(const string& filePath, vector<char>& content)
     int byteCount = 1;
     while (!feof(fp)) {
         if (byteCount > MAX_FILE_LENGTH) {
-            UTILS_LOGE("LoadBufferFromNodeFile invalid file length(%{public}d)!", byteCount);
+            UTILS_LOGE("LoadBufferFromNodeFile invalid file length(%d)!", byteCount);
             fclose(fp);
             fp = nullptr;
             content.clear();
@@ -293,14 +293,14 @@ bool LoadBufferFromFile(const string& filePath, vector<char>& content)
     ifstream file;
     file.open(filePath.c_str(), ios::in | ios::binary);
     if (!file.is_open()) {
-        UTILS_LOGD("open file failed! filePath:%{private}s", filePath.c_str());
+        UTILS_LOGD("open file failed! filePath:%s", filePath.c_str());
         return false;
     }
 
     file.seekg(0, std::ios::end);
     const long long fileLength = file.tellg();
     if (fileLength > MAX_FILE_LENGTH) {
-        UTILS_LOGD("invalid file length(%{public}lld)!", fileLength);
+        UTILS_LOGD("invalid file length(%lld)!", fileLength);
         return false;
     }
 
@@ -316,7 +316,7 @@ bool LoadBufferFromFile(const string& filePath, vector<char>& content)
 
     file.seekg(0, std::ios::beg);
     if (file.fail()) {
-        UTILS_LOGE("seekg file to begin failed!filePath:%{private}s", filePath.c_str());
+        UTILS_LOGE("seekg file to begin failed!filePath:%s", filePath.c_str());
         return false;
     }
 
@@ -338,7 +338,7 @@ bool SaveBufferToFile(const string& filePath, const vector<char>& content, bool 
     ofstream file;
     file.open(filePath.c_str(), mode);
     if (!file.is_open()) {
-        UTILS_LOGD("open file failed! filePath:%{private}s, mode:%{private}d", filePath.c_str(), mode);
+        UTILS_LOGD("open file failed! filePath:%s, mode:%d", filePath.c_str(), mode);
         return false;
     }
 
@@ -361,7 +361,7 @@ bool StringExistsInFile(const string& fileName, const string& subStr, bool caseS
 
     string str;
     if (!LoadStringFromFile(fileName, str)) {
-        UTILS_LOGD("File load fail, filePath:%{private}s", fileName.c_str());
+        UTILS_LOGD("File load fail, filePath:%s", fileName.c_str());
         return false;
     }
 
@@ -403,7 +403,7 @@ int CountStrInFile(const string& fileName, const string& subStr, bool caseSensit
 
     string str;
     if (!LoadStringFromFile(fileName, str)) {
-        UTILS_LOGD("File load fail, filePath:%{private}s", fileName.c_str());
+        UTILS_LOGD("File load fail, filePath:%s", fileName.c_str());
         return -1;
     }
 
