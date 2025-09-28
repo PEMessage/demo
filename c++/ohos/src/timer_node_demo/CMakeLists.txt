@@ -5,7 +5,7 @@ include("../../include.cmake")
 
 add_executable(app
     main.cpp
-    node.cpp
-    node_manager.cpp
+    node_handle.cpp
+    node_device.cpp
 )
 auto_target_link_libraries(app PRIVATE timer nocopyable)

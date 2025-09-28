@@ -1,23 +1,23 @@
-#ifndef NODE_H
-#define NODE_H
+#ifndef NODE_HANDLE_H
+#define NODE_HANDLE_H
 
 #include "misc.h"
 #include "nocopyable.h"
 #include <optional>
 
-class NodeManager;
+class NodeDevice;
 
-class Node {
-    DISALLOW_COPY_AND_MOVE(Node);
-    friend class NodeManager;
+class NodeHandle {
+    DISALLOW_COPY_AND_MOVE(NodeHandle);
+    friend class NodeDevice;
     
 private:
     Config config_;
     std::optional<Config> savedconfig_;
-    NodeManager *manager_;
+    NodeDevice *manager_;
 
 public:
-    Node(NodeManager *manager, Config config);
+    NodeHandle(NodeDevice *manager, Config config);
     
     void save(Config config);
     void restore(Config config);
@@ -26,4 +26,4 @@ public:
     void blink(uint32_t interval);
 };
 
-#endif // NODE_H
+#endif // NODE_HANDLE_H

@@ -1,23 +1,23 @@
-#include "node.h"
-#include "node_manager.h"
+#include "node_handle.h"
+#include "node_device.h"
 
-Node::Node(NodeManager *manager, Config config): manager_(manager), config_(config) {}
+NodeHandle::NodeHandle(NodeDevice *manager, Config config): manager_(manager), config_(config) {}
 
-void Node::save(Config config) {
+void NodeHandle::save(Config config) {
     if (!savedconfig_) {
         savedconfig_ = config_;
     }
     config_ = config;
 }
 
-void Node::restore(Config config) {
+void NodeHandle::restore(Config config) {
     if (savedconfig_) {
         config_ = *savedconfig_;
         savedconfig_.reset();
     }
 }
 
-void Node::light() {
+void NodeHandle::light() {
     Config expected = Config {
         .mode = SwitchMode{true}
     };
@@ -26,7 +26,7 @@ void Node::light() {
     manager_->applyNode();
 }
 
-void Node::dark() {
+void NodeHandle::dark() {
     Config expected = Config {
         .mode = SwitchMode{false}
     };
@@ -35,7 +35,7 @@ void Node::dark() {
     manager_->applyNode();
 }
 
-void Node::blink(uint32_t interval) {
+void NodeHandle::blink(uint32_t interval) {
     Config expected = Config {
         .mode = BlinkMode{interval}
     };

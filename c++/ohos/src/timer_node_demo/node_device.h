@@ -1,5 +1,5 @@
-#ifndef NODE_MANAGER_H
-#define NODE_MANAGER_H
+#ifndef NODE_DEVICE_H
+#define NODE_DEVICE_H
 
 #include <memory>
 #include <variant>
@@ -15,25 +15,25 @@
 
 using namespace OHOS;
 
-class Node;
+class NodeHandle;
 
-class NodeManager {
+class NodeDevice {
 public:
-    NodeManager(std::string path, Utils::Timer &timer);
-    ~NodeManager();
+    NodeDevice(std::string path, Utils::Timer &timer);
+    ~NodeDevice();
     
-    Node& createNode(const Config& config);
-    void deleteNode(Node &node);
+    NodeHandle& createNode(const Config& config);
+    void deleteNode(NodeHandle &node);
     void applyNode();
 
 private:
     std::recursive_mutex m;
     State state_;
-    std::list<Node> nodes;
+    std::list<NodeHandle> nodes;
     Utils::Timer &timer_;
     std::optional<uint32_t> timerid_;
 
     void stopTimer();
 };
 
-#endif // NODE_MANAGER_H
+#endif // NODE_DEVICE_H

@@ -1,30 +1,30 @@
-#include "node_manager.h"
-#include "node.h"
+#include "node_device.h"
+#include "node_handle.h"
 #include <iostream>
 #include <tuple>
 
-NodeManager::NodeManager(std::string path, Utils::Timer &timer):
+NodeDevice::NodeDevice(std::string path, Utils::Timer &timer):
     state_(path, false), timer_(timer) {
 }
 
-NodeManager::~NodeManager() {
+NodeDevice::~NodeDevice() {
     stopTimer();
 }
 
-Node& NodeManager::createNode(const Config& config) {
-   Node& node = nodes.emplace_back(this, config);
+NodeHandle& NodeDevice::createNode(const Config& config) {
+   NodeHandle& node = nodes.emplace_back(this, config);
    return node;
 }
 
-void NodeManager::deleteNode(Node &node) {
+void NodeDevice::deleteNode(NodeHandle &node) {
     auto it = std::find_if(nodes.begin(), nodes.end(),
-                      [&](const Node& n) { return &n == &node; });
+                      [&](const NodeHandle& n) { return &n == &node; });
     if (it != nodes.end()) {
         nodes.erase(it);
     }
 }
 
-void NodeManager::applyNode() {
+void NodeDevice::applyNode() {
     std::lock_guard<std::recursive_mutex> lk(m);
 
     if (nodes.empty()) {
@@ -50,7 +50,7 @@ void NodeManager::applyNode() {
     }, config.mode);
 }
 
-void NodeManager::stopTimer() {
+void NodeDevice::stopTimer() {
     if(!timerid_) { return; };
     timer_.Unregister(*timerid_);
     timerid_.reset();
