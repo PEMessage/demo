@@ -54,6 +54,7 @@ void testConfigSaveRestore() {
     Utils::Timer timer("Timer");
     timer.Setup();
     {
+        // use `watch --interval 0.1 cat MockPath`
         NodeDevice device("MockPath", timer);
 
         NodeHandle& node1 = device.createHandle(Config{BlinkMode{500}});

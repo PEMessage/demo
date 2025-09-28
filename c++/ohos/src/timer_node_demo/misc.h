@@ -1,10 +1,12 @@
 #ifndef MISC_H
 #define MISC_H
 
+#include <optional>
 #include <variant>
 #include <cstdint>
 #include <iostream>
 #include <fstream>
+#include <unistd.h>
 
 struct SwitchMode {
     bool isOn = false;
@@ -43,18 +45,27 @@ struct Config {
 
 struct State {
     std::string path_;
-    std::ofstream file_;
+    std::optional<std::ofstream> file_;
 
     bool on_;
 
-    State(std::string path, bool on) : path_(path), file_(path), on_(on) {}
+    State(std::string path, bool on) : path_(path), file_(), on_(on) {
+        if(access(path_.c_str(), F_OK | W_OK) == 0)  {
+            file_ = std::ofstream(path_);
+        }
+
+    }
 
     void write() {
-        // if (file_.is_open()) {
-        //     file_ << (on_ ? "1": "0") << std::endl;
-        // } else {
-        // }
-        std::cout << path_ << ":" << on_ << std::endl;
+        if (file_ && file_->is_open()) {
+            file_->seekp(0);
+            *file_ << (on_ ? "1": "0");
+            file_->flush();
+
+            std::cout << "[F] " << path_ << ":" << on_ << std::endl;
+        } else {
+            std::cout << path_ << ":" << on_ << std::endl;
+        }
     }
     void write(bool on) {
         on_ = on;
