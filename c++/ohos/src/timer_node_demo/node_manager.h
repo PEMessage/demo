@@ -1,0 +1,39 @@
+#ifndef NODE_MANAGER_H
+#define NODE_MANAGER_H
+
+#include <memory>
+#include <variant>
+#include <optional>
+#include <string>
+#include <vector>
+#include <list>
+#include <mutex>
+
+#include "timer.h"
+#include "nocopyable.h"
+#include "misc.h"
+
+using namespace OHOS;
+
+class Node;
+
+class NodeManager {
+public:
+    NodeManager(std::string path, Utils::Timer &timer);
+    ~NodeManager();
+    
+    Node& createNode(const Config& config);
+    void deleteNode(Node &node);
+    void applyNode();
+
+private:
+    std::recursive_mutex m;
+    State state_;
+    std::list<Node> nodes;
+    Utils::Timer &timer_;
+    std::optional<uint32_t> timerid_;
+
+    void stopTimer();
+};
+
+#endif // NODE_MANAGER_H

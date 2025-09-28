@@ -3,5 +3,9 @@ project(project LANGUAGES CXX C)
 include("../../include.cmake")
 
 
-add_executable(app main.cpp)
+add_executable(app
+    main.cpp
+    node.cpp
+    node_manager.cpp
+)
 auto_target_link_libraries(app PRIVATE timer nocopyable)
