@@ -14,9 +14,9 @@ class NodeHandle {
 private:
     Config config_;
     std::optional<Config> savedconfig_;
-    NodeDevice *device_;
 
 public:
+    NodeDevice *device_;
     NodeHandle(NodeDevice *device, Config config);
     
     void save(Config config);

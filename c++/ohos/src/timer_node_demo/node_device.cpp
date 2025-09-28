@@ -32,6 +32,12 @@ void NodeDevice::deleteHandle(NodeHandle &node) {
     update();
 }
 
+
+bool NodeDevice::read() {
+    std::lock_guard<std::recursive_mutex> lk(m);
+    return state_.read();
+}
+
 void NodeDevice::update() {
     std::lock_guard<std::recursive_mutex> lk(m);
 
@@ -50,6 +56,10 @@ void NodeDevice::update() {
             stopTimer();
             timerid_ = timer_.Register([&]() {
                 std::lock_guard<std::recursive_mutex> lk(m);
+                // Unregister not ensure that happen after all callback, extra check is need.
+                // See: https://gitee.com/openharmony/commonlibrary_c_utils/blob/master/docs/zh-cn/c_utils_timer.md#典型案例
+                if(!timerid_) { return; }
+
                 state_.toggle();
             }, arg.interval, false);
         } else {

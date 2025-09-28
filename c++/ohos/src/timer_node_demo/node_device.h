@@ -25,6 +25,7 @@ public:
     NodeHandle& createHandle(const Config& config);
     void deleteHandle(NodeHandle &node);
     void update();
+    bool read();
 
 private:
     std::recursive_mutex m;

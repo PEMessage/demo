@@ -1,13 +1,14 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
+#include <assert.h>
 
 #include "misc.h"
 #include "node_handle.h"
 #include "node_device.h"
 #include "timer.h"
 
-int main() {
+int testNodePreemptive() {
     // Create a timer for the NodeManager
     Utils::Timer timer("Timer");
     timer.Setup();
@@ -18,14 +19,14 @@ int main() {
 
         // Create different nodes with different configurations
         NodeHandle& node1 = device.createHandle(Config{BlinkMode{200}});
-        std::this_thread::sleep_for(std::chrono::seconds(2));
-
+        std::this_thread::sleep_for(std::chrono::seconds(1));
 
         NodeHandle& node2 = device.createHandle(Config{SwitchMode{true}});
-        std::this_thread::sleep_for(std::chrono::seconds(2));
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        assert(node2.device_->read() == true);
 
-        device.deleteHandle(node2);
-        std::this_thread::sleep_for(std::chrono::seconds(2));
+        // device.deleteHandle(node2);
+        // std::this_thread::sleep_for(std::chrono::seconds(2));
 
 
     }
@@ -33,4 +34,8 @@ int main() {
     timer.Shutdown();
 
     return 0;
+}
+
+int main() {
+    testNodePreemptive();
 }
