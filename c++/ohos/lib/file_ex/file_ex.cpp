@@ -19,6 +19,11 @@
 #include "directory_ex.h"
 #include "utils_log.h"
 
+
+#include <linux/limits.h> // PEM Modify
+#include <string.h> // PEM Modify
+#include <algorithm> // PEM Modify
+
 using namespace std;
 
 const int MAX_FILE_LENGTH = 32 * 1024 * 1024;
@@ -328,7 +333,8 @@ bool SaveBufferToFile(const string& filePath, const vector<char>& content, bool 
     }
 
     // if the file is not exist,create it first!
-    uint32_t mode = truncated ? (ios::out | ios::binary | ios::trunc) : (ios::out | ios::binary | ios::app);
+    // uint32_t mode = truncated ? (ios::out | ios::binary | ios::trunc) : (ios::out | ios::binary | ios::app);
+    std::ios_base::openmode mode = truncated ? (ios::out | ios::binary | ios::trunc) : (ios::out | ios::binary | ios::app); // PEM Modify
     ofstream file;
     file.open(filePath.c_str(), mode);
     if (!file.is_open()) {
