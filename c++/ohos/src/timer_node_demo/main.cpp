@@ -48,13 +48,9 @@ struct State {
 
     bool on_;
 
-    std::recursive_mutex m;
-
-
     State(std::string path, bool on) : path_(path), file_(path), on_(on) {}
 
     void write() {
-        std::lock_guard<std::recursive_mutex> lk(m);
         if (file_.is_open()) {
             file_ << (on_ ? "1": "0") << std::endl;
         } else {
@@ -62,12 +58,10 @@ struct State {
         }
     }
     void write(bool on) { 
-        std::lock_guard<std::recursive_mutex> lk(m);
         on_ = on;
         write();
     }
     void toggle() {
-        std::lock_guard<std::recursive_mutex> lk(m);
         on_ = !on_;
         write();
     }
@@ -80,27 +74,70 @@ class Node {
     friend class NodeManager;
 private:
     Config  config_;
+    std::optional<Config>  savedconfig_;
+
     NodeManager *manager_;
 
 public:
     Node(NodeManager * manager, Config config): manager_(manager) , config_(config) {};
+
+    void save(Config config) {
+        if (!savedconfig_) {
+            savedconfig_ = config_;
+        }
+        config_ = config;
+
+    }
+
+    void restore(Config config) {
+        if (savedconfig_) {
+            config_ = *savedconfig_;
+            savedconfig_.reset();
+        }
+    }
+
+    void light() {
+        Config expected = Config {
+            .mode = SwitchMode{true}
+        };
+
+        if (expected == config_) { return; }
+        manager_->applyNode();
+    }
+
+    void dark() {
+        Config expected = Config {
+            .mode = SwitchMode{false}
+        };
+
+        if (expected == config_) { return; }
+        manager_->applyNode();
+    }
+
+    void blink(uint32_t interval) {
+        Config expected = Config {
+            .mode = BlinkMode{interval}
+        };
+        if (expected == config_) { return; }
+        manager_->applyNode();
+
+    }
+
 };
 
 
 class NodeManager {
 public:
-    Node& createNode(const std::string& name, const Config& config) {
+    Node& createNode(const Config& config) {
        return nodes.emplace_back(this, config);
     }
 
-    NodeManager(std::string path):
-        state_(path, false) {
-        timer_.Setup();
+    NodeManager(std::string path, Utils::Timer &timer):
+        state_(path, false), timer_(timer) {
     }
 
     ~NodeManager() {
         stopTimer();
-        timer_.Shutdown();
     }
 
     void applyNode() {
@@ -120,6 +157,7 @@ public:
             } else if constexpr (std::is_same_v<T, BlinkMode>) {
                 stopTimer();
                 timer_.Register([&]() {
+                    std::lock_guard<std::recursive_mutex> lk(m);
                     state_.toggle();
                 }, arg.interval, false);
             } else {
@@ -134,15 +172,11 @@ private:
 
     State state_;
     std::list<Node> nodes;
-    Utils::Timer timer_ {"Node"};
+    Utils::Timer &timer_;
     std::optional<uint32_t> timerid_;
-    
-
 
 private:
     void stopTimer() {
-        std::lock_guard<std::recursive_mutex> lk(m);
-
         if(!timerid_) { return; };
         timer_.Unregister(*timerid_);
         timerid_.reset();
