@@ -14,10 +14,10 @@ class NodeHandle {
 private:
     Config config_;
     std::optional<Config> savedconfig_;
-    NodeDevice *manager_;
+    NodeDevice *device_;
 
 public:
-    NodeHandle(NodeDevice *manager, Config config);
+    NodeHandle(NodeDevice *device, Config config);
     
     void save(Config config);
     void restore(Config config);

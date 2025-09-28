@@ -11,12 +11,12 @@ NodeDevice::~NodeDevice() {
     stopTimer();
 }
 
-NodeHandle& NodeDevice::createNode(const Config& config) {
+NodeHandle& NodeDevice::createHandle(const Config& config) {
    NodeHandle& node = nodes.emplace_back(this, config);
    return node;
 }
 
-void NodeDevice::deleteNode(NodeHandle &node) {
+void NodeDevice::deleteHandle(NodeHandle &node) {
     auto it = std::find_if(nodes.begin(), nodes.end(),
                       [&](const NodeHandle& n) { return &n == &node; });
     if (it != nodes.end()) {
@@ -24,7 +24,7 @@ void NodeDevice::deleteNode(NodeHandle &node) {
     }
 }
 
-void NodeDevice::applyNode() {
+void NodeDevice::update() {
     std::lock_guard<std::recursive_mutex> lk(m);
 
     if (nodes.empty()) {

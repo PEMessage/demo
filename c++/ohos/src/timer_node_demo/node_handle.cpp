@@ -1,7 +1,7 @@
 #include "node_handle.h"
 #include "node_device.h"
 
-NodeHandle::NodeHandle(NodeDevice *manager, Config config): manager_(manager), config_(config) {}
+NodeHandle::NodeHandle(NodeDevice *device, Config config): device_(device), config_(config) {}
 
 void NodeHandle::save(Config config) {
     if (!savedconfig_) {
@@ -23,7 +23,7 @@ void NodeHandle::light() {
     };
 
     if (expected == config_) { return; }
-    manager_->applyNode();
+    device_->update();
 }
 
 void NodeHandle::dark() {
@@ -32,7 +32,7 @@ void NodeHandle::dark() {
     };
 
     if (expected == config_) { return; }
-    manager_->applyNode();
+    device_->update();
 }
 
 void NodeHandle::blink(uint32_t interval) {
@@ -40,5 +40,5 @@ void NodeHandle::blink(uint32_t interval) {
         .mode = BlinkMode{interval}
     };
     if (expected == config_) { return; }
-    manager_->applyNode();
+    device_->update();
 }

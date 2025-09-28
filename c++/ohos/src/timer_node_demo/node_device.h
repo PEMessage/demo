@@ -22,9 +22,9 @@ public:
     NodeDevice(std::string path, Utils::Timer &timer);
     ~NodeDevice();
     
-    NodeHandle& createNode(const Config& config);
-    void deleteNode(NodeHandle &node);
-    void applyNode();
+    NodeHandle& createHandle(const Config& config);
+    void deleteHandle(NodeHandle &node);
+    void update();
 
 private:
     std::recursive_mutex m;
