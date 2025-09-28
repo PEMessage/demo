@@ -6,7 +6,7 @@ NodeHandle::NodeHandle(NodeDevice *device, Config config): device_(device),
     config_(config), savedconfig_() {}
 
 void NodeHandle::save(Config config) {
-    if (!savedconfig_) {
+    if (!isSaved()) {
         savedconfig_ = config_;
     } else {
         assert(false); // double save
@@ -23,7 +23,7 @@ void NodeHandle::save() {
 
 
 void NodeHandle::restore() {
-    if (savedconfig_) {
+    if (isSaved()) {
         config_ = *savedconfig_;
         savedconfig_.reset();
     } else {
@@ -31,6 +31,16 @@ void NodeHandle::restore() {
     }
 
     device_->update();
+}
+
+bool NodeHandle::isSaved() {
+    return savedconfig_.has_value();
+}
+
+void NodeHandle::ensureSaved() {
+    if(!isSaved()) {
+        save();
+    }
 }
 
 Config& NodeHandle::getConfig(bool isUser) {
