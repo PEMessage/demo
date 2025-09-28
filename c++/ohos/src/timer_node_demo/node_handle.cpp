@@ -33,19 +33,19 @@ void NodeHandle::restore() {
     device_->update();
 }
 
-Config& NodeHandle::getConfig(bool isSystem) {
-    if (isSystem && savedconfig_) {
+Config& NodeHandle::getConfig(bool isUser) {
+    if (!isUser && savedconfig_) {
         return *savedconfig_;
     } else {
         return config_;
     }
 }
 
-void NodeHandle::light(bool isSystem) {
+void NodeHandle::light(bool isUser) {
     Config next = Config {
         .mode = SwitchMode{true}
     };
-    Config& current = getConfig(isSystem);
+    Config& current = getConfig(isUser);
 
     if (next == current) { return; }
     current = next;
@@ -53,11 +53,11 @@ void NodeHandle::light(bool isSystem) {
     device_->update();
 }
 
-void NodeHandle::dark(bool isSystem) {
+void NodeHandle::dark(bool isUser) {
     Config next = Config {
         .mode = SwitchMode{false}
     };
-    Config& current = getConfig(isSystem);
+    Config& current = getConfig(isUser);
 
     if (next == current) { return; }
     current = next;
@@ -65,11 +65,11 @@ void NodeHandle::dark(bool isSystem) {
     device_->update();
 }
 
-void NodeHandle::blink(uint32_t interval, bool isSystem) {
+void NodeHandle::blink(uint32_t interval, bool isUser) {
     Config next = Config {
         .mode = BlinkMode{interval}
     };
-    Config& current = getConfig(isSystem);
+    Config& current = getConfig(isUser);
 
     if (next == current) { return; }
     current = next;
