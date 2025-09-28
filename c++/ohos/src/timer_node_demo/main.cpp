@@ -25,10 +25,8 @@ int testNodePreemptive() {
         std::this_thread::sleep_for(std::chrono::seconds(1));
         assert(node2.device_->read() == true);
 
-        // device.deleteHandle(node2);
-        // std::this_thread::sleep_for(std::chrono::seconds(2));
-
-
+        NodeHandle& node3 = device.createHandle(Config{DutyMode{500, 90}});
+        std::this_thread::sleep_for(std::chrono::seconds(10));
     }
 
     timer.Shutdown();

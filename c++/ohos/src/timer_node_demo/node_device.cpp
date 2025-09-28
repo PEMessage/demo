@@ -54,14 +54,33 @@ void NodeDevice::update() {
             state_.write(arg.isOn);
         } else if constexpr (std::is_same_v<T, BlinkMode>) {
             stopTimer();
-            timerid_ = timer_.Register([&]() {
+            callback_ = [&]() {
                 std::lock_guard<std::recursive_mutex> lk(m);
                 // Unregister not ensure that happen after all callback, extra check is need.
                 // See: https://gitee.com/openharmony/commonlibrary_c_utils/blob/master/docs/zh-cn/c_utils_timer.md#典型案例
                 if(!timerid_) { return; }
 
                 state_.toggle();
-            }, arg.interval, false);
+            };
+            timerid_ = timer_.Register(callback_, arg.interval, false);
+        } else if constexpr (std::is_same_v<T, DutyMode>) {
+            stopTimer();
+            uint32_t first_interval = arg.interval * arg.duty / 100;
+            uint32_t second_interval = arg.interval - first_interval;
+            callback_ = [&, first_interval, second_interval]() mutable {
+                std::lock_guard<std::recursive_mutex> lk(m);
+                if(!timerid_) { return; }
+
+                state_.toggle();
+
+                stopTimer();
+                if(state_.read()) {
+                    timerid_ = timer_.Register(callback_, first_interval, true);
+                } else {
+                    timerid_ = timer_.Register(callback_, second_interval, true);
+                }
+            };
+            timerid_ = timer_.Register(callback_, first_interval, true); // kick in
         } else {
             std::cout << "Unknow Mode" << std::endl;
         }

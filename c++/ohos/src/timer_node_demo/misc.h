@@ -8,7 +8,7 @@
 
 struct SwitchMode {
     bool isOn = false;
-    
+
     bool operator==(const SwitchMode& other) const {
         return isOn == other.isOn;
     }
@@ -16,13 +16,22 @@ struct SwitchMode {
 
 struct BlinkMode {
     uint32_t interval = 0;
-    
+
     bool operator==(const BlinkMode& other) const {
         return interval == other.interval;
     }
 };
 
-using Mode = std::variant<SwitchMode, BlinkMode>;
+struct DutyMode {
+    uint32_t interval = 0;
+    uint32_t duty = 0;
+
+    bool operator==(const DutyMode& other) const {
+        return interval == other.interval && duty == other.duty;
+    }
+};
+
+using Mode = std::variant<SwitchMode, BlinkMode, DutyMode>;
 
 struct Config {
     Mode mode;

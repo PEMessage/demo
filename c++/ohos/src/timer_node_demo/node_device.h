@@ -34,6 +34,8 @@ private:
     Utils::Timer &timer_;
     std::optional<uint32_t> timerid_;
 
+    std::function<void()> callback_;
+
     void stopTimer();
 };
 
