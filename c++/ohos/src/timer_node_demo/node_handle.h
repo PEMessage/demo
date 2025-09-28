@@ -15,15 +15,18 @@ private:
     Config config_;
     std::optional<Config> savedconfig_;
 
+    Config& getConfig(bool isSystem);
+
 public:
     NodeDevice *device_;
     NodeHandle(NodeDevice *device, Config config);
     
     void save(Config config);
-    void restore(Config config);
-    void light();
-    void dark();
-    void blink(uint32_t interval);
+    void save();
+    void restore();
+    void light(bool isSystem = false);
+    void dark(bool isSystem = false);
+    void blink(uint32_t interval, bool isSystem = false);
 };
 
 #endif // NODE_HANDLE_H

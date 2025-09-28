@@ -26,7 +26,23 @@ int testNodePreemptive() {
         assert(node2.device_->read() == true);
 
         NodeHandle& node3 = device.createHandle(Config{DutyMode{500, 90}});
-        std::this_thread::sleep_for(std::chrono::seconds(10));
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+
+        device.deleteHandle(node2);
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+
+        device.deleteHandle(node3);
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+
+        node1.dark();
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+
+        node1.light();
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+
+        node1.blink(300);
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+
     }
 
     timer.Shutdown();
@@ -34,6 +50,29 @@ int testNodePreemptive() {
     return 0;
 }
 
+void testConfigPreemptive() {
+    Utils::Timer timer("Timer");
+    timer.Setup();
+    {
+        NodeDevice device("MockPath", timer);
+
+        NodeHandle& node1 = device.createHandle(Config{BlinkMode{500}});
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+
+        node1.dark(true);
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+
+        node1.light(true);
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+
+        node1.save();
+        node1.dark(true);
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+    }
+    timer.Shutdown();
+}
+
 int main() {
-    testNodePreemptive();
+    testConfigPreemptive();
+    // testNodePreemptive();
 }
