@@ -1,5 +1,6 @@
 #include "node_handle.h"
 #include "node_device.h"
+#include <assert.h>
 
 NodeHandle::NodeHandle(NodeDevice *device, Config config): device_(device),
     config_(config), savedconfig_() {}
@@ -7,6 +8,8 @@ NodeHandle::NodeHandle(NodeDevice *device, Config config): device_(device),
 void NodeHandle::save(Config config) {
     if (!savedconfig_) {
         savedconfig_ = config_;
+    } else {
+        assert(false); // double save
     }
     config_ = config;
 
@@ -23,6 +26,8 @@ void NodeHandle::restore() {
     if (savedconfig_) {
         config_ = *savedconfig_;
         savedconfig_.reset();
+    } else {
+        assert(false); // double restore
     }
 
     device_->update();

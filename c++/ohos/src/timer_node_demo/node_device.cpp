@@ -80,7 +80,7 @@ void NodeDevice::update() {
                     timerid_ = timer_.Register(callback_, second_interval, true);
                 }
             };
-            timerid_ = timer_.Register(callback_, first_interval, true); // kick in
+            timerid_ = timer_.Register(callback_, first_interval, true); // first kick
         } else {
             std::cout << "Unknow Mode" << std::endl;
         }

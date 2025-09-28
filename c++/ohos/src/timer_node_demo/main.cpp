@@ -7,14 +7,14 @@
 #include "node_handle.h"
 #include "node_device.h"
 #include "timer.h"
+using namespace std;
 
 int testNodePreemptive() {
-    // Create a timer for the NodeManager
+    // Create a timer for the NodeDevice
     Utils::Timer timer("Timer");
     timer.Setup();
 
     {
-        // Create NodeManager with a file path (using console output since file may not exist)
         NodeDevice device("MockPath", timer);
 
         // Create different nodes with different configurations
@@ -50,7 +50,7 @@ int testNodePreemptive() {
     return 0;
 }
 
-void testConfigPreemptive() {
+void testConfigSaveRestore() {
     Utils::Timer timer("Timer");
     timer.Setup();
     {
@@ -68,11 +68,20 @@ void testConfigPreemptive() {
         node1.save();
         node1.dark(true);
         std::this_thread::sleep_for(std::chrono::seconds(3));
+        assert(node1.device_->read() == true);
+
+        cout << "Now using user" << endl;
+        node1.light(true);
+        node1.dark();
+        assert(node1.device_->read() == false);
+
+        node1.restore();
+        assert(node1.device_->read() == true);
     }
     timer.Shutdown();
 }
 
 int main() {
-    testConfigPreemptive();
+    testConfigSaveRestore();
     // testNodePreemptive();
 }

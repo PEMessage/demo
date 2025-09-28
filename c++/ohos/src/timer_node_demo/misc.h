@@ -24,7 +24,7 @@ struct BlinkMode {
 
 struct DutyMode {
     uint32_t interval = 0;
-    uint32_t duty = 0;
+    uint32_t duty = 0; // should be 0-100
 
     bool operator==(const DutyMode& other) const {
         return interval == other.interval && duty == other.duty;
