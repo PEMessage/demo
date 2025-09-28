@@ -18,16 +18,13 @@ int main() {
 
         // Create different nodes with different configurations
         NodeHandle& node1 = device.createHandle(Config{BlinkMode{200}});
-        device.update();
         std::this_thread::sleep_for(std::chrono::seconds(2));
 
 
         NodeHandle& node2 = device.createHandle(Config{SwitchMode{true}});
-        device.update();
         std::this_thread::sleep_for(std::chrono::seconds(2));
 
         device.deleteHandle(node2);
-        device.update();
         std::this_thread::sleep_for(std::chrono::seconds(2));
 
 
