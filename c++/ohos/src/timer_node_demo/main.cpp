@@ -25,7 +25,7 @@ int testNodePreemptive() {
         std::this_thread::sleep_for(std::chrono::seconds(1));
         assert(node2.device_->read() == true);
 
-        NodeHandle& node3 = device.createHandle(Config{DutyMode{500, 90}});
+        NodeHandle& node3 = device.createHandle(Config{DutyMode{500, 70}});
         std::this_thread::sleep_for(std::chrono::seconds(3));
 
         device.deleteHandle(node2);
@@ -83,6 +83,6 @@ void testConfigSaveRestore() {
 }
 
 int main() {
-    testConfigSaveRestore();
-    // testNodePreemptive();
+    // testConfigSaveRestore();
+    testNodePreemptive();
 }

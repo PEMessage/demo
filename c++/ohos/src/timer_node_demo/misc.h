@@ -52,6 +52,7 @@ struct State {
     State(std::string path, bool on) : path_(path), file_(), on_(on) {
         if(access(path_.c_str(), F_OK | W_OK) == 0)  {
             file_ = std::ofstream(path_);
+            file_->setf(std::ios::unitbuf);
         }
 
     }
@@ -62,7 +63,7 @@ struct State {
             *file_ << (on_ ? "1": "0");
             file_->flush();
 
-            std::cout << "[F] " << path_ << ":" << on_ << std::endl;
+            std::cout << "[*] " << path_ << ":" << on_ << std::endl;
         } else {
             std::cout << path_ << ":" << on_ << std::endl;
         }
