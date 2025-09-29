@@ -17,6 +17,12 @@ Config& NodeHandle::getCurrentConfig() {
     }
 }
 
+void NodeHandle::switchSlot(SlotId id) {
+    current_ = id;
+    device_->update();
+}
+
+
 void NodeHandle::light(SlotId id) {
     Config next = Config {
         .mode = SwitchMode{true}

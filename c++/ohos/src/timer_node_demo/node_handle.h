@@ -26,11 +26,13 @@ private:
     SlotId current_;
 
     Config& getCurrentConfig();
-    Config& getConfig(SlotId id);
 
 public:
     NodeDevice *device_;
     NodeHandle(NodeDevice *device, Config config);
+
+    Config& getConfig(SlotId id);
+    void switchSlot(SlotId id);
 
     void light(SlotId id = SlotId::SYSTEM);
     void dark(SlotId id = SlotId::SYSTEM);

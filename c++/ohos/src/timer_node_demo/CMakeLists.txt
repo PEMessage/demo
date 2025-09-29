@@ -7,11 +7,11 @@ add_executable(app
     main.cpp
     node_handle.cpp
     node_device.cpp
+    node_devices.cpp
 )
 
 target_compile_options(app PRIVATE -fsanitize=address,leak,undefined)
 target_compile_options(app PRIVATE -fstack-protector)
-target_link_options(app PRIVATE -fsanitize=address)
 target_link_options(app PRIVATE -fsanitize=address,leak,undefined)
 target_link_options(app PRIVATE -fstack-protector)
 
