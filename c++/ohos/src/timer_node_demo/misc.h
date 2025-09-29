@@ -13,14 +13,14 @@ struct InvalidMode {
     bool operator==(const InvalidMode& other) const {
         return true;
     }
+    bool operator!=(const InvalidMode& other) const { return !(*this == other); }
 };
 
-struct SwitchMode {
-    bool isOn = false;
-
-    bool operator==(const SwitchMode& other) const {
-        return isOn == other.isOn;
+struct ConstMode {
+    bool operator==(const ConstMode& other) const {
+        return true;
     }
+    bool operator!=(const ConstMode& other) const { return !(*this == other); }
 };
 
 struct BlinkMode {
@@ -29,6 +29,7 @@ struct BlinkMode {
     bool operator==(const BlinkMode& other) const {
         return interval == other.interval;
     }
+    bool operator!=(const BlinkMode& other) const { return !(*this == other); }
 };
 
 struct DutyMode {
@@ -38,15 +39,17 @@ struct DutyMode {
     bool operator==(const DutyMode& other) const {
         return interval == other.interval && duty == other.duty;
     }
+    bool operator!=(const DutyMode& other) const { return !(*this == other); }
 };
 
-using Mode = std::variant<InvalidMode, SwitchMode, BlinkMode, DutyMode>;
+using Mode = std::variant<InvalidMode, ConstMode, BlinkMode, DutyMode>;
 
 struct Config {
+    bool enabled;
     Mode mode;
 
     bool operator==(const Config& other) const {
-        return mode == other.mode;
+        return mode == other.mode && enabled == other.enabled;
     }
     bool operator!=(const Config& other) const {
         return !(*this == other);

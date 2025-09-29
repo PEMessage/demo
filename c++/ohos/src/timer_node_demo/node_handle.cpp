@@ -10,7 +10,7 @@ NodeHandle::NodeHandle(NodeDevice *device, Config config): device_(device),
 Config& NodeHandle::getConfig(SlotId id) { return configs_[id]; }
 Config& NodeHandle::getCurrentConfig() {
     Config& current = getConfig(current_);
-    if (current != Config{InvalidMode{}} ) {
+    if (current.mode != Mode{InvalidMode{}}) {
         return current;
     } else {
         return getConfig(SlotId::SYSTEM);
@@ -25,7 +25,8 @@ void NodeHandle::switchSlot(SlotId id) {
 
 void NodeHandle::light(SlotId id) {
     Config next = Config {
-        .mode = SwitchMode{true}
+        .enabled = true,
+        .mode = ConstMode{},
     };
     Config& current = getConfig(id);
 
@@ -37,7 +38,8 @@ void NodeHandle::light(SlotId id) {
 
 void NodeHandle::dark(SlotId id) {
     Config next = Config {
-        .mode = SwitchMode{false}
+        .enabled = false,
+        .mode = ConstMode{},
     };
     Config& current = getConfig(id);
 
@@ -49,6 +51,7 @@ void NodeHandle::dark(SlotId id) {
 
 void NodeHandle::blink(uint32_t interval, SlotId id) {
     Config next = Config {
+        .enabled = true,
         .mode = BlinkMode{interval}
     };
     Config& current = getConfig(id);

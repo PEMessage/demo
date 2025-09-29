@@ -18,14 +18,14 @@ int testNodePreemptive() {
         NodeDevice device("MockPath", timer);
 
         // Create different nodes with different configurations
-        NodeHandle& node1 = device.createHandle(Config{BlinkMode{200}});
+        NodeHandle& node1 = device.createHandle(Config{true,BlinkMode{200}});
         std::this_thread::sleep_for(std::chrono::seconds(1));
 
-        NodeHandle& node2 = device.createHandle(Config{SwitchMode{true}});
+        NodeHandle& node2 = device.createHandle(Config{true, ConstMode{}});
         std::this_thread::sleep_for(std::chrono::seconds(1));
         assert(node2.device_->read() == true);
 
-        NodeHandle& node3 = device.createHandle(Config{DutyMode{500, 70}});
+        NodeHandle& node3 = device.createHandle(Config{true, DutyMode{500, 70}});
         std::this_thread::sleep_for(std::chrono::seconds(3));
 
         device.deleteHandle(node2);
@@ -57,7 +57,7 @@ void testConfigSaveRestore() {
         // use `watch --interval 0.1 cat MockPath`
         NodeDevice device("MockPath", timer);
 
-        NodeHandle& node1 = device.createHandle(Config{BlinkMode{500}});
+        NodeHandle& node1 = device.createHandle(Config{true,BlinkMode{500}});
         std::this_thread::sleep_for(std::chrono::seconds(3));
 
         node1.dark();

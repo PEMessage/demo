@@ -47,11 +47,17 @@ void NodeDevice::update() {
 
     Config &config = nodes.back().getCurrentConfig();
 
+    if (config.enabled == false) {
+        stopTimer();
+        state_.write(false);
+        return;
+    }
+
     std::visit([&](auto&& arg) {
         using T = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<T, SwitchMode>) {
+        if constexpr (std::is_same_v<T, ConstMode>) {
             stopTimer();
-            state_.write(arg.isOn);
+            state_.write(true);
         } else if constexpr (std::is_same_v<T, BlinkMode>) {
             stopTimer();
             callback_ = [&]() {
