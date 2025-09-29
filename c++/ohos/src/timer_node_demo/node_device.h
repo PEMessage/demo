@@ -18,8 +18,9 @@ using namespace OHOS;
 class NodeHandle;
 
 class NodeDevice {
+DISALLOW_COPY_AND_MOVE(NodeDevice);
 public:
-    NodeDevice(std::string path, Utils::Timer &timer);
+    NodeDevice(const std::string& path, Utils::Timer &timer);
     ~NodeDevice();
     
     NodeHandle& createHandle(const Config& config);

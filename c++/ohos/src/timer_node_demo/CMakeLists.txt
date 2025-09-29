@@ -8,4 +8,11 @@ add_executable(app
     node_handle.cpp
     node_device.cpp
 )
+
+target_compile_options(app PRIVATE -fsanitize=address,leak,undefined)
+target_compile_options(app PRIVATE -fstack-protector)
+target_link_options(app PRIVATE -fsanitize=address)
+target_link_options(app PRIVATE -fsanitize=address,leak,undefined)
+target_link_options(app PRIVATE -fstack-protector)
+
 auto_target_link_libraries(app PRIVATE timer nocopyable)

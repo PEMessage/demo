@@ -3,7 +3,7 @@
 #include <iostream>
 #include <tuple>
 
-NodeDevice::NodeDevice(std::string path, Utils::Timer &timer):
+NodeDevice::NodeDevice(const std::string& path, Utils::Timer &timer):
     state_(path, false), timer_(timer) {
 }
 
