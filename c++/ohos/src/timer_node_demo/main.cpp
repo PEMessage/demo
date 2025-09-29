@@ -38,9 +38,7 @@ public:
 LogStream logger;
 
 int testNodePreemptive() {
-    logger << "===================" << endl;
-    logger << " testNodePreemptive" << endl;
-    logger << "===================" << endl;
+    logger << "==== testNodePreemptive" << endl;
     Utils::Timer timer("Timer");
     timer.Setup();
 
@@ -105,14 +103,38 @@ void testConfigSaveRestore() {
         node1.dark();
         assert(node1.device_->read() == true);
 
-        logger << "Now using system" << endl;
+        logger << "Now using system: should be dark" << endl;
         node1.switchSlot(NodeHandle::SYSTEM);
         assert(node1.device_->read() == false);
     }
     timer.Shutdown();
 }
 
+
+void testEnableDisable() {
+    logger << "==== testConfigSaveRestore" << endl;
+    Utils::Timer timer("Timer");
+    timer.Setup();
+    {
+        logger << "Now create device, enabled set to false, should not have [*]" << endl;
+        NodeDevice device(timer, "MockPath", false);
+
+        logger << "Now use blink to init handle" << endl;
+        NodeHandle& node1 = device.createHandle(Config{true,BlinkMode{500}});
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+
+        logger << "Now disable it" << endl;
+        node1.disable();
+
+        logger << "Now reenable it, should back to blink" << endl;
+        node1.enable();
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+    }
+    timer.Shutdown();
+}
+
 int main() {
+    testEnableDisable();
     // testConfigSaveRestore();
-    testNodePreemptive();
+    // testNodePreemptive();
 }
