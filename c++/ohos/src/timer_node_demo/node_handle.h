@@ -37,6 +37,9 @@ public:
     void light(SlotId id = SlotId::SYSTEM);
     void dark(SlotId id = SlotId::SYSTEM);
     void blink(uint32_t interval, SlotId id = SlotId::SYSTEM);
+
+    void enable(SlotId id = SlotId::SYSTEM);
+    void disable(SlotId id = SlotId::SYSTEM);
 };
 
 #endif // NODE_HANDLE_H

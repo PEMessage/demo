@@ -61,3 +61,21 @@ void NodeHandle::blink(uint32_t interval, SlotId id) {
 
     device_->update();
 }
+
+void NodeHandle::enable(SlotId id) {
+    Config& current = getConfig(id);
+    Config prev = current;
+    current.enabled = true;
+
+    if (prev == current) { return; }
+    device_->update();
+}
+
+void NodeHandle::disable(SlotId id) {
+    Config& current = getConfig(id);
+    Config prev = current;
+    current.enabled = false;
+
+    if (prev == current) { return; }
+    device_->update();
+}
