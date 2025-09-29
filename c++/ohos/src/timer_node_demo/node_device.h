@@ -20,7 +20,7 @@ class NodeHandle;
 class NodeDevice {
 DISALLOW_COPY_AND_MOVE(NodeDevice);
 public:
-    NodeDevice(const std::string& path, Utils::Timer &timer);
+    NodeDevice(Utils::Timer &timer, const std::string& path, bool enabled = true);
     ~NodeDevice();
     
     NodeHandle& createHandle(const Config& handle_defconfig);
@@ -29,12 +29,12 @@ public:
     bool read();
 
 private:
-    std::recursive_mutex m;
     State state_;
-    std::list<NodeHandle> nodes;
     Utils::Timer &timer_;
-    std::optional<uint32_t> timerid_;
 
+    std::recursive_mutex m;
+    std::list<NodeHandle> nodes;
+    std::optional<uint32_t> timerid_;
     std::function<void()> callback_;
 
     void stopTimer();

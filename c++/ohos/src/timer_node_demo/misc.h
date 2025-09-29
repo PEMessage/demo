@@ -61,9 +61,10 @@ struct State {
     std::optional<std::ofstream> file_;
 
     bool on_;
+    bool enabled_;
 
-    State(std::string path, bool on) : path_(path), file_(), on_(on) {
-        if(access(path_.c_str(), F_OK | W_OK) == 0)  {
+    State(std::string path, bool on, bool enabled) : path_(path), file_(), on_(on), enabled_(enabled) {
+        if(access(path_.c_str(), F_OK | W_OK) == 0 && enabled_)  {
             file_ = std::ofstream(path_);
             file_->setf(std::ios::unitbuf);
         }

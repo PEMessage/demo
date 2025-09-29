@@ -1,10 +1,11 @@
 #include "node_device.h"
 #include "node_handle.h"
 #include <iostream>
-#include <tuple>
 
-NodeDevice::NodeDevice(const std::string& path, Utils::Timer &timer):
-    state_(path, false), timer_(timer) {
+NodeDevice::NodeDevice(Utils::Timer &timer, const std::string& path,  bool enabled):
+    timer_(timer), state_(path, false, enabled),
+    m(), nodes(), timerid_(), callback_()
+{
 }
 
 NodeDevice::~NodeDevice() {

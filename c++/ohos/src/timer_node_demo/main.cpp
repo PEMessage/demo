@@ -15,7 +15,7 @@ int testNodePreemptive() {
     timer.Setup();
 
     {
-        NodeDevice device("MockPath", timer);
+        NodeDevice device(timer, "MockPath");
 
         // Create different nodes with different configurations
         NodeHandle& node1 = device.createHandle(Config{true,BlinkMode{200}});
@@ -55,7 +55,7 @@ void testConfigSaveRestore() {
     timer.Setup();
     {
         // use `watch --interval 0.1 cat MockPath`
-        NodeDevice device("MockPath", timer);
+        NodeDevice device(timer, "MockPath");
 
         NodeHandle& node1 = device.createHandle(Config{true,BlinkMode{500}});
         std::this_thread::sleep_for(std::chrono::seconds(3));
