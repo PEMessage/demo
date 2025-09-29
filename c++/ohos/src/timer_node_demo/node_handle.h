@@ -1,35 +1,40 @@
 #ifndef NODE_HANDLE_H
 #define NODE_HANDLE_H
 
+#include <optional>
+#include <vector>
+#include <array>
+
 #include "misc.h"
 #include "nocopyable.h"
-#include <optional>
 
 class NodeDevice;
 
 class NodeHandle {
-    DISALLOW_COPY_AND_MOVE(NodeHandle);
-    friend class NodeDevice;
+DISALLOW_COPY_AND_MOVE(NodeHandle);
+friend class NodeDevice;
     
-private:
-    Config config_;
-    std::optional<Config> savedconfig_;
+public:
+    enum SlotId {
+        SYSTEM = 0,
+        USER,
+        MAX_NUM,
+    };
 
-    Config& getConfig(bool isUser);
+private:
+    std::array<Config, SlotId::MAX_NUM> configs_;
+    SlotId current_;
+
+    Config& getCurrentConfig();
+    Config& getConfig(SlotId id);
 
 public:
     NodeDevice *device_;
     NodeHandle(NodeDevice *device, Config config);
-    
-    void save(Config config);
-    void save();
-    void restore();
-    bool isSaved();
-    void ensureSaved();
 
-    void light(bool isUser = false);
-    void dark(bool isUser = false);
-    void blink(uint32_t interval, bool isUser = false);
+    void light(SlotId id = SlotId::SYSTEM);
+    void dark(SlotId id = SlotId::SYSTEM);
+    void blink(uint32_t interval, SlotId id = SlotId::SYSTEM);
 };
 
 #endif // NODE_HANDLE_H

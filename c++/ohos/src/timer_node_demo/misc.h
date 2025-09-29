@@ -8,6 +8,13 @@
 #include <fstream>
 #include <unistd.h>
 
+struct InvalidMode {
+    // All InvalidMode equal to each other in value
+    bool operator==(const InvalidMode& other) const {
+        return true;
+    }
+};
+
 struct SwitchMode {
     bool isOn = false;
 
@@ -33,13 +40,16 @@ struct DutyMode {
     }
 };
 
-using Mode = std::variant<SwitchMode, BlinkMode, DutyMode>;
+using Mode = std::variant<InvalidMode, SwitchMode, BlinkMode, DutyMode>;
 
 struct Config {
     Mode mode;
 
     bool operator==(const Config& other) const {
         return mode == other.mode;
+    }
+    bool operator!=(const Config& other) const {
+        return !(*this == other);
     }
 };
 

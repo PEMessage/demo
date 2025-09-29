@@ -23,7 +23,7 @@ public:
     NodeDevice(const std::string& path, Utils::Timer &timer);
     ~NodeDevice();
     
-    NodeHandle& createHandle(const Config& config);
+    NodeHandle& createHandle(const Config& handle_defconfig);
     void deleteHandle(NodeHandle &node);
     void update();
     bool read();

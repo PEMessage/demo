@@ -66,23 +66,23 @@ void testConfigSaveRestore() {
         node1.light();
         std::this_thread::sleep_for(std::chrono::seconds(3));
 
-        node1.save();
+        // node1.save();
         node1.dark();
         std::this_thread::sleep_for(std::chrono::seconds(3));
-        assert(node1.device_->read() == true);
+        // assert(node1.device_->read() == true);
 
         cout << "Now using user" << endl;
         node1.light();
-        node1.dark(true);
-        assert(node1.device_->read() == false);
+        node1.dark(NodeHandle::SYSTEM);
+        // assert(node1.device_->read() == false);
 
-        node1.restore();
-        assert(node1.device_->read() == true);
+        // node1.restore();
+        // assert(node1.device_->read() == true);
     }
     timer.Shutdown();
 }
 
 int main() {
-    // testConfigSaveRestore();
-    testNodePreemptive();
+    testConfigSaveRestore();
+    // testNodePreemptive();
 }

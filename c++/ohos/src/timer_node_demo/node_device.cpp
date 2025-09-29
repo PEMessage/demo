@@ -11,10 +11,10 @@ NodeDevice::~NodeDevice() {
     stopTimer();
 }
 
-NodeHandle& NodeDevice::createHandle(const Config& config) {
+NodeHandle& NodeDevice::createHandle(const Config& handle_defconfig) {
     std::lock_guard<std::recursive_mutex> lk(m);
 
-    NodeHandle& node = nodes.emplace_back(this, config);
+    NodeHandle& node = nodes.emplace_back(this, handle_defconfig);
 
     update();
     return node;
@@ -45,7 +45,7 @@ void NodeDevice::update() {
         return;
     }
 
-    Config &config = nodes.back().config_;
+    Config &config = nodes.back().getCurrentConfig();
 
     std::visit([&](auto&& arg) {
         using T = std::decay_t<decltype(arg)>;
