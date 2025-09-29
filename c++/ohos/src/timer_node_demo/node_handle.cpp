@@ -2,8 +2,9 @@
 #include "node_device.h"
 #include <assert.h>
 
-NodeHandle::NodeHandle(NodeDevice *device, Config config): device_(device),
+NodeHandle::NodeHandle(NodeDevice *device, const InitOpts& opts): device_(device),
     configs_(), current_(SlotId::SYSTEM) {
+    const Config& config = opts; // at now, Config same as InitOpts
     configs_[SlotId::SYSTEM] = config;
 }
 

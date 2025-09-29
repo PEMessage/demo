@@ -15,6 +15,7 @@ DISALLOW_COPY_AND_MOVE(NodeHandle);
 friend class NodeDevice;
     
 public:
+    using InitOpts = Config;
     enum SlotId {
         SYSTEM = 0,
         USER,
@@ -29,7 +30,7 @@ private:
 
 public:
     NodeDevice *device_;
-    NodeHandle(NodeDevice *device, Config config);
+    NodeHandle(NodeDevice *device, const InitOpts& opts);
 
     Config& getConfig(SlotId id);
     void switchSlot(SlotId id);

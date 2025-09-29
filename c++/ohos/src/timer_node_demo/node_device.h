@@ -20,9 +20,14 @@ class NodeHandle;
 class NodeDevice {
 DISALLOW_COPY_AND_MOVE(NodeDevice);
 public:
+    struct InitOpts {
+        std::string path;
+        bool enabled;
+    };
+    NodeDevice(Utils::Timer &timer, const InitOpts& opts) : NodeDevice(timer, opts.path, opts.enabled) {};
     NodeDevice(Utils::Timer &timer, const std::string& path, bool enabled = true);
     ~NodeDevice();
-    
+
     NodeHandle& createHandle(const Config& handle_defconfig);
     void deleteHandle(NodeHandle &node);
     void update();
