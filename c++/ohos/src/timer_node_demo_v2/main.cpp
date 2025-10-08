@@ -6,6 +6,7 @@
 #include "misc.h"
 #include "node_device.h"
 #include "node_devices.h"
+#include "node_handles.h"
 #include "timer.h"
 using namespace std;
 
@@ -57,6 +58,33 @@ void testDevice() {
     timer.Shutdown();
 }
 
+void testHandles() {
+    logger << "==== testHandles" << endl;
+    Utils::Timer timer("Timer");
+    timer.Setup();
+
+    NodeDevice dev {timer, NodeDevice::InitOpts{.name = "MockName" , .path = "MockPath", .enabled = false }};
+    {
+        logger << "Handle init with blink" << endl;
+        NodeHandles handles {dev};
+        NodeHandle& handle1 = handles.createHandle(Mode{.enabled = true, .submode = BlinkMode{.interval = 500}});
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+
+        logger << "Handle set user slot to Const" << endl;
+        handle1.setMode(NodeHandle::USER, Mode{.enabled = true, .submode = ConstMode{}});
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+
+        logger << "Handle switch Slot" << endl;
+        handle1.switchSlot(NodeHandle::USER);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+
+        logger << "Handle delete" << endl;
+        handles.deleteHandle(handle1);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    timer.Shutdown();
+}
+
 void testDevices() {
     logger << "==== testDevices" << endl;
     NodeDevices devs {
@@ -89,7 +117,9 @@ void testDevices() {
 
 }
 
+
 int main() {
     // testDevice();
-    testDevices();
+    testHandles();
+    // testDevices();
 }

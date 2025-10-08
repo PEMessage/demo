@@ -5,6 +5,9 @@ include("../../include.cmake")
 
 add_executable(app
     main.cpp
+    node_handle.cpp
+    node_handles.cpp
+
 )
 
 target_compile_options(app PRIVATE -fsanitize=address,leak,undefined)

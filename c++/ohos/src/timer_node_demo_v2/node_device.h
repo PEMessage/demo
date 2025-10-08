@@ -49,6 +49,10 @@ public:
         stopTimer();
     }
 
+    inline Mode& getMode() {
+        return mode_;
+    }
+
     inline void set(Mode mode) {
         mode_ = mode;
     }
