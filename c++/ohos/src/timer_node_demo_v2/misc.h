@@ -16,12 +16,22 @@ struct InvalidMode {
     bool operator!=(const InvalidMode& other) const { return !(*this == other); }
 };
 
+inline std::ostream& operator<<(std::ostream& out, const InvalidMode& v) {
+  out << "InvalidMode{}";
+  return out;
+}
+
 struct ConstMode {
     bool operator==(const ConstMode& other) const {
         return true;
     }
     bool operator!=(const ConstMode& other) const { return !(*this == other); }
 };
+
+inline std::ostream& operator<<(std::ostream& out, const ConstMode& v) {
+  out << "ConstMode{}";
+  return out;
+}
 
 struct BlinkMode {
     uint32_t interval = 0;
@@ -31,6 +41,13 @@ struct BlinkMode {
     }
     bool operator!=(const BlinkMode& other) const { return !(*this == other); }
 };
+
+inline std::ostream& operator<<(std::ostream& out, const BlinkMode& v) {
+  out << "BlinkMode{"
+        << "interval="  << v.interval
+        << "}";
+  return out;
+}
 
 struct DutyMode {
     uint32_t interval = 0;
@@ -42,7 +59,24 @@ struct DutyMode {
     bool operator!=(const DutyMode& other) const { return !(*this == other); }
 };
 
+inline std::ostream& operator<<(std::ostream& out, const DutyMode& v) {
+  out << "DutyMode{"
+        << "interval="  << v.interval << ","
+        << "duty="  << v.duty << ","
+        << "}";
+  return out;
+}
+
 using SubMode = std::variant<InvalidMode, ConstMode, BlinkMode, DutyMode>;
+
+inline std::ostream& operator<<(std::ostream& out, const SubMode& v) {
+    std::visit([&out](const auto& mode) {
+        using T = std::decay_t<decltype(mode)>;
+        out << mode;
+    }, v);
+
+    return out;
+}
 
 struct Mode {
     bool enabled;
@@ -55,6 +89,15 @@ struct Mode {
         return !(*this == other);
     }
 };
+
+inline std::ostream& operator<<(std::ostream& out, const Mode& v) {
+  out << "Mode{"
+        << "enabled="  << v.enabled  << ","
+        << "submode="  << v.submode
+        << "}";
+  return out;
+}
+
 
 struct State {
     std::string path_;
