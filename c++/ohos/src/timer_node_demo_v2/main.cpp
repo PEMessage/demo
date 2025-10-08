@@ -78,6 +78,22 @@ void testHandles() {
         handle1.switchSlot(NodeHandle::USER);
         std::this_thread::sleep_for(std::chrono::seconds(1));
 
+        logger << "Handle enable, should no change" << endl;
+        handle1.enable(NodeHandle::USER);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+
+        logger << "Handle disable System, should do nothing" << endl;
+        handle1.disable(NodeHandle::SYSTEM);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+
+        logger << "Handle switch System, should do disable blink" << endl;
+        handle1.switchSlot(NodeHandle::SYSTEM);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+
+        logger << "Handle enable System, should do enable blink" << endl;
+        handle1.enable(NodeHandle::SYSTEM);
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+
         logger << "Handle delete" << endl;
         handles.deleteHandle(handle1);
         std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -122,14 +138,15 @@ void testDevices() {
     }
     std::this_thread::sleep_for(std::chrono::seconds(3));
 
-    logger << "Handle set to ConstMode" << endl;
+    logger << "Only Keep MockName1, and disable another" << endl;
     for (auto handle : handles_group1) {
         if (handle.get().name() == "MockName1") {
-            handle.get().setMode(NodeHandle::SYSTEM, Mode{true, ConstMode{}});
+            handle.get().enable(NodeHandle::SYSTEM);
         } else {
-            handle.get().setMode(NodeHandle::SYSTEM, Mode{false, ConstMode{}});
+            handle.get().disable(NodeHandle::SYSTEM);
         }
     }
+    std::this_thread::sleep_for(std::chrono::seconds(3));
 
 
 }

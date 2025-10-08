@@ -31,6 +31,11 @@ public:
     Mode& getMode(SlotId id);
     void switchSlot(SlotId id);
     void setMode(SlotId id, const Mode& mode);
+
+    void enable(SlotId id);
+    void disable(SlotId id);
+    void toggle(SlotId id);
+
     NodeHandles* getHandles();
     std::string name();
 

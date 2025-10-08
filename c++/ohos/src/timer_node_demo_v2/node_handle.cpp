@@ -29,6 +29,21 @@ void NodeHandle::setMode(SlotId id, const Mode& mode) {
     handles_->update();
 }
 
+void NodeHandle::enable(SlotId id) {
+    modes_[id].enabled = true;
+    handles_->update();
+}
+
+void NodeHandle::disable(SlotId id) {
+    modes_[id].enabled = false;
+    handles_->update();
+}
+
+void NodeHandle::toggle(SlotId id) {
+    modes_[id].enabled = !modes_[id].enabled;
+    handles_->update();
+}
+
 
 NodeHandles* NodeHandle::getHandles() {
     return handles_;
