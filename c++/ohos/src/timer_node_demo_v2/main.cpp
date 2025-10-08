@@ -5,6 +5,7 @@
 
 #include "misc.h"
 #include "node_device.h"
+#include "node_devices.h"
 #include "timer.h"
 using namespace std;
 
