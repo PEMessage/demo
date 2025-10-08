@@ -9,7 +9,7 @@
 class NodeHandles;
 
 class NodeHandle {
-DISALLOW_COPY(NodeHandle);
+DISALLOW_COPY_AND_MOVE(NodeHandle);
 
 public:
     using InitOpts = Mode;
