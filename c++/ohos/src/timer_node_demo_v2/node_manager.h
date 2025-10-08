@@ -1,5 +1,5 @@
-#ifndef NODE_DEVICES_H
-#define NODE_DEVICES_H
+#ifndef NODE_MANAGER_H
+#define NODE_MANAGER_H
 
 #include "node_device.h"
 #include "node_handles.h"

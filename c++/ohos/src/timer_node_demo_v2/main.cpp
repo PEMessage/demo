@@ -5,7 +5,7 @@
 
 #include "misc.h"
 #include "node_device.h"
-#include "node_devices.h"
+#include "node_manager.h"
 #include "node_handles.h"
 #include "timer.h"
 using namespace std;
@@ -122,8 +122,13 @@ void testDevices() {
     }
     std::this_thread::sleep_for(std::chrono::seconds(3));
 
+    logger << "Handle set to ConstMode" << endl;
     for (auto handle : handles_group1) {
-        handle.get().getHandles();
+        if (handle.get().name() == "MockName1") {
+            handle.get().setMode(NodeHandle::SYSTEM, Mode{true, ConstMode{}});
+        } else {
+            handle.get().setMode(NodeHandle::SYSTEM, Mode{false, ConstMode{}});
+        }
     }
 
 
