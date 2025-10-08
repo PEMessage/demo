@@ -26,7 +26,7 @@ private:
     Utils::Timer &timer_;
     std::optional<uint32_t> timerid_;
     std::function<void()> callback_;
-    inline void stopTimer() {
+    void stopTimer() {
         if(!timerid_) { return; };
         timer_.Unregister(*timerid_);
         timerid_.reset();
@@ -39,7 +39,7 @@ public:
         bool enabled;
     };
 
-    inline NodeDevice(Utils::Timer &timer, InitOpts opts):
+    NodeDevice(Utils::Timer &timer, InitOpts opts):
         name_(opts.name),
         m(),
         state_(opts.path, false, opts.enabled),
@@ -49,19 +49,19 @@ public:
         callback_()
     {}
 
-    inline ~NodeDevice() {
+    ~NodeDevice() {
         stopTimer();
     }
 
-    inline Mode& getMode() {
+    Mode& getMode() {
         return mode_;
     }
 
-    inline void setMode(Mode mode) {
+    void setMode(Mode mode) {
         mode_ = mode;
     }
 
-    inline void update() {
+    void update() {
         std::lock_guard<std::recursive_mutex> lk(m);
 
         // std::cout << mode_ << std::endl;
