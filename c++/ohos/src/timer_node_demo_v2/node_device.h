@@ -9,7 +9,6 @@
 #include "misc.h"
 
 
-
 using namespace OHOS;
 
 class NodeDevice {
@@ -57,6 +56,7 @@ public:
     inline void update() {
         std::lock_guard<std::recursive_mutex> lk(m);
 
+        // std::cout << mode_ << std::endl;
         if (mode_.enabled == false) {
             stopTimer();
             state_.write(false);
@@ -64,22 +64,22 @@ public:
         }
 
         std::visit([&](auto&& arg) {
-                using T = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_same_v<T, ConstMode>) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, ConstMode>) {
                 stopTimer();
                 state_.write(true);
-                } else if constexpr (std::is_same_v<T, BlinkMode>) {
+            } else if constexpr (std::is_same_v<T, BlinkMode>) {
                 stopTimer();
                 callback_ = [&]() {
-                std::lock_guard<std::recursive_mutex> lk(m);
-                // Unregister not ensure that happen after all callback, extra check is need.
-                // See: https://gitee.com/openharmony/commonlibrary_c_utils/blob/master/docs/zh-cn/c_utils_timer.md#典型案例
-                if(!timerid_) { return; }
+                    std::lock_guard<std::recursive_mutex> lk(m);
+                    // Unregister not ensure that happen after all callback, extra check is need.
+                    // See: https://gitee.com/openharmony/commonlibrary_c_utils/blob/master/docs/zh-cn/c_utils_timer.md#典型案例
+                    if(!timerid_) { return; }
 
-                state_.toggle();
+                    state_.toggle();
                 };
                 timerid_ = timer_.Register(callback_, arg.interval, false);
-                } else if constexpr (std::is_same_v<T, DutyMode>) {
+            } else if constexpr (std::is_same_v<T, DutyMode>) {
                 stopTimer();
                 uint32_t first_interval = arg.interval * arg.duty / 100;
                 uint32_t second_interval = arg.interval - first_interval;
@@ -97,9 +97,9 @@ public:
                     }
                 };
                 timerid_ = timer_.Register(callback_, first_interval, true); // first kick
-                } else {
-                    std::cout << "Unknow Mode" << std::endl;
-                }
+            } else {
+                std::cout << "Unknow Mode" << std::endl;
+            }
         }, mode_.submode);
 
     }
