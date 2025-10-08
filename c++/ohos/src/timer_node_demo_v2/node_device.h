@@ -18,6 +18,7 @@ class NodeDevice {
 private:
     std::recursive_mutex m;
 
+    std::string name;
     State state_;
     Config config_;
 
@@ -32,6 +33,7 @@ private:
 
 public:
     struct InitOpts {
+        std::string name;
         std::string path;
         bool enabled;
     };

@@ -44,7 +44,7 @@ void testDevice() {
     Utils::Timer timer("Timer");
     timer.Setup();
 
-    NodeDevice dev {timer, NodeDevice::InitOpts{ .path = "MockPath", .enabled = false }};
+    NodeDevice dev {timer, NodeDevice::InitOpts{.name = "MockName" , .path = "MockPath", .enabled = false }};
     {
         dev.set(Config{.enabled = true, .mode = BlinkMode{.interval = 500}}); 
         dev.update();
