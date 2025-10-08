@@ -20,7 +20,7 @@ private:
 
     std::string name;
     State state_;
-    Config config_;
+    Mode mode_;
 
     Utils::Timer &timer_;
     std::optional<uint32_t> timerid_;
@@ -40,7 +40,7 @@ public:
 
     inline NodeDevice(Utils::Timer &timer, InitOpts opts): m(),
         state_(opts.path, false, opts.enabled),
-        config_(Config{.enabled = true, .mode = InvalidMode{}}),
+        mode_(Mode{.enabled = true, .submode = InvalidMode{}}),
         timer_(timer),
         timerid_(),
         callback_()
@@ -50,14 +50,14 @@ public:
         stopTimer();
     }
 
-    inline void set(Config config) {
-        config_ = config;
+    inline void set(Mode mode) {
+        mode_ = mode;
     }
 
     inline void update() {
         std::lock_guard<std::recursive_mutex> lk(m);
 
-        if (config_.enabled == false) {
+        if (mode_.enabled == false) {
             stopTimer();
             state_.write(false);
             return;
@@ -100,7 +100,7 @@ public:
                 } else {
                     std::cout << "Unknow Mode" << std::endl;
                 }
-        }, config_.mode);
+        }, mode_.submode);
 
     }
 

@@ -46,11 +46,11 @@ void testDevice() {
 
     NodeDevice dev {timer, NodeDevice::InitOpts{.name = "MockName" , .path = "MockPath", .enabled = false }};
     {
-        dev.set(Config{.enabled = true, .mode = BlinkMode{.interval = 500}}); 
+        dev.set(Mode{.enabled = true, .submode = BlinkMode{.interval = 500}}); 
         dev.update();
         std::this_thread::sleep_for(std::chrono::seconds(5));
 
-        dev.set(Config{.enabled = true, .mode = DutyMode{.interval = 300, .duty = 90}}); 
+        dev.set(Mode{.enabled = true, .submode = DutyMode{.interval = 300, .duty = 90}}); 
         dev.update();
         std::this_thread::sleep_for(std::chrono::seconds(3));
     }

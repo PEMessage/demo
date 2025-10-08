@@ -42,16 +42,16 @@ struct DutyMode {
     bool operator!=(const DutyMode& other) const { return !(*this == other); }
 };
 
-using Mode = std::variant<InvalidMode, ConstMode, BlinkMode, DutyMode>;
+using SubMode = std::variant<InvalidMode, ConstMode, BlinkMode, DutyMode>;
 
-struct Config {
+struct Mode {
     bool enabled;
-    Mode mode;
+    SubMode submode;
 
-    bool operator==(const Config& other) const {
-        return mode == other.mode && enabled == other.enabled;
+    bool operator==(const Mode& other) const {
+        return submode == other.submode && enabled == other.enabled;
     }
-    bool operator!=(const Config& other) const {
+    bool operator!=(const Mode& other) const {
         return !(*this == other);
     }
 };
