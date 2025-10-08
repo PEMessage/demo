@@ -2,14 +2,27 @@
 #define NODE_DEVICES_H
 
 #include "node_device.h"
+#include "node_handles.h"
+#include "node_handle.h"
 using namespace OHOS;
 
 class NodeDevices {
 DISALLOW_COPY_AND_MOVE(NodeDevices);
 
 public:
-    using Item = std::pair<NodeDevice, Mode>;
-    using Container = std::list<Item>;
+    struct Item {
+        NodeDevice dev_;
+        NodeHandles handles_;
+        Mode defmode_;
+
+        Item(Utils::Timer &timer, NodeDevice::InitOpts opt, Mode defmode):
+            dev_(timer, opt),
+            handles_(dev_),
+            defmode_(defmode)
+        {}
+    };
+
+    using Items = std::list<Item>;
 
     struct InitOpts {
         NodeDevice::InitOpts devopts; // device init opts
@@ -18,27 +31,19 @@ public:
 
     std::vector<std::reference_wrapper<NodeDevice>> allDevices() {
         std::vector<std::reference_wrapper<NodeDevice>> result;
-        for (auto& item : container_) {
-            result.push_back(std::ref(item.first));
+        for (auto& item : itmes_) {
+            result.push_back(std::ref(item.dev_));
         }
         return result;
     }
-    Container& getContainer() { return container_; }
 
-    NodeDevices(const std::initializer_list<InitOpts>& opts) : timer_("TimerDaemon"), container_() {
+    Items& allItems() { return itmes_; }
+
+    NodeDevices(const std::initializer_list<InitOpts>& opts) : timer_("TimerDaemon"), itmes_() {
         timer_.Setup();
 
         for (InitOpts opt : opts) {
-            Item &item = container_.emplace_back(std::piecewise_construct,
-                                    std::forward_as_tuple(timer_, opt.devopts),
-                                    std::forward_as_tuple(opt.mode)
-            );
-            item.first.set(opt.mode);
-        }
-
-        for (auto dev_ref : allDevices()) {
-            NodeDevice &dev = dev_ref.get();
-            dev.update();
+            Item &item = itmes_.emplace_back(timer_, opt.devopts, opt.mode);
         }
 
     }
@@ -49,7 +54,7 @@ public:
 
 private:
     Utils::Timer timer_;
-    Container container_;
+    Items itmes_;
 };
 
 

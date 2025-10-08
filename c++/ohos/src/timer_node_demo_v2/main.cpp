@@ -120,6 +120,6 @@ void testDevices() {
 
 int main() {
     // testDevice();
-    testHandles();
-    // testDevices();
+    // testHandles();
+    testDevices();
 }
