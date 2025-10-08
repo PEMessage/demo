@@ -61,11 +61,31 @@ void testDevices() {
     logger << "==== testDevices" << endl;
     NodeDevices devs {
         NodeDevices::InitOpts{
-            .devopts = {"MockName", "MockPath", false},
+            .devopts = {"MockName1", "MockPath1", false},
             .mode = Mode{true, BlinkMode{.interval = 500}}
+        },
+        NodeDevices::InitOpts{
+            .devopts = {"MockName2", "MockPath2", false},
+            .mode = Mode{true, DutyMode{.interval = 500, .duty = 90}}
         },
     };
     std::this_thread::sleep_for(std::chrono::seconds(3));
+
+    logger << "ConstMode on all devs" << endl;
+    for (auto dev_ref : devs.allDevices()) {
+        NodeDevice &dev = dev_ref.get();
+        dev.set(Mode{true, ConstMode{}});
+        dev.update();
+    }
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+
+
+    logger << "ConstMode off all devs" << endl;
+    for (auto dev_ref : devs.allDevices()) {
+        NodeDevice &dev = dev_ref.get();
+        dev.set(Mode{false, ConstMode{}});
+        dev.update();
+    }
 
 }
 
