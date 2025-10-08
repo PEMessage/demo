@@ -57,6 +57,19 @@ void testDevice() {
     timer.Shutdown();
 }
 
+void testDevices() {
+    logger << "==== testDevices" << endl;
+    NodeDevices devs {
+        NodeDevices::InitOpts{
+            .devopts = {"MockName", "MockPath", false},
+            .mode = Mode{true, BlinkMode{.interval = 500}}
+        },
+    };
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+
+}
+
 int main() {
-    testDevice();
+    // testDevice();
+    testDevices();
 }
