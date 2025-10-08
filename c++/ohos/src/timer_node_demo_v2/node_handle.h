@@ -26,11 +26,13 @@ private:
 
 public:
     NodeHandle(NodeHandles* handles, const InitOpts& opts);
-    
+
     Mode& getCurrentMode();
     Mode& getMode(SlotId id);
     void switchSlot(SlotId id);
     void setMode(SlotId id, const Mode& mode);
+    NodeHandles* getHandles();
+
 };
 
 #endif

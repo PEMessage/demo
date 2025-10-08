@@ -28,3 +28,8 @@ void NodeHandle::setMode(SlotId id, const Mode& mode) {
     modes_[id] = mode;
     handles_->update();
 }
+
+
+NodeHandles* NodeHandle::getHandles() {
+    return handles_;
+}
