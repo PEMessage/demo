@@ -32,6 +32,7 @@ public:
     void switchSlot(SlotId id);
     void setMode(SlotId id, const Mode& mode);
     NodeHandles* getHandles();
+    std::string name();
 
 };
 

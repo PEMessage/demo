@@ -47,11 +47,11 @@ void testDevice() {
 
     NodeDevice dev {timer, NodeDevice::InitOpts{.name = "MockName" , .path = "MockPath", .enabled = false }};
     {
-        dev.set(Mode{.enabled = true, .submode = BlinkMode{.interval = 500}}); 
+        dev.setMode(Mode{.enabled = true, .submode = BlinkMode{.interval = 500}}); 
         dev.update();
         std::this_thread::sleep_for(std::chrono::seconds(5));
 
-        dev.set(Mode{.enabled = true, .submode = DutyMode{.interval = 300, .duty = 90}}); 
+        dev.setMode(Mode{.enabled = true, .submode = DutyMode{.interval = 300, .duty = 90}}); 
         dev.update();
         std::this_thread::sleep_for(std::chrono::seconds(3));
     }
@@ -87,22 +87,22 @@ void testHandles() {
 
 void testDevices() {
     logger << "==== testDevices" << endl;
-    NodeDevices devs {
-        NodeDevices::InitOpts{
+    NodeManager devs {
+        NodeManager::InitOpts{
             .devopts = {"MockName1", "MockPath1", false},
             .mode = Mode{true, BlinkMode{.interval = 500}}
         },
-        NodeDevices::InitOpts{
+        NodeManager::InitOpts{
             .devopts = {"MockName2", "MockPath2", false},
             .mode = Mode{true, DutyMode{.interval = 500, .duty = 90}}
         },
     };
-    std::this_thread::sleep_for(std::chrono::seconds(3));
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 
     logger << "ConstMode on all devs" << endl;
     for (auto dev_ref : devs.allDevices()) {
         NodeDevice &dev = dev_ref.get();
-        dev.set(Mode{true, ConstMode{}});
+        dev.setMode(Mode{true, ConstMode{}});
         dev.update();
     }
     std::this_thread::sleep_for(std::chrono::seconds(3));
@@ -111,9 +111,21 @@ void testDevices() {
     logger << "ConstMode off all devs" << endl;
     for (auto dev_ref : devs.allDevices()) {
         NodeDevice &dev = dev_ref.get();
-        dev.set(Mode{false, ConstMode{}});
+        dev.setMode(Mode{false, ConstMode{}});
         dev.update();
     }
+
+    logger << "Create handles group" << endl;
+    std::list<std::reference_wrapper<NodeHandle>> handles_group1 {};
+    for (auto& item : devs.allItems()) {
+        handles_group1.emplace_back(item.createHandle());
+    }
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+
+    for (auto handle : handles_group1) {
+        handle.get().getHandles();
+    }
+
 
 }
 

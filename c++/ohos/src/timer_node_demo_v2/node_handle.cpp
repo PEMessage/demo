@@ -33,3 +33,7 @@ void NodeHandle::setMode(SlotId id, const Mode& mode) {
 NodeHandles* NodeHandle::getHandles() {
     return handles_;
 }
+
+std::string NodeHandle::name() {
+    return handles_->dev_.name_;
+}

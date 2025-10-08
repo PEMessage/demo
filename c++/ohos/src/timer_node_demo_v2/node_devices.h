@@ -6,8 +6,8 @@
 #include "node_handle.h"
 using namespace OHOS;
 
-class NodeDevices {
-DISALLOW_COPY_AND_MOVE(NodeDevices);
+class NodeManager {
+DISALLOW_COPY_AND_MOVE(NodeManager);
 
 public:
     struct Item {
@@ -53,7 +53,7 @@ public:
 
 
 
-    NodeDevices(const std::initializer_list<InitOpts>& opts) : timer_("TimerDaemon"), itmes_() {
+    NodeManager(const std::initializer_list<InitOpts>& opts) : timer_("TimerDaemon"), itmes_() {
         timer_.Setup();
 
         for (InitOpts opt : opts) {
@@ -62,7 +62,7 @@ public:
 
     }
 
-    ~NodeDevices() {
+    ~NodeManager() {
         timer_.Shutdown();
     }
 

@@ -5,6 +5,8 @@
 #include "node_handle.h"
 
 class NodeHandles {
+friend class NodeHandle;
+
 DISALLOW_COPY_AND_MOVE(NodeHandles);
 private:
     NodeDevice& dev_;

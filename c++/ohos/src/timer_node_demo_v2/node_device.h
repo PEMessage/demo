@@ -14,10 +14,12 @@ using namespace OHOS;
 class NodeDevice {
     DISALLOW_COPY(NodeDevice);
 
+public: 
+    const std::string name_;
+
 private:
     std::recursive_mutex m;
 
-    std::string name;
     State state_;
     Mode mode_;
 
@@ -37,7 +39,9 @@ public:
         bool enabled;
     };
 
-    inline NodeDevice(Utils::Timer &timer, InitOpts opts): m(),
+    inline NodeDevice(Utils::Timer &timer, InitOpts opts):
+        name_(opts.name),
+        m(),
         state_(opts.path, false, opts.enabled),
         mode_(Mode{.enabled = true, .submode = InvalidMode{}}),
         timer_(timer),
@@ -53,7 +57,7 @@ public:
         return mode_;
     }
 
-    inline void set(Mode mode) {
+    inline void setMode(Mode mode) {
         mode_ = mode;
     }
 

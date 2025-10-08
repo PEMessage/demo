@@ -20,7 +20,7 @@ void NodeHandles::deleteHandle(NodeHandle& handle) {
 
 void NodeHandles::update() {
     if (handles_.empty()) {
-        dev_.set(Mode{}); // reset to default `Mode{enabled=0,submode=InvalidMode{}}`
+        dev_.setMode(Mode{}); // reset to default `Mode{enabled=0,submode=InvalidMode{}}`
         dev_.update();
         return;
     }
@@ -30,7 +30,7 @@ void NodeHandles::update() {
 
     if (current == next) {return;}
 
-    dev_.set(next);
+    dev_.setMode(next);
     dev_.update();
 }
 
