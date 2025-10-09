@@ -147,13 +147,27 @@ void testDevices() {
         }
     }
     std::this_thread::sleep_for(std::chrono::seconds(3));
+}
 
+std::initializer_list<NodeManager::InitOpts> generateLightOpts() {
+    // std::initializer_list is not value type, Do not return on stack one
+    auto res =  std::initializer_list<NodeManager::InitOpts>{
+        NodeManager::InitOpts{
+            .devopts = {"MockName1", "MockPath1", false},
+            .mode = Mode{true, BlinkMode{.interval = 500}}
+        },
+    };
+    return res;
+}
 
+void testErrorInitWay() {
+    NodeManager devs(generateLightOpts()); // THIS WILL CASUSE ERROR
 }
 
 
 int main() {
-    // testDevice();
-    // testHandles();
+    testDevice();
+    testHandles();
     testDevices();
+    // testErrorInitWay();
 }
