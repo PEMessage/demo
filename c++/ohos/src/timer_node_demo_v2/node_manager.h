@@ -48,7 +48,7 @@ public:
 
 private:
     Utils::Timer timer_;
-    Items itmes_;
+    Items items_;
 };
 
 } // namespace Node

@@ -19,21 +19,21 @@ void NodeManager::Item::deleteHandle(NodeHandle& handle) {
 
 std::vector<std::reference_wrapper<NodeDevice>> NodeManager::allDevices() {
     std::vector<std::reference_wrapper<NodeDevice>> result;
-    for (auto& item : itmes_) {
+    for (auto& item : items_) {
         result.push_back(std::ref(item.dev_));
     }
     return result;
 }
 
 NodeManager::Items& NodeManager::allItems() { 
-    return itmes_; 
+    return items_; 
 }
 
-NodeManager::NodeManager(const std::initializer_list<InitOpts>& opts) : timer_("TimerDaemon"), itmes_() {
+NodeManager::NodeManager(const std::initializer_list<InitOpts>& opts) : timer_("TimerDaemon"), items_() {
     timer_.Setup();
 
     for (InitOpts opt : opts) {
-        Item &item = itmes_.emplace_back(timer_, opt.devopts, opt.mode);
+        Item &item = items_.emplace_back(timer_, opt.devopts, opt.mode);
     }
 
 }
