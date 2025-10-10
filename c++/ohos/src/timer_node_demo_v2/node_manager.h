@@ -4,6 +4,10 @@
 #include "node_device.h"
 #include "node_handles.h"
 #include "node_handle.h"
+#include "misc.h"
+
+namespace Node {
+
 using namespace OHOS;
 
 class NodeManager {
@@ -17,19 +21,11 @@ public:
         NodeHandles handles_;
         Mode defmode_;
 
-        Item(Utils::Timer &timer, const NodeDevice::InitOpts& opt, const Mode& defmode):
-            dev_(timer, opt),
-            handles_(dev_),
-            defmode_(defmode)
-        {}
+        Item(Utils::Timer &timer, const NodeDevice::InitOpts& opt, const Mode& defmode);
 
-        NodeHandle& createHandle() {
-            return handles_.createHandle(defmode_);
-        }
+        NodeHandle& createHandle();
 
-        void deleteHandle(NodeHandle& handle) {
-            handles_.deleteHandle(handle);
-        }
+        void deleteHandle(NodeHandle& handle);
     };
 
 
@@ -41,35 +37,20 @@ public:
         Mode mode;
     };
 
-    std::vector<std::reference_wrapper<NodeDevice>> allDevices() {
-        std::vector<std::reference_wrapper<NodeDevice>> result;
-        for (auto& item : itmes_) {
-            result.push_back(std::ref(item.dev_));
-        }
-        return result;
-    }
-
-    Items& allItems() { return itmes_; }
+    std::vector<std::reference_wrapper<NodeDevice>> allDevices();
+    Items& allItems();
 
 
 
-    NodeManager(const std::initializer_list<InitOpts>& opts) : timer_("TimerDaemon"), itmes_() {
-        timer_.Setup();
+    NodeManager(const std::initializer_list<InitOpts>& opts);
 
-        for (InitOpts opt : opts) {
-            Item &item = itmes_.emplace_back(timer_, opt.devopts, opt.mode);
-        }
-
-    }
-
-    ~NodeManager() {
-        timer_.Shutdown();
-    }
+    ~NodeManager();
 
 private:
     Utils::Timer timer_;
     Items itmes_;
 };
 
+} // namespace Node
 
 #endif // NODE_DEVICES_H

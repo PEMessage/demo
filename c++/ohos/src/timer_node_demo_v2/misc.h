@@ -8,6 +8,8 @@
 #include <fstream>
 #include <unistd.h>
 
+namespace Node {
+
 struct InvalidMode {
     // All InvalidMode equal to each other in value
     bool operator==(const InvalidMode& other) const {
@@ -135,5 +137,7 @@ struct State {
     }
     bool read() { return on_; }
 };
+
+} // namespace Node
 
 #endif // MISC_H

@@ -1,5 +1,7 @@
 #include "node_handles.h"
 
+namespace Node {
+
 NodeHandle& NodeHandles::createHandle(const Mode& defmode) {
     NodeHandle& handle = handles_.emplace_back(this, defmode);
 
@@ -34,7 +36,7 @@ void NodeHandles::update() {
     dev_.update();
 }
 
-
+} // namespace Node
 
 
 

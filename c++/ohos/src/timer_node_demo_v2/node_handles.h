@@ -3,6 +3,9 @@
 
 #include "node_device.h"
 #include "node_handle.h"
+#include "misc.h"
+
+namespace Node {
 
 class NodeHandles {
 friend class NodeHandle;
@@ -22,5 +25,6 @@ public:
     void update();
 };
 
+} // namespace Node
 
 #endif

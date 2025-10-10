@@ -6,6 +6,8 @@
 #include "nocopyable.h"
 #include "misc.h"
 
+namespace Node {
+
 class NodeHandles;
 
 class NodeHandle {
@@ -40,5 +42,7 @@ public:
     std::string name();
 
 };
+
+} // namespace Node
 
 #endif

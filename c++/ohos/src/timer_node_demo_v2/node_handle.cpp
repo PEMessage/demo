@@ -1,6 +1,8 @@
 #include "node_handle.h"
 #include "node_handles.h"
 
+namespace Node {
+
 NodeHandle::NodeHandle(NodeHandles* handles, const InitOpts& opts)
     : handles_(handles), modes_(), current_(SlotId::SYSTEM)
 {
@@ -52,3 +54,5 @@ NodeHandles* NodeHandle::getHandles() {
 std::string NodeHandle::name() {
     return handles_->dev_.name_;
 }
+
+} // namespace Node

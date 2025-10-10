@@ -5,8 +5,10 @@ include("../../include.cmake")
 
 add_executable(app
     main.cpp
+    node_device.cpp
     node_handle.cpp
     node_handles.cpp
+    node_manager.cpp
 
 )
 
