@@ -28,7 +28,9 @@ namespace HiviewDFX {
  * Log type of LOG_CORE & LOG_INIT: 0xD000000-0xD0FFFFF.
  * tag: Indicates the log service tag, you can customize the tag as needed, usually the keyword of the module.
  */
-using HiLogLabel = struct {
+// using HiLogLabel = struct { // PEM Modify
+// This will cause error: ‘static int OHOS::HiviewDFX::HiLog::Debug(const HiLogLabel&, const char*, ...)’, declared using unnamed type, is used but never defined [-fpermissive]
+struct HiLogLabel { // PEM Modify
     LogType type;
     unsigned int domain;
     const char *tag;
