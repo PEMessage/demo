@@ -55,6 +55,7 @@ class Colors:
     CYAN = '\033[96m'
     RESET = '\033[0m'
 
+
 class Special:
     NO_CHANGE = -1
     DELETE = -2
@@ -113,9 +114,54 @@ def print_table(table, max_x, max_y):
         print()
 
 
+def print_table_color(table, max_x, max_y):
+
+    print("x-y (x: trailing zeros, y: ones count)")
+    print("=" * 80)
+
+    # 打印表头
+    print("  y\\x|      |", end="")
+    for x in range(max_x + 1):
+        print(f"{x:6d}", end="")
+    print()
+    print("-" * 5 + "-" * (8 + 6 * (max_x + 1)))
+
+    # 打印表格内容
+    for y in range(max_y + 1):
+        print(f"{y:5d}| {y:04x} |", end="")
+        for x in range(max_x + 1):
+            current_val = table[x][y]
+
+            # 检查与上一行的差异
+            is_different_from_previous = False
+            if y > 0:
+                previous_val = table[x][y-1]
+                is_different_from_previous = (current_val != previous_val)
+
+            # 处理特殊值
+            if current_val == -1:
+                if is_different_from_previous:
+                    print(f"{Colors.YELLOW}     -{Colors.RESET}", end="")
+                else:
+                    print("     -", end="")
+            elif current_val == -2:
+                if is_different_from_previous:
+                    print(f"{Colors.RED}    <-{Colors.RESET}", end="")
+                else:
+                    print("    <-", end="")
+            else:
+                # 正常值，检查是否与上一行不同
+                if is_different_from_previous:
+                    print(f"{Colors.GREEN}{current_val:6d}{Colors.RESET}", end="")
+                else:
+                    print(f"{current_val:6d}", end="")
+        print()
+
+
+# Use python3 tc_store_sheet.py | less -R 
 if __name__ == '__main__':
     max_x = 21
     max_y = 0xffff
-    max_n = max_y
-    # print_table(refill_under_zero_by_search_up(generate_table(max_x, max_y, max_n)), max_x, max_y)
-    print_table(generate_table(max_x, max_y, max_n), max_x, max_y)
+    max_n = max_y * 2
+    # print_table_color(generate_table(max_x, max_y, max_n), max_x, max_y)
+    print_table_color(refill_under_zero_by_search_up(generate_table(max_x, max_y, max_n)), max_x, max_y)
