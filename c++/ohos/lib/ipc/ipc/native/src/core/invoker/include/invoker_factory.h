@@ -20,6 +20,8 @@
 #include <unordered_map>
 #include "iremote_invoker.h"
 
+#include <mutex> // PEM Modify
+
 namespace OHOS {
 #ifdef CONFIG_IPC_SINGLE
 namespace IPC_SINGLE {

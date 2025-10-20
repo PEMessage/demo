@@ -30,6 +30,8 @@
 #include "type_traits"
 #include "unordered_map"
 
+#include <mutex> // PEM Modify
+
 namespace OHOS {
 [[maybe_unused]] static constexpr HiviewDFX::HiLogLabel LABEL = { LOG_CORE, LOG_ID_IPC_COMMON, "BrokerRegistration" };
 BrokerRegistration &BrokerRegistration::Get()

@@ -21,6 +21,7 @@
 #include <vector>
 #include "iremote_object.h"
 #include "refbase.h"
+#include <mutex> // PEM Modify
 
 namespace OHOS {
 template <typename T> class BrokerCreator {

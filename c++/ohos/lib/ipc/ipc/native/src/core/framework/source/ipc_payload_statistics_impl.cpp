@@ -12,7 +12,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+#include <mutex> // PEM Modify
 #include "ipc_payload_statistics_impl.h"
 
 #include "ipc_debug.h"
