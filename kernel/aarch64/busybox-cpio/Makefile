@@ -11,11 +11,16 @@ BUSYBOX_CONFIG := $(SRC_DIR)/$(BUILD_DIR)/.config
 
 EXTRA_DEFCONFIG :=
 EXTRA_DEFCONFIG += --enable CONFIG_STATIC
-EXTRA_DEFCONFIG += --enable CONFIG_DEBUG
 EXTRA_DEFCONFIG += --enable CONFIG_FEATURE_VI_REGEX_SEARCH
 # disable TC, for some reason don't pass build on ubuntu24.04 
 # but workfine on 22.04
 EXTRA_DEFCONFIG += --disable CONFIG_TC
+
+# Debug Relate Option
+# enable -g
+EXTRA_DEFCONFIG += --enable CONFIG_DEBUG
+# enable -O0
+EXTRA_DEFCONFIG += --enable CONFIG_DEBUG_PESSIMIZE
 
 .PHONY: all
 all: rootfs.cpio.gz
