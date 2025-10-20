@@ -150,23 +150,25 @@ qemu-fast-ko:
 # 	https://stackoverflow.com/questions/2606711/how-to-debug-problems-in-linux-kernel-module-init
 # 	https://stackoverflow.com/a/49841048/20689546
 #
-# 	0. compile ko, notice rm __init and __exit to make gdb work
-# 	1. set breakpoint on `do_init_module and
-# 	2. re-load symbol by
+# 	0. compile ko, notice to rm __init and __exit to make gdb work
+#   1. vgdb linux/build/vmlinux -ex 'target remote :1234' -ex 'b start_kernel' -ex 'b do_init_module' -ex 'c'
+# 	2. set breakpoint on `do_init_module and
+# 	3. re-load symbol by
 # 		lx-symbol to load ko
 # 		or `add-symbol-file modules/gpio_handler/gpio_handler.ko 0xXXX` which is base addr of ko
 # 		```
 # 		(gdb) p mod->core_layout.base
 #       $5 = (void *) 0xffff800000f70000 <gpio_irq_handler>
 #       ```
-#   3. set breakpoint or step untill `ret = fn()`
+#   4. set breakpoint or step untill `ret = fn()`
+#
 
 .PHONY: debug
 debug:
 	@echo gdb-multiarch -ex \'add-auto-load-safe-path $(KDIR)\' -ex \'target remote localhost:1234\' $(KDIR)/$(BUILD_DIR)/vmlinux
 	qemu-system-aarch64 $(QEMU_MACHINE) -kernel $(KIMG) -nographic --initrd ../busybox-cpio/rootfs.cpio.gz \
 		-monitor telnet:localhost:11234,server,nowait \
-		-nographic -S -s \
+		-S -s 
 
 
 .PHONY: qemu-dumpdts
