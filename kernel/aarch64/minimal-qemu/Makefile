@@ -162,6 +162,14 @@ qemu-fast-ko:
 #       ```
 #   4. set breakpoint or step untill `ret = fn()`
 #
+# How to debug userspace(init process)
+#   Thanks to: https://stackoverflow.com/a/46636070/20689546
+#   1. vgdb linux/build/vmlinux -ex 'target remote :1234' -ex 'b start_kernel'
+#   2. readelf -h busybox_unstripped | grep Entry
+#   3. add-symbol-file ../busybox-cpio/busybox-src/build/busybox_unstripped $(The Entry Addr)
+#   		It seem like `add-symbol-file ../busybox-cpio/busybox-src/build/busybox_unstripped` also work
+#   4. and then `contine`
+#
 
 .PHONY: debug
 debug:
