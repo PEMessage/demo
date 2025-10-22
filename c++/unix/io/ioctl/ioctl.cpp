@@ -12,6 +12,10 @@
 #include <sstream>
 #include <string>
 #include <map>
+#include <vector>
+#include <variant>
+#include <functional>
+#include <inttypes.h>
 #include "visit_struct/visit_struct.hpp"
 
 #include <string_view>
@@ -76,6 +80,14 @@ struct is_char_array<char[N]> : std::true_type {};
 template<std::size_t N>
 struct is_char_array<const char[N]> : std::true_type {};
 
+template <class, class = void>
+struct is_std_variant : std::false_type {};
+
+template <class T>
+struct is_std_variant<T, std::void_t<decltype(std::variant_size<T>::value)>>
+    : std::true_type {};
+
+
 // See: https://github.com/cbeck88/visit_struct/issues/26
 template <class Value>
 void  debug_print(const char* name, const Value& value, int indent = 0) {
@@ -105,6 +117,10 @@ void  debug_print(const char* name, const Value& value, int indent = 0) {
             std::cout << INDENT << "]"
                 // << "  // " <<  type_name<Value>()
                 << std::endl;;
+    } else if constexpr(is_std_variant<Value>::value) {
+        std::visit([&](const auto& v) {
+            debug_print(name, v);
+        }, value);
     } else {
         std::cout << INDENT;
         meta_print(name, value);
