@@ -103,6 +103,16 @@ template <class T>
 struct is_std_variant<T, std::void_t<decltype(std::variant_size<T>::value)>>
     : std::true_type {};
 
+template <typename T, template <typename...> class Template>
+struct is_specialization : std::false_type {};
+
+template <template <typename...> class Template, typename... Args>
+struct is_specialization<Template<Args...>, Template> : std::true_type {};
+
+// Helper variable template
+template <typename T, template <typename...> class Template>
+inline constexpr bool is_specialization_v = is_specialization<T, Template>::value;
+
 // ---------------------------------------
 // 2. debug_print
 // ---------------------------------------
@@ -144,6 +154,12 @@ void  debug_print(const char* name, const Value& value, int indent = 0) {
             std::cout << INDENT << "]"
                 // << "  // " <<  type_name<Value>()
                 << std::endl;;
+    } else if constexpr (is_specialization<Value, std::map>::value ) {
+        std::cout << INDENT << name << ": {" << std::endl;
+        for (const auto& [key, val] : value) {
+            debug_print(key.c_str(), val, indent + 2);
+        }
+        std::cout << INDENT << "}" << std::endl;
     } else if constexpr(is_std_variant<Value>::value) {
         std::visit([&](const auto& v) {
             debug_print(name, v);
@@ -215,7 +231,7 @@ struct ioctl_trait<binder_feature_set> {
     static constexpr std::string_view path = "/dev/binder";
 };
 
-// 4.3 BINDER_FEATURE_SET
+// 4.3 BINDER_VERSION
 // ---------------------------------------
 
 struct binder_version {
@@ -276,6 +292,7 @@ public:
 
 using TypesInfo = TypesInfoT<winsize, binder_feature_set, binder_version>;
 using Info = TypesInfo::Info;
+VISITABLE_STRUCT(Info, name, cmd ,struct_size, path);
 using VariantType = TypesInfo::VariantType;
 
 TypesInfo typesinfo {};
@@ -304,6 +321,10 @@ int main(int argc, char *argv[]) {
     using namespace std;
     // Part1 Parse config
     auto kv_pairs = parse_key_value_args(argc, argv);
+    if (kv_pairs.count("@help") > 0 || true) {
+        cout << "---------------------------" << endl;
+        debug_print("help/", typesinfo.infos);
+    }
 
     // Info *pinfo = &typesinfo.infos.begin()->second;
     Info *pinfo = &typesinfo.infos["winsize"];
@@ -323,7 +344,7 @@ int main(int argc, char *argv[]) {
     cout << "---------------------------" << endl;
     cout << "Using file: " << info.path << endl;
     cout << "Using fd: " << fd << endl;
-    std::cout << "---------------------------" << std::endl;
+    cout << "---------------------------" << std::endl;
 
     int ret = ioctl(fd, info.cmd, buffer.data());
     cout << "ret of ioctl: " << ret << endl;
