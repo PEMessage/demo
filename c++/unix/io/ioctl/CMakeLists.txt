@@ -12,5 +12,5 @@ add_compile_options(-O0 -ggdb -g3)
 add_executable(ioctl ioctl.cpp)
 target_link_libraries(ioctl PUBLIC visit_struct)
 
-add_executable(read_mod_write read_mod_write.cpp)
-target_link_libraries(read_mod_write PUBLIC visit_struct)
+# add_executable(read_mod_write read_mod_write.cpp)
+# target_link_libraries(read_mod_write PUBLIC visit_struct)

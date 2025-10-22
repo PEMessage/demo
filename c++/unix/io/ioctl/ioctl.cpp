@@ -61,7 +61,7 @@ void print_buffer(void *ptr, size_t len) {
             printf("\n");
         }
     }
-    // printf("\n");
+    printf("\n");
 }
 
 template<typename T>
@@ -215,6 +215,21 @@ struct ioctl_trait<binder_feature_set> {
     static constexpr std::string_view path = "/dev/binder";
 };
 
+// 4.3 BINDER_FEATURE_SET
+// ---------------------------------------
+
+struct binder_version {
+    __s32 protocol_version;
+};
+#define BINDER_VERSION _IOWR('b', 9, struct binder_version)
+VISITABLE_STRUCT(binder_version, protocol_version);
+
+template<>
+struct ioctl_trait<binder_version> {
+    static constexpr unsigned long  cmd = BINDER_VERSION;
+    static constexpr std::string_view path = "/dev/binder";
+};
+
 // ---------------------------------------
 // 5. Types Info
 // ---------------------------------------
@@ -259,7 +274,7 @@ public:
     }
 };
 
-using TypesInfo = TypesInfoT<winsize, binder_feature_set>;
+using TypesInfo = TypesInfoT<winsize, binder_feature_set, binder_version>;
 using Info = TypesInfo::Info;
 using VariantType = TypesInfo::VariantType;
 
@@ -290,6 +305,7 @@ int main(int argc, char *argv[]) {
     // Part1 Parse config
     auto kv_pairs = parse_key_value_args(argc, argv);
 
+    // Info *pinfo = &typesinfo.infos.begin()->second;
     Info *pinfo = &typesinfo.infos["winsize"];
     if (kv_pairs.count("@type") > 0) {
         auto it = typesinfo.infos.find(kv_pairs["@type"]);
