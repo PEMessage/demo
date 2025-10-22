@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
+#include <typeinfo>
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <stdio.h>
@@ -289,7 +290,14 @@ int main(int argc, char *argv[]) {
     // Part1 Parse config
     auto kv_pairs = parse_key_value_args(argc, argv);
 
-    Info& info = typesinfo.infos["winsize"];
+    Info *pinfo = &typesinfo.infos["winsize"];
+    if (kv_pairs.count("@type") > 0) {
+        auto it = typesinfo.infos.find(kv_pairs["@type"]);
+        if (it != typesinfo.infos.end()) {
+            pinfo = &it->second;
+        }
+    }
+    Info info = *pinfo;
 
     int fd;
     vector<uint8_t> buffer(info.struct_size);
@@ -304,7 +312,7 @@ int main(int argc, char *argv[]) {
     int ret = ioctl(fd, info.cmd, buffer.data());
     cout << "ret of ioctl: " << ret << endl;
     if (ret < 0) {
-        perror("ioctl IOCTL_CMD failed");
+        perror("ioctl(info.cmd) error");
         return EXIT_FAILURE;
     }
 
