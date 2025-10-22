@@ -11,15 +11,17 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <string.h>
+#include <string_view>
 #include <map>
 #include <vector>
 #include <variant>
 #include <functional>
 #include <inttypes.h>
+
+#include <asm-generic/int-ll64.h>
+
 #include "visit_struct/visit_struct.hpp"
-
-#include <string_view>
-
 
 // ---------------------------------------
 // 1.0 Helper Function
@@ -176,14 +178,95 @@ void modify_struct_fields(T& struct_instance, const std::map<std::string, std::s
 
 
 // ---------------------------------------
-// 4. Main
+// 4. IOCTL Define
 // ---------------------------------------
+template<typename T>
+struct ioctl_trait {
+    static_assert(sizeof(T) == 0, "ioctl_trait not specialized for this type");
+};
 
+
+// 4.1 TIOCGWINSZ
+// ---------------------------------------
 VISITABLE_STRUCT(winsize, ws_row, ws_col, ws_xpixel, ws_ypixel);
-
 #define IOCTL_CMD     TIOCGWINSZ
 typedef struct winsize IOCTL_STRUCT;
 #define IOCTL_FILE "/dev/tty"
+
+template<>
+struct ioctl_trait<winsize> {
+    static constexpr unsigned long cmd = TIOCGWINSZ;
+    static constexpr std::string_view path = "/dev/tty";
+};
+
+
+// 4.2 BINDER_FEATURE_SET
+// ---------------------------------------
+struct binder_feature_set {
+    __u64 feature_set;
+};
+#define BINDER_FEATURE_SET _IOWR('b', 30, struct binder_feature_set)
+VISITABLE_STRUCT(binder_feature_set, feature_set);
+
+template<>
+struct ioctl_trait<binder_feature_set> {
+    static constexpr unsigned long  cmd = BINDER_FEATURE_SET;
+    static constexpr std::string_view path = "/dev/binder";
+};
+
+// ---------------------------------------
+// 5. Types Info
+// ---------------------------------------
+template<typename... Types>
+struct TypesInfoT {
+public:
+    using VariantType = std::variant<Types...>;
+    using FromBufferFunc = std::function<VariantType(const void*, size_t)>;
+
+    struct Info {
+        std::string name;
+        unsigned long cmd;
+        size_t struct_size;
+        std::string path;
+        FromBufferFunc from_buffer;
+    };
+
+    std::map<std::string, Info> infos;
+
+    template<typename T>
+    void registerType() {
+        std::string_view name = type_name<T>();
+        Info& info = infos[std::string(name)];
+
+        info.name = name;
+        info.cmd = ioctl_trait<T>::cmd;
+        info.struct_size = sizeof(T);
+        info.path = ioctl_trait<T>::path;
+        info.from_buffer = [=](const void* data, size_t size) -> VariantType {
+            if (size < sizeof(T)) {
+                throw std::runtime_error("Buffer too small for " + std::string(name));
+            }
+            T result;
+            memcpy(&result, data, sizeof(T));
+            return result;
+        };
+    }
+
+public:
+    TypesInfoT() {
+        (registerType<Types>(), ...);
+    }
+};
+
+using TypesInfo = TypesInfoT<winsize, binder_feature_set>;
+using Info = TypesInfo::Info;
+using VariantType = TypesInfo::VariantType;
+
+TypesInfo typesinfo {};
+
+// ---------------------------------------
+// 5. Main
+// ---------------------------------------
 
 std::map<std::string, std::string> parse_key_value_args(int argc, char* argv[]) {
     std::map<std::string, std::string> kv_pairs;
@@ -202,40 +285,46 @@ std::map<std::string, std::string> parse_key_value_args(int argc, char* argv[]) 
 }
 
 int main(int argc, char *argv[]) {
+    using namespace std;
     // Part1 Parse config
     auto kv_pairs = parse_key_value_args(argc, argv);
 
+    Info& info = typesinfo.infos["winsize"];
+
     int fd;
-    IOCTL_STRUCT buffer {};
+    vector<uint8_t> buffer(info.struct_size);
 
     // We use stdout (or any TTY) as the file descriptor for terminal ioctls
+    fd =  open(info.path.c_str(), O_RDONLY);
+    cout << "---------------------------" << endl;
+    cout << "Using file: " << info.path << endl;
+    cout << "Using fd: " << fd << endl;
     std::cout << "---------------------------" << std::endl;
-    printf("Using file: %s\n", IOCTL_FILE);
-    fd =  open(IOCTL_FILE, O_RDONLY);
 
-    printf("Using file descriptor: %d\n", fd);
-    std::cout << "---------------------------" << std::endl;
-
-    // Perform ioctl to get window size
-    int ret = ioctl(fd, IOCTL_CMD, &buffer);
-    printf("ioctl return value: %d\n", ret);
+    int ret = ioctl(fd, info.cmd, buffer.data());
+    cout << "ret of ioctl: " << ret << endl;
     if (ret < 0) {
         perror("ioctl IOCTL_CMD failed");
         return EXIT_FAILURE;
     }
 
-    print_buffer(&buffer, sizeof(buffer));
-    debug_print("/", buffer);
 
-    // Modify struct based on command line arguments before ioctl
-    if (!kv_pairs.empty()) {
-        std::cout << "---------------------------" << std::endl;
-        std::cout << "Modifying struct with key-value pairs:" << std::endl;
-        modify_struct_fields(buffer, kv_pairs);
-        std::cout << "---------------------------" << std::endl;
-        print_buffer(&buffer, sizeof(buffer));
-        debug_print("/", buffer);
-    }
+    print_buffer(buffer.data(), buffer.size());
+
+    VariantType parsed = info.from_buffer(buffer.data(), buffer.size());
+
+    debug_print("/", parsed);
+
+
+    // // Modify struct based on command line arguments before ioctl
+    // if (!kv_pairs.empty()) {
+    //     std::cout << "---------------------------" << std::endl;
+    //     std::cout << "Modifying struct with key-value pairs:" << std::endl;
+    //     modify_struct_fields(buffer, kv_pairs);
+    //     std::cout << "---------------------------" << std::endl;
+    //     print_buffer(&buffer, sizeof(buffer));
+    //     debug_print("/", buffer);
+    // }
 
     return EXIT_SUCCESS;
 }
