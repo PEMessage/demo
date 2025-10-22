@@ -19,6 +19,11 @@
 #include "visit_struct/visit_struct.hpp"
 
 #include <string_view>
+
+
+// ---------------------------------------
+// 1.0 Helper Function
+// ---------------------------------------
 template <typename T>
 constexpr auto type_name() {
     std::string_view name, prefix, suffix;
@@ -40,11 +45,6 @@ constexpr auto type_name() {
     return name;
 }
 
-VISITABLE_STRUCT(winsize, ws_row, ws_col, ws_xpixel, ws_ypixel);
-
-#define IOCTL_CMD     TIOCGWINSZ
-typedef struct winsize IOCTL_STRUCT;
-#define IOCTL_FILE "/dev/tty"
 
 
 void print_buffer(void *ptr, size_t len) {
@@ -61,16 +61,29 @@ void print_buffer(void *ptr, size_t len) {
     // printf("\n");
 }
 
-
-template <class T>
-void meta_print(const char* name, const T& value) {
-    if constexpr(std::is_same_v<T, char> || std::is_same_v<T, unsigned char>) {
-        std::cout << name << ": " << (int)value;
-    } else {
-        std::cout << name << ": " << value;
-    }
+template<typename T>
+T string_to_value(const std::string& str) {
+    std::istringstream iss(str);
+    T value;
+    iss >> value;
+    return value;
 }
 
+// Specialization for char (to handle numeric conversion)
+template<>
+char string_to_value<char>(const std::string& str) {
+    return static_cast<char>(std::stoi(str));
+}
+
+// Specialization for unsigned char
+template<>
+unsigned char string_to_value<unsigned char>(const std::string& str) {
+    return static_cast<unsigned char>(std::stoul(str));
+}
+
+// ---------------------------------------
+// 1.1 Helper TypeTrait
+// ---------------------------------------
 template<typename T>
 struct is_char_array : std::false_type {};
 
@@ -87,6 +100,17 @@ template <class T>
 struct is_std_variant<T, std::void_t<decltype(std::variant_size<T>::value)>>
     : std::true_type {};
 
+// ---------------------------------------
+// 2. debug_print
+// ---------------------------------------
+template <class T>
+void meta_print(const char* name, const T& value) {
+    if constexpr(std::is_same_v<T, char> || std::is_same_v<T, unsigned char>) {
+        std::cout << name << ": " << (int)value;
+    } else {
+        std::cout << name << ": " << value;
+    }
+}
 
 // See: https://github.com/cbeck88/visit_struct/issues/26
 template <class Value>
@@ -128,43 +152,9 @@ void  debug_print(const char* name, const Value& value, int indent = 0) {
     }
 }
 
-std::map<std::string, std::string> parse_key_value_args(int argc, char* argv[]) {
-    std::map<std::string, std::string> kv_pairs;
-
-    for (int i = 1; i < argc; i++) {
-        std::string arg = argv[i];
-        size_t pos = arg.find('=');
-        if (pos != std::string::npos) {
-            std::string key = arg.substr(0, pos);
-            std::string value = arg.substr(pos + 1);
-            kv_pairs[key] = value;
-        }
-    }
-
-    return kv_pairs;
-}
-
-
-template<typename T>
-T string_to_value(const std::string& str) {
-    std::istringstream iss(str);
-    T value;
-    iss >> value;
-    return value;
-}
-
-// Specialization for char (to handle numeric conversion)
-template<>
-char string_to_value<char>(const std::string& str) {
-    return static_cast<char>(std::stoi(str));
-}
-
-// Specialization for unsigned char
-template<>
-unsigned char string_to_value<unsigned char>(const std::string& str) {
-    return static_cast<unsigned char>(std::stoul(str));
-}
-
+// ---------------------------------------
+// 3. modify_field
+// ---------------------------------------
 
 template<typename T>
 void modify_struct_fields(T& struct_instance, const std::map<std::string, std::string>& kv_pairs) {
@@ -184,6 +174,32 @@ void modify_struct_fields(T& struct_instance, const std::map<std::string, std::s
     });
 }
 
+
+// ---------------------------------------
+// 4. Main
+// ---------------------------------------
+
+VISITABLE_STRUCT(winsize, ws_row, ws_col, ws_xpixel, ws_ypixel);
+
+#define IOCTL_CMD     TIOCGWINSZ
+typedef struct winsize IOCTL_STRUCT;
+#define IOCTL_FILE "/dev/tty"
+
+std::map<std::string, std::string> parse_key_value_args(int argc, char* argv[]) {
+    std::map<std::string, std::string> kv_pairs;
+
+    for (int i = 1; i < argc; i++) {
+        std::string arg = argv[i];
+        size_t pos = arg.find('=');
+        if (pos != std::string::npos) {
+            std::string key = arg.substr(0, pos);
+            std::string value = arg.substr(pos + 1);
+            kv_pairs[key] = value;
+        }
+    }
+
+    return kv_pairs;
+}
 
 int main(int argc, char *argv[]) {
     // Part1 Parse config
@@ -223,3 +239,4 @@ int main(int argc, char *argv[]) {
 
     return EXIT_SUCCESS;
 }
+
