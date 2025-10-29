@@ -20,6 +20,9 @@
 #include <functional>
 #include <inttypes.h>
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <asm-generic/int-ll64.h>
 
 #include "visit_struct/visit_struct.hpp"
@@ -109,7 +112,6 @@ struct is_specialization : std::false_type {};
 template <template <typename...> class Template, typename... Args>
 struct is_specialization<Template<Args...>, Template> : std::true_type {};
 
-// Helper variable template
 template <typename T, template <typename...> class Template>
 inline constexpr bool is_specialization_v = is_specialization<T, Template>::value;
 
@@ -340,17 +342,41 @@ int main(int argc, char *argv[]) {
     vector<uint8_t> buffer(info.struct_size);
 
     // We use stdout (or any TTY) as the file descriptor for terminal ioctls
-    fd =  open(info.path.c_str(), O_RDONLY);
-    cout << "---------------------------" << endl;
-    cout << "Using file: " << info.path << endl;
-    cout << "Using fd: " << fd << endl;
-    cout << "---------------------------" << std::endl;
+    if (kv_pairs.count("@file") == 0 ) {
+        fd =  open(info.path.c_str(), O_RDONLY);
+        cout << "---------------------------" << endl;
+        cout << "Using file: " << info.path << endl;
+        cout << "Using fd: " << fd << endl;
+        cout << "---------------------------" << std::endl;
 
-    int ret = ioctl(fd, info.cmd, buffer.data());
-    cout << "ret of ioctl: " << ret << endl;
-    if (ret < 0) {
-        perror("ioctl(info.cmd) error");
-        return EXIT_FAILURE;
+        int ret = ioctl(fd, info.cmd, buffer.data());
+        cout << "ret of ioctl: " << ret << endl;
+        if (ret < 0) {
+            perror("ioctl(info.cmd) error");
+            return EXIT_FAILURE;
+        }
+    } else {
+        fd =  open(kv_pairs["@file"].c_str(), O_RDONLY);
+        cout << "---------------------------" << endl;
+        cout << "Using file: " << info.path << endl;
+        cout << "Using fd: " << fd << endl;
+        cout << "---------------------------" << std::endl;
+
+        struct stat file_stat;
+        if (fstat(fd, &file_stat) < 0) {
+            perror("fstat error");
+            close(fd);
+            return EXIT_FAILURE;
+        }
+        buffer.resize(file_stat.st_size);
+
+        ssize_t bytes_read = read(fd, buffer.data(), file_stat.st_size);
+        if (bytes_read < 0) {
+            perror("read error");
+            close(fd);
+            return EXIT_FAILURE;
+        }
+
     }
 
 
@@ -373,4 +399,3 @@ int main(int argc, char *argv[]) {
 
     return EXIT_SUCCESS;
 }
-
