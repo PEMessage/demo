@@ -1,6 +1,8 @@
 #include <stdio.h>
 
-#define FOREACH_INDEX_IN_MASK(mask, _i) \
+// Similar to for_each_set_bit in the kernel, but simplified to only support number types( sizeof(T) <= sizeof(unsigned int)
+// See: https://blog.csdn.net/wll1228/article/details/105549418
+#define FOREACH_SETBITS(mask, _i) \
     for (unsigned int _i = 0, _temp_mask = (mask); \
          _temp_mask != 0; \
          _temp_mask >>= 1, _i++) \
@@ -10,7 +12,7 @@
 void print_set_bits(unsigned int mask, const char* mask_name) {
     printf("%s: 0x%X\n", mask_name, mask);
     printf("Set bits: ");
-    FOREACH_INDEX_IN_MASK(mask, index) {
+    FOREACH_SETBITS(mask, index) {
         printf("%u ", index);
     }
     printf("\n\n");
