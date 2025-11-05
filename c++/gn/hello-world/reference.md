@@ -5,7 +5,9 @@
 [使用gn构建嵌入式](https://gitee.com/pemury/mcu_playground)
 
 
-
+# Note
+1. `.gn`: root marker, and tell where is buildconfig(BUILDCONFIG.gn)
+2.
 
 
 
