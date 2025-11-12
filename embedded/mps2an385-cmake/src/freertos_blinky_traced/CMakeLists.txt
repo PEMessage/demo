@@ -16,7 +16,7 @@ target_link_libraries(${MODULE_NAME}
     CMSDK_CM3
     CMSIS
     freertos_kernel
-    freertos_config
+    freertos_config_with_trace
     freertos_hook
 )
 
