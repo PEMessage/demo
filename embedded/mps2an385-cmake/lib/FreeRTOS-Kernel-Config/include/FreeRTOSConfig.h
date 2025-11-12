@@ -153,7 +153,9 @@
 
 /* TODO TraceRecorder (Step 5): Include trcRecorder.h at the end of FreeRTOSConfig.h. */
 // #ifndef __IASMARM__
+#ifdef ENABLE_TRACE_RECORDER
     #include "trcRecorder.h"
+#endif
 // #endif
 
 #define vPortSVCHandler    SVC_Handler
