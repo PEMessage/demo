@@ -6,15 +6,8 @@
 
 
 #include <stdint.h>
+#include "CMSDK_CM3_EXT.h"
 
-
-// Define framebuffer properties based on the QEMU code
-#define FB_BASE_ADDRESS ((volatile uint32_t*)0x41000000)
-#define FB_WIDTH        640
-#define FB_HEIGHT       480
-#define FB_BPP          32 // Bits per pixel
-#define FB_BYTE_PER_PIXEL (FB_BPP / 8 ) // Should be 4
-#define FB_BYTES_PER_ROW (FB_WIDTH * FB_BYTE_PER_PIXEL) // 1120 / 4 = 280
 
 void NVIC_Init() {
     size_t i = 0 ;

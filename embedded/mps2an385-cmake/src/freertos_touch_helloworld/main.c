@@ -1,34 +1,21 @@
 #include <stdio.h>
 #include "CMSDK_CM3.h" // for SystemCoreClock
+#include "CMSDK_CM3_EXT.h" // for SystemCoreClock
 #include "FreeRTOS.h"
 #include "task.h"
 
 
 #include <stdint.h>
 
-
-// Define framebuffer properties based on the QEMU code
-#define TOUCH_BASE_ADDRESS ((volatile void*)0x41000000)
-#define TOUCH_X      ((volatile uint32_t *)(TOUCH_BASE_ADDRESS + 0))
-#define TOUCH_Y      ((volatile uint32_t *)(TOUCH_BASE_ADDRESS + 4))
-#define TOUCH_PRESS  ((volatile uint32_t *)(TOUCH_BASE_ADDRESS + 8))
-
-#define FB_BASE_ADDRESS ((volatile uint32_t *)(0x41001000))
-#define FB_WIDTH        640
-#define FB_HEIGHT       480
-#define FB_BPP          32 // Bits per pixel
-#define FB_BYTE_PER_PIXEL (FB_BPP / 8 ) // Should be 4
-#define FB_BYTES_PER_ROW (FB_WIDTH * FB_BYTE_PER_PIXEL) // 1120 / 4 = 280
-
 // Define color indices (matching the deduction from the QEMU palette)
-#define COLOR_IDX_BLACK     0 
-#define COLOR_IDX_DK_GRAY   1 
-#define COLOR_IDX_LT_GRAY   2 
-#define COLOR_IDX_WHITE     3 
+#define COLOR_IDX_BLACK     0
+#define COLOR_IDX_DK_GRAY   1
+#define COLOR_IDX_LT_GRAY   2
+#define COLOR_IDX_WHITE     3
 #define COLOR_IDX_RED       4
 #define COLOR_IDX_GREEN     5
 #define COLOR_IDX_BLUE      6
-#define COLOR_IDX_NUM       7 
+#define COLOR_IDX_NUM       7
 
 /**
  * @brief Fills the NeXT framebuffer with a single color.

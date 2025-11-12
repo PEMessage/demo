@@ -15,6 +15,7 @@ add_executable_with_binaries(${MODULE_NAME} ${SRCS})
 # Link libraries
 target_link_libraries(${MODULE_NAME}
     CMSDK_CM3
+    CMSDK_CM3_EXT
     CMSIS
     freertos_kernel
     freertos_config
