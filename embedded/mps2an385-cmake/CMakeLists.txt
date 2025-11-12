@@ -11,6 +11,7 @@ project(mps2an385-minimal LANGUAGES C ASM)
 
 # Add libraries
 add_subdirectory(lib/CMSDK_CM3)
+add_subdirectory(lib/CMSDK_CM3_EXT)
 add_subdirectory(lib/CMSIS)
 add_subdirectory(lib/FreeRTOS-Kernel-Config)
 add_subdirectory(lib/FreeRTOS-Hook)
