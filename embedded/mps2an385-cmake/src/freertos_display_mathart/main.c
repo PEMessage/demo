@@ -1,24 +1,11 @@
 #include <stdio.h>
+#include <stdint.h>
 #include "CMSDK_CM3.h" // for SystemCoreClock
+#include "CMSDK_CM3_EXT.h" // for SystemCoreClock
 #include "FreeRTOS.h"
 #include "task.h"
 
-
-#include <stdint.h>
-
-
-// Define framebuffer properties based on the QEMU code
-#define FB_BASE_ADDRESS ((volatile uint32_t*)0x41001000)
-#define FB_WIDTH        640
-#define FB_HEIGHT       480
-#define FB_BPP          32 // Bits per pixel
-#define FB_BYTE_PER_PIXEL (FB_BPP / 8 ) // Should be 4
-#define FB_BYTES_PER_ROW (FB_WIDTH * FB_BYTE_PER_PIXEL) // 1120 / 4 = 280
-
 typedef uint32_t (*DrawFunc)(int x, int y, uint16_t time);
-
-
-
 
 void NVIC_Init() {
     size_t i = 0 ;

@@ -16,6 +16,7 @@ target_compile_options(${MODULE_NAME} PUBLIC )
 # Link libraries
 target_link_libraries(${MODULE_NAME}
     CMSDK_CM3
+    CMSDK_CM3_EXT
     CMSIS
     freertos_kernel
     freertos_config
