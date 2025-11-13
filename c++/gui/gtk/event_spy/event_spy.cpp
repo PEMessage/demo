@@ -5,6 +5,15 @@
 // q-gcc: `pkg-config --cflags --libs gtkmm-3.0` -I. --
 int main()
 {
+
+    // Print GTK version
+    std::cout << "GTK+ version: " << GTK_MAJOR_VERSION << "."
+        << GTK_MINOR_VERSION << "." << GTK_MICRO_VERSION << std::endl;
+
+    // Print gtkmm version
+    std::cout << "gtkmm version: " << GTKMM_MAJOR_VERSION << "."
+        << GTKMM_MINOR_VERSION << "." << GTKMM_MICRO_VERSION << std::endl;
+
     auto app = Gtk::Application::create();
     Gtk::Window window;
     window.set_default_size(1024, 768);
