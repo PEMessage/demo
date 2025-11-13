@@ -15,10 +15,7 @@
 /*********************
  *      DEFINES
  *********************/
-#define TOUCH_BASE_ADDRESS ((volatile void*)0x41000000)
-#define TOUCH_X      ((volatile uint32_t *)(TOUCH_BASE_ADDRESS + 0))
-#define TOUCH_Y      ((volatile uint32_t *)(TOUCH_BASE_ADDRESS + 4))
-#define TOUCH_PRESS  ((volatile uint32_t *)(TOUCH_BASE_ADDRESS + 8))
+#include "CMSDK_CM3_EXT.h"
 
 /**********************
  *      TYPEDEFS

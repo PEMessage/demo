@@ -10,6 +10,7 @@
  *      INCLUDES
  *********************/
 #include "lv_port_disp.h"
+#include "CMSDK_CM3_EXT.h"
 #include <stdbool.h>
 #include <stdio.h>
 
@@ -17,8 +18,8 @@
  *      DEFINES
  *********************/
 
-#define MY_DISP_HOR_RES 640
-#define MY_DISP_VER_RES 480
+#define MY_DISP_HOR_RES FB_WIDTH
+#define MY_DISP_VER_RES FB_HEIGHT
 
 #ifndef MY_DISP_HOR_RES
     #warning Please define or replace the macro MY_DISP_HOR_RES with the actual screen width, default value 320 is used for now.
@@ -122,7 +123,6 @@ void disp_disable_update(void)
     disp_flush_enabled = false;
 }
 
-#define FB_BASE_ADDRESS ((volatile uint32_t*)0x41001000)
 /*Flush the content of the internal buffer the specific area on the display.
  *`px_map` contains the rendered image as raw pixel map and it should be copied to `area` on the display.
  *You can use DMA or any hardware acceleration to do this operation in the background but

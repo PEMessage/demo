@@ -6,4 +6,4 @@ add_library(lvgl_port
 target_include_directories(lvgl_port PUBLIC
     ./
 )
-target_link_libraries(lvgl_port PRIVATE lvgl freertos_kernel)
+target_link_libraries(lvgl_port PRIVATE lvgl freertos_kernel CMSDK_CM3_EXT)
