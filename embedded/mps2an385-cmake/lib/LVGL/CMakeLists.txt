@@ -11,7 +11,7 @@ if(NOT EXISTS "${LVGL_SOURCE_DIR}")
   FetchContent_Declare(
     lvgl
     GIT_REPOSITORY https://github.com/lvgl/lvgl.git
-    GIT_TAG        v9.2.0
+    GIT_TAG        release/v9.2
     SOURCE_DIR     "${LVGL_SOURCE_DIR}"
   )
 
