@@ -66,17 +66,58 @@ static void drag_event_handler(lv_event_t * e)
     lv_obj_set_pos(obj, x, y);
 }
 
+static void direction_gesture_event_handler(lv_event_t * e)
+{
+    lv_obj_t * obj = lv_event_get_target(e);
+    lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_active());
+
+    switch(dir) {
+        case LV_DIR_LEFT:
+            lv_obj_set_style_bg_color(obj, lv_color_hex(0xFF0000), 0); // Red
+            break;
+        case LV_DIR_RIGHT:
+            lv_obj_set_style_bg_color(obj, lv_color_hex(0x00FF00), 0); // Green
+            break;
+        case LV_DIR_TOP:
+            lv_obj_set_style_bg_color(obj, lv_color_hex(0x0000FF), 0); // Blue
+            break;
+        case LV_DIR_BOTTOM:
+            lv_obj_set_style_bg_color(obj, lv_color_hex(0xFFFF00), 0); // Yellow
+            break;
+        case LV_DIR_ALL:
+            lv_obj_set_style_bg_color(obj, lv_color_hex(0xFFFFFF), 0); // White (reset)
+            break;
+        default:
+            break;
+    }
+}
+
 /**
- * Make an object draggable.
+ * Make an object draggable with direction-based color changes.
  */
 void lv_example_drag(void)
 {
     // Create the main draggable object
     lv_obj_t * obj;
     obj = lv_obj_create(lv_screen_active());
+    printf("obj dragbox is %p\n", obj);
+    printf("obj screen is %p\n", lv_screen_active());
+
     lv_obj_set_size(obj, 150, 100);
     lv_obj_set_pos(obj, 50, 50); // Initial position
+
+    // Set initial color
+    lv_obj_set_style_bg_color(obj, lv_color_hex(0x808080), 0); // Gray
+
+    // Add drag event for movement
     lv_obj_add_event_cb(obj, drag_event_handler, LV_EVENT_PRESSING, NULL);
+
+    // Add gesture event for direction detection and color change
+    lv_obj_add_event_cb(obj, direction_gesture_event_handler, LV_EVENT_GESTURE, NULL);
+
+    // Enable gesture detection for all directions
+    // THIS IS KEY, other wise EVENT will propagate to parent
+    lv_obj_clear_flag(obj, LV_OBJ_FLAG_GESTURE_BUBBLE);
 
     // Add label to the object
     lv_obj_t * label = lv_label_create(obj);
