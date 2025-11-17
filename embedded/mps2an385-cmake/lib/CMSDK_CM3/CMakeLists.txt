@@ -7,7 +7,8 @@ set(SRCS
     Source/startup_CMSDK_CM3.c
     Source/system_CMSDK_CM3.c
     Source/stdout_USART.c
-    Source/USART_V2M-MPS2.c
+
+    Source/Driver/UART/USART_V2M-MPS2.c
 )
 
 # See: https://jefflongo.dev/posts/cmake-weak-symbol-oddities/
@@ -35,6 +36,7 @@ add_library(CMSDK_CM3 STATIC ${SRCS})
 target_include_directories(CMSDK_CM3
     PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/Include
+    ${CMAKE_CURRENT_SOURCE_DIR}/Include/Driver/
 )
 
 target_link_libraries(CMSDK_CM3 PRIVATE iface_hard_fault)
