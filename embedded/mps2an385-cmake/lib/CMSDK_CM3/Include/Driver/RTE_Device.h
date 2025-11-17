@@ -47,4 +47,7 @@
 // <i> Configuration settings for Driver_USART3 in component ::CMSIS Driver:USART
 #define RTE_UART3                       0
 
+
+#define RTE_I2C0                        1
+
 #endif  /* __RTE_DEVICE_H */

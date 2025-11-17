@@ -9,6 +9,10 @@ set(SRCS
     Source/stdout_USART.c
 
     Source/Driver/UART/USART_V2M-MPS2.c
+
+    Source/Driver/I2C/Driver_I2C.c
+    Source/Driver/I2C/i2c_sbcon_drv.c
+    Source/Driver/I2C/device_definition.c
 )
 
 # See: https://jefflongo.dev/posts/cmake-weak-symbol-oddities/
