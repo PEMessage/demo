@@ -35,8 +35,35 @@ void wait_ms_nop(uint32_t ms) {
     __NOP();
     __NOP();
 }
+
+#ifdef I2C0_SBCON
 /* I2C_SBCon driver structures */
 static struct i2c_sbcon_dev_cfg_t I2C0_SBCON_DEV_CFG = {
     .base = I2C_TOUCH_BASE, .default_freq_hz = 100000, .sleep_us = &wait_ms_nop};
 static struct i2c_sbcon_dev_data_t I2C0_SBCON_DEV_DATA = {.freq_us = 0, .sys_clk = 0, .state = 0};
 struct i2c_sbcon_dev_t I2C0_SBCON_DEV = {.cfg = &(I2C0_SBCON_DEV_CFG), .data = &(I2C0_SBCON_DEV_DATA)};
+#endif
+
+#ifdef I2C1_SBCON
+/* I2C_SBCon driver structures */
+static struct i2c_sbcon_dev_cfg_t I2C1_SBCON_DEV_CFG = {
+    .base = I2C_AUDIO_BASE, .default_freq_hz = 100000, .sleep_us = &wait_ms_nop};
+static struct i2c_sbcon_dev_data_t I2C1_SBCON_DEV_DATA = {.freq_us = 0, .sys_clk = 0, .state = 0};
+struct i2c_sbcon_dev_t I2C1_SBCON_DEV = {.cfg = &(I2C1_SBCON_DEV_CFG), .data = &(I2C1_SBCON_DEV_DATA)};
+#endif
+
+#ifdef I2C2_SBCON
+/* I2C_SBCon driver structures */
+static struct i2c_sbcon_dev_cfg_t I2C2_SBCON_DEV_CFG = {
+    .base = I2C_SHIELD0_BASE, .default_freq_hz = 100000, .sleep_us = &wait_ms_nop};
+static struct i2c_sbcon_dev_data_t I2C2_SBCON_DEV_DATA = {.freq_us = 0, .sys_clk = 0, .state = 0};
+struct i2c_sbcon_dev_t I2C2_SBCON_DEV = {.cfg = &(I2C2_SBCON_DEV_CFG), .data = &(I2C2_SBCON_DEV_DATA)};
+#endif
+
+#ifdef I2C3_SBCON
+/* I2C_SBCon driver structures */
+static struct i2c_sbcon_dev_cfg_t I2C3_SBCON_DEV_CFG = {
+    .base = I2C_SHIELD1_BASE, .default_freq_hz = 100000, .sleep_us = &wait_ms_nop};
+static struct i2c_sbcon_dev_data_t I2C3_SBCON_DEV_DATA = {.freq_us = 0, .sys_clk = 0, .state = 0};
+struct i2c_sbcon_dev_t I2C3_SBCON_DEV = {.cfg = &(I2C3_SBCON_DEV_CFG), .data = &(I2C3_SBCON_DEV_DATA)};
+#endif

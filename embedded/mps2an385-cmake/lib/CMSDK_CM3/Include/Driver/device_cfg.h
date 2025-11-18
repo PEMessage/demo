@@ -31,6 +31,9 @@
 
 
 /* I2C_SBCon */
-// #define I2C0_SBCON_DEV I2C0_SBCON_DEV_S
+#define I2C0_SBCON
+#define I2C1_SBCON
+#define I2C2_SBCON
+#define I2C3_SBCON
 
 #endif /* __DEVICE_CFG_H__ */

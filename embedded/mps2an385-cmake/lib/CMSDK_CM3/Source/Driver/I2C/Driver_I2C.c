@@ -312,11 +312,12 @@ ARM_DRIVER_I2C Driver_I2C0 = {
 #if (defined (RTE_I2C1) && (RTE_I2C1 == 1))
 /* I2C1 Driver wrapper functions */
 static I2Cx_Resources ARM_I2C1_DEV = {
-#if (defined (__DOMAIN_NS) && (__DOMAIN_NS == 1))
-    .dev = &I2C1_SBCON_DEV_NS,
-#else
-    .dev = &I2C1_SBCON_DEV_S,
-#endif
+// #if (defined (__DOMAIN_NS) && (__DOMAIN_NS == 1))
+//     .dev = &I2C1_SBCON_DEV_NS,
+// #else
+//     .dev = &I2C1_SBCON_DEV_S,
+// #endif
+    .dev = &I2C1_SBCON_DEV,
     .nbr_bytes = 0,
     .status = {
         .busy             = 0,
@@ -405,11 +406,12 @@ ARM_DRIVER_I2C Driver_I2C1 = {
 #if (defined (RTE_I2C2) && (RTE_I2C2 == 1))
 /* I2C2 Driver wrapper functions */
 static I2Cx_Resources ARM_I2C2_DEV = {
-#if (defined (__DOMAIN_NS) && (__DOMAIN_NS == 1))
-    .dev = &I2C2_SBCON_DEV_NS,
-#else
-    .dev = &I2C2_SBCON_DEV_S,
-#endif
+// #if (defined (__DOMAIN_NS) && (__DOMAIN_NS == 1))
+//     .dev = &I2C2_SBCON_DEV_NS,
+// #else
+//     .dev = &I2C2_SBCON_DEV_S,
+// #endif
+    .dev = &I2C2_SBCON_DEV,
     .nbr_bytes = 0,
     .status = {
         .busy             = 0,
@@ -498,11 +500,12 @@ ARM_DRIVER_I2C Driver_I2C2 = {
 #if (defined (RTE_I2C3) && (RTE_I2C3 == 1))
 /* I2C3 Driver wrapper functions */
 static I2Cx_Resources ARM_I2C3_DEV = {
-#if (defined (__DOMAIN_NS) && (__DOMAIN_NS == 1))
-    .dev = &I2C3_SBCON_DEV_NS,
-#else
-    .dev = &I2C3_SBCON_DEV_S,
-#endif
+// #if (defined (__DOMAIN_NS) && (__DOMAIN_NS == 1))
+//     .dev = &I2C3_SBCON_DEV_NS,
+// #else
+//     .dev = &I2C3_SBCON_DEV_S,
+// #endif
+    .dev = &I2C3_SBCON_DEV,
     .nbr_bytes = 0,
     .status = {
         .busy             = 0,

@@ -49,5 +49,8 @@
 
 
 #define RTE_I2C0                        1
+#define RTE_I2C1                        1
+#define RTE_I2C2                        1
+#define RTE_I2C3                        1
 
 #endif  /* __RTE_DEVICE_H */

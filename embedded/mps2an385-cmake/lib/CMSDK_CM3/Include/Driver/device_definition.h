@@ -51,6 +51,9 @@ extern "C" {
 #include "i2c_sbcon_drv.h"
 #include "timeout.h"
 extern struct i2c_sbcon_dev_t I2C0_SBCON_DEV;
+extern struct i2c_sbcon_dev_t I2C1_SBCON_DEV;
+extern struct i2c_sbcon_dev_t I2C2_SBCON_DEV;
+extern struct i2c_sbcon_dev_t I2C3_SBCON_DEV;
 
 
 #ifdef __cplusplus

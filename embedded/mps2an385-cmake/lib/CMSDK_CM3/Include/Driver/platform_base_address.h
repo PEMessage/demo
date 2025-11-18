@@ -26,4 +26,7 @@
 #define I2C_TOUCH_BASE     0x40022000 /* FPGA - SBCon I2C (Touch Conf) base address */
 #define I2C_AUDIO_BASE     0x40023000 /* FPGA - SBCon I2C (Audio Conf) base address */
 
+#define I2C_SHIELD0_BASE    0x40029000
+#define I2C_SHIELD1_BASE    0x4002a000
+
 #endif  /* __PLATFORM_BASE_ADDRESS_H__ */
