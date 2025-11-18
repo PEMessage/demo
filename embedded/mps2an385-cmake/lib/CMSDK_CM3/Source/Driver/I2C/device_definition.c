@@ -26,9 +26,17 @@
 #include "device_definition.h"
 #include "platform_base_address.h"
 
+#include "cmsis_gcc.h"
 
+void wait_ms_nop(uint32_t ms) {
+    __NOP();
+    __NOP();
+    __NOP();
+    __NOP();
+    __NOP();
+}
 /* I2C_SBCon driver structures */
 static struct i2c_sbcon_dev_cfg_t I2C0_SBCON_DEV_CFG = {
-    .base = I2C_TOUCH_BASE, .default_freq_hz = 100000, .sleep_us = &wait_us};
+    .base = I2C_TOUCH_BASE, .default_freq_hz = 100000, .sleep_us = &wait_ms_nop};
 static struct i2c_sbcon_dev_data_t I2C0_SBCON_DEV_DATA = {.freq_us = 0, .sys_clk = 0, .state = 0};
 struct i2c_sbcon_dev_t I2C0_SBCON_DEV = {.cfg = &(I2C0_SBCON_DEV_CFG), .data = &(I2C0_SBCON_DEV_DATA)};
