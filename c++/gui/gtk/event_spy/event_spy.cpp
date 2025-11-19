@@ -1,3 +1,4 @@
+#include "gdkmm/device.h"
 #include <gtkmm.h>
 #include <iostream>
 #include <magic_enum.hpp>
@@ -24,6 +25,7 @@ int main(int argc, char *argv[])
 
 
     Gtk::Window window;
+    window.add_events(Gdk::SCROLL_MASK | Gdk::SMOOTH_SCROLL_MASK | Gdk::TOUCH_MASK);
     window.set_default_size(1024, 768);
     app->signal_startup().connect([&]
     {
