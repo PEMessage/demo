@@ -292,6 +292,12 @@ static int32_t USART_Initialize (      ARM_USART_SignalEvent_t  cb_event,
   // Clear transfer information
   memset(usart->xfer, 0U, sizeof(USART_TRANSFER_INFO));
 
+  // PEM Modify: this following staff will access
+  // cmsdk-ahb-gpio: unimplemented device read  (size 4, offset 0x018)
+  // cmsdk-ahb-gpio: unimplemented device write (size 4, offset 0x018, value 0x00000001)
+  // cmsdk-ahb-gpio: unimplemented device read  (size 4, offset 0x018)
+  // cmsdk-ahb-gpio: unimplemented device write (size 4, offset 0x018, value 0x00000002)
+  //
   // configure USART pins
   usart->pins.pin_rx->PinGpio->ALTFUNCSET |= (1u << usart->pins.pin_rx->PinNum);
   usart->pins.pin_tx->PinGpio->ALTFUNCSET |= (1u << usart->pins.pin_tx->PinNum);

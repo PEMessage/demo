@@ -69,6 +69,11 @@ extern ARM_DRIVER_USART  USART_Driver_(USART_DRV_NUM);
 int stdout_init (void) {
   int32_t status;
  
+  // PEM Modify: this line will cause
+  // cmsdk-ahb-gpio: unimplemented device read  (size 4, offset 0x018)
+  // cmsdk-ahb-gpio: unimplemented device write (size 4, offset 0x018, value 0x00000001)
+  // cmsdk-ahb-gpio: unimplemented device read  (size 4, offset 0x018)
+  // cmsdk-ahb-gpio: unimplemented device write (size 4, offset 0x018, value 0x00000002)
   status = ptrUSART->Initialize(NULL);
   if (status != ARM_DRIVER_OK) return (-1);
  
