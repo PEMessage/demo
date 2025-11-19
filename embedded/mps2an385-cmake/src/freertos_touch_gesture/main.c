@@ -6,6 +6,7 @@
 #include "timers.h"
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 void NVIC_Init() {
     size_t i = 0 ;
@@ -33,21 +34,87 @@ void setup() {
 // Input Framework
 // ========================================
 
+typedef struct Point {
+    uint16_t x;
+    uint16_t y;
+} Point;
+
+typedef struct ScanData {
+    uint8_t pressed;
+    Point point;
+} ScanData;
 
 typedef struct InputDevice {
+    bool enabled : 1;
+
+    uint8_t pressed;
+    Point point;
+
 } InputDevice;
 
 struct InputDevice *DEV;
 
+InputDevice *InputDeviceCreate() {
+    InputDevice *indev = malloc(sizeof(*indev));
+
+    indev->enabled = true;
+
+    indev->point.x = 0;
+    indev->point.y = 0;
+    return indev;
+}
+
 void InputDeviceScan(InputDevice* indev) {
-    if (!indev) { return;}
-    printf("Timer triggered!\n");
+    if (!indev) { return; }
+    if (!indev->enabled) { return; }
+
+
+    // Actually Read something
+    {
+        struct ScanData data;
+        {
+            data.pressed = 0;
+            data.point = indev->point;
+        }
+        // Forward declare
+        void InputDeviceScanCore(InputDevice* indev, ScanData *data);
+        InputDeviceScanCore(indev, &data);
+
+        {
+            indev->point = data.point;
+            indev->pressed = data.pressed;
+        }
+    }
+
+    printf("x:%4d, y:%4d, pressed:%2d\n",
+            indev->point.x, indev->point.y, indev->pressed);
+
+    if (indev->pressed) {
+        void InputDeviceScanPressProc(InputDevice *indev);
+        InputDeviceScanPressProc(indev);
+    } else {
+        void InputDeviceScanReleaseProc(InputDevice *indev);
+        InputDeviceScanReleaseProc(indev);
+    }
+
+}
+
+void InputDeviceScanPressProc(InputDevice *indev) {
+}
+
+void InputDeviceScanReleaseProc(InputDevice *indev) {
 }
 
 
 // ========================================
 // Adapter
 // ========================================
+void InputDeviceScanCore(InputDevice* indev, ScanData *data) {
+    data->point.x = *TOUCH_X;
+    data->point.y = *TOUCH_X;
+    data->pressed = *TOUCH_PRESS;
+    return ;
+}
 
 // Call From IRQ
 // ----------------------------------------
@@ -58,10 +125,14 @@ void touch_pend_callback(void * arg1, uint32_t arg2) {
 
 void TouchIRQ_Handler() {
     static uint32_t prev_pressed = 0;
-    // Edge detect
-    if (prev_pressed == *TOUCH_PRESS) { return; }
-    // Only pressed down trigger
-    if (*TOUCH_PRESS == 0) { return; }
+    uint32_t prev = prev_pressed;
+    uint32_t curr = *TOUCH_PRESS;
+
+    prev_pressed = curr; // update prev
+    // if neither edge nor pressed skip it -- skip hover event
+    if (!( (prev ^ curr) || curr )) {
+        return;
+    }
 
     // See:
     // https://freertos.org/zh-cn-cmn-s/Documentation/02-Kernel/04-API-references/11-Software-timers/18-xTimerPendFunctionCallFromISRhttps://freertos.org/zh-cn-cmn-s/Documentation/02-Kernel/04-API-references/11-Software-timers/18-xTimerPendFunctionCallFromISR
@@ -78,7 +149,7 @@ void TouchIRQ_Handler() {
 
 // Call From Timer
 // ----------------------------------------
-const uint32_t PERIOD = 33; // ms
+const uint32_t PERIOD = 1000; // ms
 static TimerHandle_t touch_timer = NULL;
 void touch_timer_callback(TimerHandle_t xTimer) {
     printf("Tick count: %u ", xTaskGetTickCount());
@@ -88,7 +159,7 @@ void touch_timer_callback(TimerHandle_t xTimer) {
 
 void MainTask() {
     // create indev
-    DEV = malloc(sizeof(*DEV));
+    DEV = InputDeviceCreate();
 
     // Create a timer (initially not active)
     touch_timer = xTimerCreate(
@@ -100,7 +171,7 @@ void MainTask() {
     );
 
     // Start the timer
-    xTimerStart(touch_timer, portMAX_DELAY);
+    // xTimerStart(touch_timer, portMAX_DELAY);
 
     while(1) {
     }
