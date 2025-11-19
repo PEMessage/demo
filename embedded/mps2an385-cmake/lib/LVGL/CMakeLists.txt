@@ -30,5 +30,5 @@ endif()
 add_subdirectory(lvgl_port)
 
 cmake_policy(SET CMP0079 NEW) # inject freertos_kernel into lvgl dep
-target_link_libraries(lvgl PRIVATE freertos_kernel)
+target_link_libraries(lvgl PRIVATE freertos_kernel m)
 
