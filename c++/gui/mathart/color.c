@@ -1,6 +1,8 @@
 #include <SDL2/SDL.h>
 #include <stdbool.h>
 
+// q-gcc: `pkg-config --cflags --libs sdl2` --
+
 // Define screen resolution
 #define FB_WIDTH  800
 #define FB_HEIGHT 600
