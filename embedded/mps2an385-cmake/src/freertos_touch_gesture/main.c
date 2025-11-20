@@ -44,15 +44,27 @@ typedef struct ScanData {
     Point point;
 } ScanData;
 
+
+typedef uint16_t ObjectID;
+
 typedef struct InputDevice {
     bool enabled : 1;
 
     uint8_t pressed;
     Point point;
 
+    /**
+     * @brief 0 is Relaese, 1 is Background, each id relate to a zone
+     *        and conform following pattern
+     *        0 -> 1 -> 0 -> x -> 0 ...
+     *        will change back 0 before change to others
+     */
+    ObjectID object_id;
+
 } InputDevice;
 
 struct InputDevice *DEV;
+
 
 InputDevice *InputDeviceCreate() {
     InputDevice *indev = malloc(sizeof(*indev));
@@ -61,9 +73,15 @@ InputDevice *InputDeviceCreate() {
 
     indev->point.x = 0;
     indev->point.y = 0;
+
+
+    indev->object_id = 0;
+
     return indev;
 }
 
+// 1. Call From IRQ or Timer
+// ----------------------------------------
 void InputDeviceScan(InputDevice* indev) {
     if (!indev) { return; }
     if (!indev->enabled) { return; }
@@ -99,10 +117,56 @@ void InputDeviceScan(InputDevice* indev) {
 
 }
 
+// 2. Call From InputDeviceScan
+// ----------------------------------------
+
 void InputDeviceScanPressProc(InputDevice *indev) {
+    ObjectID cur_objec_id = indev->object_id;
+
+    {
+        if (cur_objec_id == 0) {
+            cur_objec_id = 1; // TODO: maybe better way?
+        }
+
+        // On ObjectID Changed
+        if (cur_objec_id != indev->object_id) {
+            void onObjectIdChanged(InputDevice *indev, ObjectID cur_objec_id);
+            onObjectIdChanged(indev, cur_objec_id);
+        }
+    }
+
+    indev->object_id = cur_objec_id;
 }
 
 void InputDeviceScanReleaseProc(InputDevice *indev) {
+    uint16_t cur_objec_id = indev->object_id;
+
+    {
+        if (cur_objec_id) {
+            cur_objec_id = 0; // TODO: maybe better way?
+        }
+
+        // On ObjectID Changed
+        if (cur_objec_id != indev->object_id) {
+            void onObjectIdChanged(InputDevice *indev, ObjectID cur_objec_id);
+            onObjectIdChanged(indev, cur_objec_id);
+        }
+
+    }
+
+    indev->object_id = cur_objec_id;
+}
+
+// 3. Call From
+//  InputDeviceScanPressProc
+//  InputDeviceScanReleaseProc
+// ----------------------------------------
+
+void onObjectIdChanged(InputDevice *indev, ObjectID cur_objec_id) {
+    printf("ID %d -> %d: x=%d y=%d\n",
+            indev->object_id, cur_objec_id,
+            indev->point.x, indev->point.y
+          );
 }
 
 
@@ -123,16 +187,19 @@ void touch_pend_callback(void * arg1, uint32_t arg2) {
     InputDeviceScan(indev);
 }
 
+#define NO_HOVER_SUPPORT
 void TouchIRQ_Handler() {
     static uint32_t prev_pressed = 0;
     uint32_t prev = prev_pressed;
     uint32_t curr = *TOUCH_PRESS;
-
     prev_pressed = curr; // update prev
+
+    #ifdef NO_HOVER_SUPPORT
     // if neither edge nor pressed skip it -- skip hover event
     if (!( (prev ^ curr) || curr )) {
         return;
     }
+    #endif
 
     // See:
     // https://freertos.org/zh-cn-cmn-s/Documentation/02-Kernel/04-API-references/11-Software-timers/18-xTimerPendFunctionCallFromISRhttps://freertos.org/zh-cn-cmn-s/Documentation/02-Kernel/04-API-references/11-Software-timers/18-xTimerPendFunctionCallFromISR
@@ -156,6 +223,10 @@ void touch_timer_callback(TimerHandle_t xTimer) {
     InputDeviceScan(DEV);
 }
 
+
+// ========================================
+// Main Task
+// ========================================
 
 void MainTask() {
     // create indev
