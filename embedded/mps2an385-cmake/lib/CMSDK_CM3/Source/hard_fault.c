@@ -36,6 +36,12 @@ void HardFault_Handler(void)
 }
 
 
+#define FOREACH_SETBITS(mask, _i) \
+    for (unsigned int _i = 0, _temp_mask = (mask); \
+         _temp_mask != 0; \
+         _temp_mask >>= 1, _i++) \
+        if (_temp_mask & 1)
+
 void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
 {
 /* These are volatile to try and prevent the compiler/linker optimising them
@@ -89,11 +95,18 @@ void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
     // Configurable Fault Status Register (CFSR)
     // Combines UsageFault, BusFault, and MemManage status bits.
     // Common bits:
-    // - [0:7] (UFSR): Usage Fault Status
+    // - [0:7] (MMFSR): Memory Management Fault Status
     // - [8:15] (BFSR): Bus Fault Status
-    // - [16:23] (MMFSR): Memory Management Fault Status
+    // - [16:31] (UFSR): Usage Fault Status
     printf("CFSR = 0x%08lX  // Configurable Fault Status Register\n",
             SCB->CFSR);
+    {
+        printf("  bit: ");
+        FOREACH_SETBITS(SCB->CFSR, i) {
+            printf("%d ", i); // bit start from 0
+        }
+        printf("\n");
+    }
 
     // Bus Fault Address Register (BFAR)
     // Holds the data bus fault address if BFARVALID in CFSR is set.
