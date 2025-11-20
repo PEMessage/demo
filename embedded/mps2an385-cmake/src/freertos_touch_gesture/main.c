@@ -139,7 +139,7 @@ void InputDeviceScanPressProc(InputDevice *indev) {
 }
 
 void InputDeviceScanReleaseProc(InputDevice *indev) {
-    uint16_t cur_objec_id = indev->object_id;
+    ObjectID cur_objec_id = indev->object_id;
 
     {
         if (cur_objec_id) {
@@ -175,7 +175,7 @@ void onObjectIdChanged(InputDevice *indev, ObjectID cur_objec_id) {
 // ========================================
 void InputDeviceScanCore(InputDevice* indev, ScanData *data) {
     data->point.x = *TOUCH_X;
-    data->point.y = *TOUCH_X;
+    data->point.y = *TOUCH_Y;
     data->pressed = *TOUCH_PRESS;
     return ;
 }
