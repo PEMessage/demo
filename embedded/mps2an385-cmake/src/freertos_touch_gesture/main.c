@@ -31,6 +31,15 @@ void setup() {
 }
 
 // ========================================
+// Helper Function
+// ========================================
+#define STR(x) #x
+#define STRINGIFY(x) STR(x)
+#define FILE_LINE __FILE__ ":" STRINGIFY(__LINE__)
+
+#define LV_ABS(x) ((x) > 0 ? (x) : (-(x)))
+
+// ========================================
 // Input Framework
 // ========================================
 
@@ -47,11 +56,30 @@ typedef struct ScanData {
 
 typedef uint16_t ObjectID;
 
+
+typedef enum {
+    DIR_NONE     = 0x00,
+    DIR_LEFT     = (1 << 0),
+    DIR_RIGHT    = (1 << 1),
+    DIR_TOP      = (1 << 2),
+    DIR_BOTTOM   = (1 << 3),
+    DIR_HOR      = DIR_LEFT | DIR_RIGHT,
+    DIR_VER      = DIR_TOP | DIR_BOTTOM,
+    DIR_ALL      = DIR_HOR | DIR_VER,
+} Direction;
+
 typedef struct InputDevice {
     bool enabled : 1;
 
     uint8_t pressed;
     Point point;
+
+    /**
+     * @brief Will be set under following situation
+     *        1. Every scan end, Will set last_point to point
+     *        2. onObjectIdChanged, will set to point(force resync)
+     */
+    Point last_point;
 
     /**
      * @brief 0 is Relaese, 1 is Background, each id relate to a zone
@@ -60,6 +88,12 @@ typedef struct InputDevice {
      *        will change back 0 before change to others
      */
     ObjectID object_id;
+    /* check object_id is not zero before using following field */
+    /**/ Point gesture_sum;
+    /**/ uint8_t gesture_dir : 4;
+    /**/ uint8_t gesture_sent : 1;
+
+
 
 } InputDevice;
 
@@ -73,9 +107,17 @@ InputDevice *InputDeviceCreate() {
 
     indev->point.x = 0;
     indev->point.y = 0;
+    indev->last_point.x = 0;
+    indev->last_point.y = 0;
 
 
     indev->object_id = 0;
+    {
+        indev->gesture_sum.x = 0;
+        indev->gesture_sum.y = 0;
+        indev->gesture_sent = 0;
+        indev->gesture_dir = DIR_NONE;
+    }
 
     return indev;
 }
@@ -87,8 +129,7 @@ void InputDeviceScan(InputDevice* indev) {
     if (!indev->enabled) { return; }
 
 
-    // Actually Read something
-    {
+    { // Actually Read something
         struct ScanData data;
         {
             data.pressed = 0;
@@ -104,8 +145,8 @@ void InputDeviceScan(InputDevice* indev) {
         }
     }
 
-    printf("x:%4d, y:%4d, pressed:%2d\n",
-            indev->point.x, indev->point.y, indev->pressed);
+    // printf("x:%4d, y:%4d, pressed:%2d\n",
+    //         indev->point.x, indev->point.y, indev->pressed);
 
     if (indev->pressed) {
         void InputDeviceScanPressProc(InputDevice *indev);
@@ -113,6 +154,10 @@ void InputDeviceScan(InputDevice* indev) {
     } else {
         void InputDeviceScanReleaseProc(InputDevice *indev);
         InputDeviceScanReleaseProc(indev);
+    }
+
+    {   // Update last_point
+        indev->last_point = indev->point;
     }
 
 }
@@ -133,6 +178,12 @@ void InputDeviceScanPressProc(InputDevice *indev) {
             void onObjectIdChanged(InputDevice *indev, ObjectID cur_objec_id);
             onObjectIdChanged(indev, cur_objec_id);
         }
+    }
+
+    // UnderPress
+    if (indev->object_id) {
+        void detectGesture(InputDevice *indev);
+        detectGesture(indev);
     }
 
     indev->object_id = cur_objec_id;
@@ -162,11 +213,78 @@ void InputDeviceScanReleaseProc(InputDevice *indev) {
 //  InputDeviceScanReleaseProc
 // ----------------------------------------
 
-void onObjectIdChanged(InputDevice *indev, ObjectID cur_objec_id) {
+void onObjectIdChanged(InputDevice *indev, ObjectID cur_object_id) {
     printf("ID %d -> %d: x=%d y=%d\n",
-            indev->object_id, cur_objec_id,
+            indev->object_id, cur_object_id,
             indev->point.x, indev->point.y
           );
+
+    indev->last_point = indev->point; // resync last_point and point
+
+    if (!indev->object_id && cur_object_id) { // OnPress
+        printf("OnPress\n");
+        {
+            indev->gesture_sum.x = 0;
+            indev->gesture_sum.y = 0;
+            indev->gesture_dir = DIR_NONE;
+            indev->gesture_sent = 0;
+        }
+
+    } else if (indev->object_id && !cur_object_id) { // OnRelease
+        printf("OnRelease\n");
+
+    } else { // UnKnow
+        printf("ERROR: " FILE_LINE);
+        while(1);
+    }
+}
+
+void detectGesture(InputDevice *indev) {
+    if(!indev->object_id) { return; }
+    if(indev->gesture_sent) { return; }
+
+    // printf("detectGesture!\n");
+    Point diff = {
+        indev->point.x - indev->last_point.x,
+        indev->point.y - indev->last_point.y,
+    };
+
+    // move too small, reset gesture_sum.
+    #define MIN_VELOCITY 3
+    if ( LV_ABS(diff.x) < MIN_VELOCITY && LV_ABS(diff.y) < MIN_VELOCITY ) {
+        indev->gesture_sum.x = 0;
+        indev->gesture_sum.y = 0;
+        return;
+    }
+    // otherwise, accumlate it
+    indev->gesture_sum.x += diff.x;
+    indev->gesture_sum.y += diff.y;
+
+    // printf("sum of x %d\n", indev->gesture_sum.x);
+    // printf("sum of y %d\n", indev->gesture_sum.y);
+
+    #define GESTURE_LIMIT 50
+    if (LV_ABS(indev->gesture_sum.x) > GESTURE_LIMIT ||
+        LV_ABS(indev->gesture_sum.y) > GESTURE_LIMIT)
+    {
+
+        indev->gesture_sent = 1;
+        if(LV_ABS(indev->gesture_sum.x) > LV_ABS(indev->gesture_sum.y)) {
+            if(indev->gesture_sum.x > 0) {
+                indev->gesture_dir = DIR_RIGHT;
+            } else {
+                indev->gesture_dir = DIR_LEFT;
+            }
+        } else {
+            if(indev->gesture_sum.y > 0) {
+                indev->gesture_dir = DIR_BOTTOM;
+            } else {
+                indev->gesture_dir = DIR_TOP;
+            }
+        }
+        printf("Direction %d\n", indev->gesture_dir);
+
+    }
 }
 
 
