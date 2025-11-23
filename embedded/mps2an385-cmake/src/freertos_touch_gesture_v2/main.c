@@ -77,6 +77,11 @@ typedef struct Gesture {
     Point sum;
 } Gesture;
 
+typedef struct LongPress {
+    uint8_t isLong;
+    TickType_t startTick;
+} LongPress;
+
 typedef struct TouchPoint {
     int32_t track_id;
     Point point;
@@ -89,8 +94,9 @@ typedef struct Finger {
     Point start_point;
     Point prev_point;
 
-    /* custom data */
+    /* event base private data */
     Gesture gesture;
+    LongPress longPress
 
 } Finger;
 
@@ -199,12 +205,20 @@ void fingerStart(InputDevice *indev, Finger *finger) {
 
     void GestureStart(Finger *finger, Gesture* gesture);
     GestureStart(finger, &finger->gesture);
+
+    void LongPressStart(Finger *finger, LongPress *longPress);
+    LongPressStart(finger, &finger->longPress);
 }
 
 void fingerActive(InputDevice *indev, Finger *finger) {
     void GestureActive(Finger *finger, Gesture* gesture);
     GestureActive(finger, &finger->gesture);
 
+    void LongPressActive(Finger *finger, LongPress *longPress);
+    LongPressActive(finger, &finger->longPress);
+
+
+    // Keep this at the end
     finger->prev_point = finger->touch_point.point;
 }
 
@@ -265,6 +279,26 @@ void GestureActive(Finger *finger, Gesture* gesture) {
     }
 }
 
+// 4.1 Call From finger*, LongPress relate
+// ----------------------------------------
+void LongPressReset(LongPress *longPress) {
+    longPress->isLong = 0;
+    longPress->startTick = xTaskGetTickCount();
+}
+
+void LongPressStart(Finger *finger, LongPress *longPress) {
+    LongPressReset(longPress);
+}
+
+#define LONGPRESS_THRESHOLD pdMS_TO_TICKS(1000)
+void LongPressActive(Finger *finger, LongPress *longPress) {
+    if(longPress->isLong) { return; }
+    if (xTaskGetTickCount() - longPress->startTick > LONGPRESS_THRESHOLD) {
+        longPress->isLong = 1;
+        printf("LongPress\n");
+    }
+
+}
 
 // ========================================
 // Adapter
@@ -318,10 +352,10 @@ void TouchIRQ_Handler() {
 
 // Call From Timer
 // ----------------------------------------
-const uint32_t PERIOD = 1000; // ms
+const uint32_t PERIOD = 33; // ms
 static TimerHandle_t touch_timer = NULL;
 void touch_timer_callback(TimerHandle_t xTimer) {
-    printf("Tick count: %u ", xTaskGetTickCount());
+    printf("Tick count: %u\n ", xTaskGetTickCount());
     InputDeviceScan(DEV);
 }
 
