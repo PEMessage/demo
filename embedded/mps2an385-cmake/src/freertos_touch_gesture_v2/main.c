@@ -217,19 +217,19 @@ void fingerStart(InputDevice *indev, Finger *finger) {
     finger->start_point = finger->touch_point.point;
     finger->prev_point = finger->touch_point.point;
 
-    void GestureStart(Finger *finger, Gesture* gesture);
-    GestureStart(finger, &finger->gesture);
+    void GestureStart(InputDevice *indev, Finger *finger);
+    GestureStart(indev, finger);
 
-    void LongPressStart(Finger *finger, LongPress *longPress);
-    LongPressStart(finger, &finger->longPress);
+    void LongPressStart(InputDevice *indev, Finger *finger);
+    LongPressStart(indev, finger);
 }
 
 void fingerActive(InputDevice *indev, Finger *finger) {
-    void GestureActive(Finger *finger, Gesture* gesture);
-    GestureActive(finger, &finger->gesture);
+    void GestureActive(InputDevice *indev, Finger *finger);
+    GestureActive(indev, finger);
 
-    void LongPressActive(Finger *finger, LongPress *longPress);
-    LongPressActive(finger, &finger->longPress);
+    void LongPressActive(InputDevice *indev, Finger *finger);
+    LongPressActive(indev, finger);
 
 
     // Keep this at the end
@@ -237,28 +237,30 @@ void fingerActive(InputDevice *indev, Finger *finger) {
 }
 
 void fingerEnd(InputDevice *indev, Finger *finger) {
-    void ClickStart(Finger *finger, Click *click);
-    ClickStart(indev, &finger->click);
+    void ClickStart(InputDevice *indev, Finger *finger);
+    ClickStart(indev, finger);
 }
 
 void fingerIdle(InputDevice *indev, Finger *finger) {
-    void ClickActive(Finger *finger, Click *click);
-    ClickActive(indev, &finger->click);
+    void ClickActive(InputDevice *indev, Finger *finger);
+    ClickActive(indev, finger);
 }
 
 // 4.1 Call From finger*, Gesture relate
 // ----------------------------------------
-void GestureReset(Gesture *gesture) {
+void GestureReset(InputDevice *indev, Finger *finger) {
+    Gesture *gesture = &finger->gesture;
     gesture->direction = DIR_NONE;
     gesture->sum.x = 0;
     gesture->sum.y = 0;
 }
 
-void GestureStart(Finger *finger, Gesture* gesture) {
-    GestureReset(gesture);
+void GestureStart(InputDevice *indev, Finger *finger) {
+    GestureReset(indev, finger);
 }
 
-void GestureActive(Finger *finger, Gesture* gesture) {
+void GestureActive(InputDevice *indev, Finger *finger) {
+    Gesture *gesture = &finger->gesture;
     if(gesture->direction != DIR_NONE) { return; }
 
     Point diff = {
@@ -268,7 +270,7 @@ void GestureActive(Finger *finger, Gesture* gesture) {
 
     #define MIN_VELOCITY 3
     if ( LV_ABS(diff.x) < MIN_VELOCITY && LV_ABS(diff.y) < MIN_VELOCITY ) {
-        GestureReset(gesture);
+        GestureReset(indev, finger);
         return;
     }
 
@@ -298,17 +300,19 @@ void GestureActive(Finger *finger, Gesture* gesture) {
 
 // 4.2 Call From finger*, LongPress relate
 // ----------------------------------------
-void LongPressReset(LongPress *longPress) {
+void LongPressReset(InputDevice *indev, Finger *finger) {
+    LongPress *longPress = &finger->longPress;
     longPress->isLong = 0;
     longPress->startTick = xTaskGetTickCount();
 }
 
-void LongPressStart(Finger *finger, LongPress *longPress) {
-    LongPressReset(longPress);
+void LongPressStart(InputDevice *indev, Finger *finger) {
+    LongPressReset(indev, finger);
 }
 
 #define LONGPRESS_THRESHOLD pdMS_TO_TICKS(1000)
-void LongPressActive(Finger *finger, LongPress *longPress) {
+void LongPressActive(InputDevice *indev, Finger *finger) {
+    LongPress *longPress = &finger->longPress;
     if(longPress->isLong) { return; }
     if (xTaskGetTickCount() - longPress->startTick > LONGPRESS_THRESHOLD) {
         longPress->isLong = 1;
@@ -319,18 +323,22 @@ void LongPressActive(Finger *finger, LongPress *longPress) {
 
 // 4.3 Call From finger*, Click relate
 // ----------------------------------------
-void ClickReset(Click *click) {
+void ClickReset(InputDevice *indev, Finger *finger) {
+    Click *click = &finger->click;
     click->count = 0;
 }
 
-void ClickStart(Finger *finger, Click *click) {
+void ClickStart(InputDevice *indev, Finger *finger) {
+    Click *click = &finger->click;
     click->count++;
     click->startTick = xTaskGetTickCount();
 }
 
 
 #define MULTICLICK_THRESHOLD pdMS_TO_TICKS(100)
-void ClickActive(Finger *finger, Click *click) {
+void ClickActive(InputDevice *indev, Finger *finger) {
+    Click *click = &finger->click;
+
     if (click->count == 0) { return; }
 
     TickType_t current = xTaskGetTickCount();
@@ -339,7 +347,7 @@ void ClickActive(Finger *finger, Click *click) {
     }
 
     printf("Click %d\n", click->count);
-    ClickReset(click);
+    ClickReset(indev, finger);
 }
 
 // ========================================
