@@ -3,6 +3,7 @@
 #include "CMSDK_CM3_EXT.h" // for SystemCoreClock
 #include "FreeRTOS.h"
 #include "task.h"
+#include "semphr.h"
 #include "timers.h"
 
 

@@ -4,6 +4,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "timers.h"
+#include "semphr.h"
 #include <stdint.h>
 
 void NVIC_Init() {
@@ -184,3 +185,4 @@ int main() {
     vTaskStartScheduler();
     while(1);
 }
+
