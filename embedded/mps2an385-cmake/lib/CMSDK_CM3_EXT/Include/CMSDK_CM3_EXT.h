@@ -12,9 +12,9 @@ typedef struct {
 
 #define TOUCH_BASE_ADDRESS ((volatile void*)0x41000000)
 #define TOUCH_CTRL   ((volatile MPS2FBCtrl *)(TOUCH_BASE_ADDRESS + 0))
-#define TOUCH_X      ((volatile uint32_t *)(TOUCH_BASE_ADDRESS + 4))
-#define TOUCH_Y      ((volatile uint32_t *)(TOUCH_BASE_ADDRESS + 8))
-#define TOUCH_PRESS  ((volatile uint32_t *)(TOUCH_BASE_ADDRESS + 12))
+#define TOUCH_X      ((volatile uint32_t *)(TOUCH_BASE_ADDRESS + 8))
+#define TOUCH_Y      ((volatile uint32_t *)(TOUCH_BASE_ADDRESS + 12))
+#define TOUCH_PRESS  ((volatile uint32_t *)(TOUCH_BASE_ADDRESS + 16))
 
 #define Touch_IRQn GPIO0_7_IRQn
 #define TouchIRQ_Handler GPIO0_7_Handler
