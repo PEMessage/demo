@@ -16,7 +16,7 @@ if(NOT EXISTS "${LVGL_SOURCE_DIR}")
   FetchContent_Declare(
     lvgl
     GIT_REPOSITORY https://github.com/lvgl/lvgl.git
-    GIT_TAG        v9.3.0
+    GIT_TAG        v9.4.0
     SOURCE_DIR     "${LVGL_SOURCE_DIR}"
   )
 
@@ -31,4 +31,7 @@ add_subdirectory(lvgl_port)
 
 cmake_policy(SET CMP0079 NEW) # inject freertos_kernel into lvgl dep
 target_link_libraries(lvgl PRIVATE freertos_kernel m)
+
+# if want to build demo, uncomment below , and set `CONFIG_LV_BUILD_DEMOS ON` above
+# target_link_libraries(lvgl_examples PRIVATE freertos_kernel m)
 
