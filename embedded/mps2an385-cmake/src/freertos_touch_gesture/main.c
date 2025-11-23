@@ -182,8 +182,8 @@ void InputDeviceScanPressProc(InputDevice *indev) {
 
     // UnderPress
     if (indev->object_id) {
-        void detectGesture(InputDevice *indev);
-        detectGesture(indev);
+        void detectSwipeDirection(InputDevice *indev);
+        detectSwipeDirection(indev);
     }
 
     indev->object_id = cur_objec_id;
@@ -239,7 +239,7 @@ void onObjectIdChanged(InputDevice *indev, ObjectID cur_object_id) {
     }
 }
 
-void detectGesture(InputDevice *indev) {
+void detectSwipeDirection(InputDevice *indev) {
     if(!indev->object_id) { return; }
     if(indev->gesture_sent) { return; }
 
@@ -285,6 +285,9 @@ void detectGesture(InputDevice *indev) {
         printf("Direction %d\n", indev->gesture_dir);
 
     }
+}
+
+void detectLongPress() {
 }
 
 
@@ -360,7 +363,7 @@ void MainTask() {
     );
 
     // Start the timer
-    // xTimerStart(touch_timer, portMAX_DELAY);
+    xTimerStart(touch_timer, portMAX_DELAY);
 
     while(1) {
     }
