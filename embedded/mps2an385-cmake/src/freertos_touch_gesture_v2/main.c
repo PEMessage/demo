@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <string.h>
 
 void NVIC_Init() {
     size_t i = 0 ;
@@ -39,23 +40,26 @@ void setup() {
 
 #define LV_ABS(x) ((x) > 0 ? (x) : (-(x)))
 
+#define FOREACH_SETBITS(mask, _i) \
+    for (unsigned int _i = 0, _temp_mask = (mask); \
+         _temp_mask != 0; \
+         _temp_mask >>= 1, _i++) \
+        if (_temp_mask & 1)
+
+#define ARRAY_INDEX(ptr, array) ((size_t)((ptr) - (array)) / sizeof(*(array)))
+// ========================================
+// Input Framework Helper
+// ========================================
+typedef uint16_t ObjectID;
+
+
 // ========================================
 // Input Framework
 // ========================================
-
 typedef struct Point {
     int16_t x;
     int16_t y;
 } Point;
-
-typedef struct ScanData {
-    uint8_t pressed;
-    Point point;
-} ScanData;
-
-
-typedef uint16_t ObjectID;
-
 
 typedef enum {
     DIR_NONE     = 0x00,
@@ -68,31 +72,44 @@ typedef enum {
     DIR_ALL      = DIR_HOR | DIR_VER,
 } Direction;
 
+typedef struct Gesture {
+    Direction direction;
+    Point sum;
+} Gesture;
+
+typedef struct TouchPoint {
+    int32_t track_id;
+    Point point;
+} TouchPoint;
+
+typedef struct Finger {
+    TouchPoint touch_point;
+
+
+    Point start_point;
+    Point prev_point;
+
+    /* custom data */
+    Gesture gesture;
+
+} Finger;
+
+
+#define MAX_SUPPORT_SLOT 3
+
+typedef struct ScanData {
+    uint32_t slot_mask;
+    TouchPoint touch_points[MAX_SUPPORT_SLOT];
+} ScanData;
+
+
 typedef struct InputDevice {
     bool enabled : 1;
 
-    uint8_t pressed;
-    Point point;
+    uint32_t prev_slot_mask;
+    uint32_t curr_slot_mask;
 
-    /**
-     * @brief Will be set under following situation
-     *        1. Every scan end, Will set last_point to point
-     *        2. onObjectIdChanged, will set to point(force resync)
-     */
-    Point last_point;
-
-    /**
-     * @brief 0 is Relaese, 1 is Background, each id relate to a zone
-     *        and conform following pattern
-     *        0 -> 1 -> 0 -> x -> 0 ...
-     *        will change back 0 before change to others
-     */
-    ObjectID object_id;
-    /* check object_id is not zero before using following field */
-    /**/ Point gesture_sum;
-    /**/ uint8_t gesture_dir : 4;
-    /**/ uint8_t gesture_sent : 1;
-
+    Finger fingers[MAX_SUPPORT_SLOT];
 
 
 } InputDevice;
@@ -102,25 +119,13 @@ struct InputDevice *DEV;
 
 InputDevice *InputDeviceCreate() {
     InputDevice *indev = malloc(sizeof(*indev));
+    memset(indev, 0, sizeof(*indev));
 
     indev->enabled = true;
 
-    indev->point.x = 0;
-    indev->point.y = 0;
-    indev->last_point.x = 0;
-    indev->last_point.y = 0;
-
-
-    indev->object_id = 0;
-    {
-        indev->gesture_sum.x = 0;
-        indev->gesture_sum.y = 0;
-        indev->gesture_sent = 0;
-        indev->gesture_dir = DIR_NONE;
-    }
-
     return indev;
 }
+
 
 // 1. Call From IRQ or Timer
 // ----------------------------------------
@@ -128,166 +133,136 @@ void InputDeviceScan(InputDevice* indev) {
     if (!indev) { return; }
     if (!indev->enabled) { return; }
 
-
+    indev->prev_slot_mask = indev->curr_slot_mask;
     { // Actually Read something
         struct ScanData data;
         {
-            data.pressed = 0;
-            data.point = indev->point;
+            data.slot_mask = indev->curr_slot_mask;
+            for (int i = 0 ; i < MAX_SUPPORT_SLOT ; i ++ ) {
+                data.touch_points[i] = indev->fingers[i].touch_point;
+            }
         }
-        // Forward declare
+
         void InputDeviceScanCore(InputDevice* indev, ScanData *data);
         InputDeviceScanCore(indev, &data);
 
         {
-            indev->point = data.point;
-            indev->pressed = data.pressed;
+            indev->curr_slot_mask = data.slot_mask;
+            for (int i = 0 ; i < MAX_SUPPORT_SLOT ; i ++ ) {
+                indev->fingers[i].touch_point = data.touch_points[i];
+            }
         }
     }
 
-    // printf("x:%4d, y:%4d, pressed:%2d\n",
-    //         indev->point.x, indev->point.y, indev->pressed);
-
-    if (indev->pressed) {
-        void InputDeviceScanPressProc(InputDevice *indev);
-        InputDeviceScanPressProc(indev);
-    } else {
-        void InputDeviceScanReleaseProc(InputDevice *indev);
-        InputDeviceScanReleaseProc(indev);
-    }
-
-    {   // Update last_point
-        indev->last_point = indev->point;
-    }
-
+    void detectProcess(InputDevice* indev);
+    detectProcess(indev);
 }
 
-// 2. Call From InputDeviceScan
+// 2. Call from InputDeviceScan
 // ----------------------------------------
 
-void InputDeviceScanPressProc(InputDevice *indev) {
-    ObjectID cur_objec_id = indev->object_id;
+void detectProcess(InputDevice* indev) {
+    uint32_t slot_mask_both_edge = indev->prev_slot_mask ^ indev->curr_slot_mask;
+    uint32_t slot_mask_up_edge = slot_mask_both_edge & indev->curr_slot_mask;
+    uint32_t slot_mask_down_edge = slot_mask_both_edge & indev->prev_slot_mask;
+    uint32_t slot_mask_without_change_high = ~slot_mask_both_edge & indev->curr_slot_mask;
+    uint32_t slot_mask_without_change_low = ~slot_mask_both_edge & ~indev->curr_slot_mask;
 
-    {
-        if (cur_objec_id == 0) {
-            cur_objec_id = 1; // TODO: maybe better way?
-        }
-
-        // On ObjectID Changed
-        if (cur_objec_id != indev->object_id) {
-            void onObjectIdChanged(InputDevice *indev, ObjectID cur_objec_id);
-            onObjectIdChanged(indev, cur_objec_id);
-        }
+    FOREACH_SETBITS(slot_mask_up_edge, i) {
+        void fingerStart(InputDevice *indev, Finger *finger);
+        fingerStart(indev, &indev->fingers[i]);
     }
 
-    // UnderPress
-    if (indev->object_id) {
-        void detectSwipeDirection(InputDevice *indev);
-        detectSwipeDirection(indev);
+    FOREACH_SETBITS(slot_mask_down_edge, i) {
+        void fingerEnd(InputDevice *indev, Finger *finger);
+        fingerEnd(indev, &indev->fingers[i]);
     }
 
-    indev->object_id = cur_objec_id;
+    FOREACH_SETBITS(slot_mask_without_change_high, i) {
+        void fingerActive(InputDevice *indev, Finger *finger);
+        fingerActive(indev, &indev->fingers[i]);
+    }
+
+    FOREACH_SETBITS(slot_mask_without_change_low, i) {
+        void fingerIdle(InputDevice *indev, Finger *finger);
+        fingerIdle(indev, &indev->fingers[i]);
+    }
+
 }
 
-void InputDeviceScanReleaseProc(InputDevice *indev) {
-    ObjectID cur_objec_id = indev->object_id;
 
-    {
-        if (cur_objec_id) {
-            cur_objec_id = 0; // TODO: maybe better way?
-        }
-
-        // On ObjectID Changed
-        if (cur_objec_id != indev->object_id) {
-            void onObjectIdChanged(InputDevice *indev, ObjectID cur_objec_id);
-            onObjectIdChanged(indev, cur_objec_id);
-        }
-
-    }
-
-    indev->object_id = cur_objec_id;
-}
-
-// 3. Call From
-//  InputDeviceScanPressProc
-//  InputDeviceScanReleaseProc
+// 3.1 Call from detectProcess, Finger relate
 // ----------------------------------------
+void fingerStart(InputDevice *indev, Finger *finger) {
+    finger->start_point = finger->touch_point.point;
+    finger->prev_point = finger->touch_point.point;
 
-void onObjectIdChanged(InputDevice *indev, ObjectID cur_object_id) {
-    printf("ID %d -> %d: x=%d y=%d\n",
-            indev->object_id, cur_object_id,
-            indev->point.x, indev->point.y
-          );
-
-    indev->last_point = indev->point; // resync last_point and point
-
-    if (!indev->object_id && cur_object_id) { // OnPress
-        printf("OnPress\n");
-        {
-            indev->gesture_sum.x = 0;
-            indev->gesture_sum.y = 0;
-            indev->gesture_dir = DIR_NONE;
-            indev->gesture_sent = 0;
-        }
-
-    } else if (indev->object_id && !cur_object_id) { // OnRelease
-        printf("OnRelease\n");
-
-    } else { // UnKnow
-        printf("ERROR: " FILE_LINE);
-        while(1);
-    }
+    void GestureStart(Finger *finger, Gesture* gesture);
+    GestureStart(finger, &finger->gesture);
 }
 
-void detectSwipeDirection(InputDevice *indev) {
-    if(!indev->object_id) { return; }
-    if(indev->gesture_sent) { return; }
+void fingerActive(InputDevice *indev, Finger *finger) {
+    void GestureActive(Finger *finger, Gesture* gesture);
+    GestureActive(finger, &finger->gesture);
 
-    // printf("detectGesture!\n");
+    finger->prev_point = finger->touch_point.point;
+}
+
+void fingerEnd(InputDevice *indev, Finger *finger) {
+}
+
+void fingerIdle(InputDevice *indev, Finger *finger) {
+    // nothing
+}
+
+// 4.1 Call From finger*, Gesture relate
+// ----------------------------------------
+void GestureReset(Gesture *gesture) {
+    gesture->direction = DIR_NONE;
+    gesture->sum.x = 0;
+    gesture->sum.y = 0;
+}
+
+void GestureStart(Finger *finger, Gesture* gesture) {
+    GestureReset(gesture);
+}
+
+void GestureActive(Finger *finger, Gesture* gesture) {
+    if(gesture->direction != DIR_NONE) { return; }
+
     Point diff = {
-        indev->point.x - indev->last_point.x,
-        indev->point.y - indev->last_point.y,
+        finger->touch_point.point.x - finger->prev_point.x,
+        finger->touch_point.point.y - finger->prev_point.y
     };
 
-    // move too small, reset gesture_sum.
     #define MIN_VELOCITY 3
     if ( LV_ABS(diff.x) < MIN_VELOCITY && LV_ABS(diff.y) < MIN_VELOCITY ) {
-        indev->gesture_sum.x = 0;
-        indev->gesture_sum.y = 0;
+        GestureReset(gesture);
         return;
     }
-    // otherwise, accumlate it
-    indev->gesture_sum.x += diff.x;
-    indev->gesture_sum.y += diff.y;
 
-    // printf("sum of x %d\n", indev->gesture_sum.x);
-    // printf("sum of y %d\n", indev->gesture_sum.y);
+    gesture->sum.x += diff.x;
+    gesture->sum.y += diff.y;
 
     #define GESTURE_LIMIT 50
-    if (LV_ABS(indev->gesture_sum.x) > GESTURE_LIMIT ||
-        LV_ABS(indev->gesture_sum.y) > GESTURE_LIMIT)
+    if (LV_ABS(gesture->sum.x) > GESTURE_LIMIT ||
+        LV_ABS(gesture->sum.y) > GESTURE_LIMIT)
     {
-
-        indev->gesture_sent = 1;
-        if(LV_ABS(indev->gesture_sum.x) > LV_ABS(indev->gesture_sum.y)) {
-            if(indev->gesture_sum.x > 0) {
-                indev->gesture_dir = DIR_RIGHT;
+        if(LV_ABS(gesture->sum.x) > LV_ABS(gesture->sum.y)) {
+            if(gesture->sum.x > 0) {
+                gesture->direction = DIR_RIGHT;
             } else {
-                indev->gesture_dir = DIR_LEFT;
+                gesture->direction = DIR_LEFT;
             }
         } else {
-            if(indev->gesture_sum.y > 0) {
-                indev->gesture_dir = DIR_BOTTOM;
+            if(gesture->sum.y > 0) {
+                gesture->direction = DIR_BOTTOM;
             } else {
-                indev->gesture_dir = DIR_TOP;
+                gesture->direction = DIR_TOP;
             }
         }
-        printf("Direction %d\n", indev->gesture_dir);
-
+        printf("Direction %d\n", gesture->direction);
     }
-}
-
-void detectLongPress() {
 }
 
 
@@ -295,9 +270,15 @@ void detectLongPress() {
 // Adapter
 // ========================================
 void InputDeviceScanCore(InputDevice* indev, ScanData *data) {
-    data->point.x = *TOUCH_X;
-    data->point.y = *TOUCH_Y;
-    data->pressed = *TOUCH_PRESS;
+    data->touch_points[0].point.x = *TOUCH_X;
+    data->touch_points[0].point.y = *TOUCH_Y;
+    if (*TOUCH_PRESS) {
+        data->slot_mask |= (1 << 0);
+        data->touch_points[0].track_id = 1;
+    } else {
+        data->slot_mask &= ~(1 << 0);
+        data->touch_points[0].track_id = -1;
+    }
     return ;
 }
 

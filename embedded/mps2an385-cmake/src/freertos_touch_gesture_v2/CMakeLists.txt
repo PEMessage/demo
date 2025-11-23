@@ -1,9 +1,9 @@
 # Hello World Module
 cmake_minimum_required(VERSION 3.12)
-project(freertos_touch_gesture LANGUAGES C ASM)
+project(freertos_touch_gesture_v2 LANGUAGES C ASM)
 
 # Set module name
-set(MODULE_NAME freertos_touch_gesture)
+set(MODULE_NAME freertos_touch_gesture_v2)
 
 # Source files
 file(GLOB SRCS *.c)
