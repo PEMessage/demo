@@ -70,6 +70,17 @@ typedef struct TouchPoint {
     Point point;
 } TouchPoint;
 
+
+
+
+// 2. Finger
+// ----------------------------------------
+
+typedef enum State {
+    ST_NONE = 0,
+    ST_RECOGNIZED = 1
+} State;
+
 typedef enum {
     DIR_NONE     = 0x00,
     DIR_LEFT     = (1 << 0),
@@ -81,21 +92,21 @@ typedef enum {
     DIR_ALL      = DIR_HOR | DIR_VER,
 } Direction;
 
-// 2. Finger
-// ----------------------------------------
 typedef struct Gesture {
+    State isDetect;
     Direction direction;
     Point sum;
 } Gesture;
 
 typedef struct LongPress {
-    uint8_t isLong;
+    State isDetect;
     TickType_t startTick;
 } LongPress;
 
 typedef struct Click {
+    State isDetect;
     uint8_t count;
-    TickType_t startTick;
+    TickType_t watchdog;
 } Click;
 
 typedef struct Finger {
@@ -250,6 +261,7 @@ void fingerIdle(InputDevice *indev, Finger *finger) {
 // ----------------------------------------
 void GestureReset(InputDevice *indev, Finger *finger) {
     Gesture *gesture = &finger->gesture;
+    gesture->isDetect = ST_NONE;
     gesture->direction = DIR_NONE;
     gesture->sum.x = 0;
     gesture->sum.y = 0;
@@ -261,7 +273,7 @@ void GestureStart(InputDevice *indev, Finger *finger) {
 
 void GestureActive(InputDevice *indev, Finger *finger) {
     Gesture *gesture = &finger->gesture;
-    if(gesture->direction != DIR_NONE) { return; }
+    if(gesture->isDetect != ST_NONE) { return; }
 
     Point diff = {
         finger->touch_point.point.x - finger->prev_point.x,
@@ -294,6 +306,7 @@ void GestureActive(InputDevice *indev, Finger *finger) {
                 gesture->direction = DIR_TOP;
             }
         }
+        gesture->isDetect = ST_RECOGNIZED;
         printf("Direction %d\n", gesture->direction);
     }
 }
@@ -302,7 +315,7 @@ void GestureActive(InputDevice *indev, Finger *finger) {
 // ----------------------------------------
 void LongPressReset(InputDevice *indev, Finger *finger) {
     LongPress *longPress = &finger->longPress;
-    longPress->isLong = 0;
+    longPress->isDetect = ST_NONE;
     longPress->startTick = xTaskGetTickCount();
 }
 
@@ -313,9 +326,10 @@ void LongPressStart(InputDevice *indev, Finger *finger) {
 #define LONGPRESS_THRESHOLD pdMS_TO_TICKS(1000)
 void LongPressActive(InputDevice *indev, Finger *finger) {
     LongPress *longPress = &finger->longPress;
-    if(longPress->isLong) { return; }
+    if(longPress->isDetect != ST_NONE ) { return; }
+
     if (xTaskGetTickCount() - longPress->startTick > LONGPRESS_THRESHOLD) {
-        longPress->isLong = 1;
+        longPress->isDetect = ST_RECOGNIZED;
         printf("LongPress\n");
     }
 
@@ -325,29 +339,36 @@ void LongPressActive(InputDevice *indev, Finger *finger) {
 // ----------------------------------------
 void ClickReset(InputDevice *indev, Finger *finger) {
     Click *click = &finger->click;
+    click->isDetect = ST_NONE;
+
     click->count = 0;
 }
 
 void ClickStart(InputDevice *indev, Finger *finger) {
     Click *click = &finger->click;
+
+
     click->count++;
-    click->startTick = xTaskGetTickCount();
+    click->watchdog = xTaskGetTickCount();
 }
 
 
 #define MULTICLICK_THRESHOLD pdMS_TO_TICKS(100)
 void ClickActive(InputDevice *indev, Finger *finger) {
     Click *click = &finger->click;
+    if(click->isDetect != ST_NONE ) { return; }
+    if(click->count == 0) { return; }
 
-    if (click->count == 0) { return; }
 
-    TickType_t current = xTaskGetTickCount();
-    if (current - click->startTick < MULTICLICK_THRESHOLD) {
-        return ;
+
+    if (xTaskGetTickCount() - click->watchdog > MULTICLICK_THRESHOLD) {
+        click->isDetect = ST_RECOGNIZED;
+        printf("Click %d\n", click->count);
+        ClickReset(indev, finger);
+        return;
     }
 
-    printf("Click %d\n", click->count);
-    ClickReset(indev, finger);
+    return;
 }
 
 // ========================================
