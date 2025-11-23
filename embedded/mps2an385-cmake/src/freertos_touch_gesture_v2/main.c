@@ -54,12 +54,21 @@ typedef uint16_t ObjectID;
 
 
 // ========================================
-// Input Framework
+// Input Framework Struct
 // ========================================
+
+// 1. Basic
+// ----------------------------------------
 typedef struct Point {
     int16_t x;
     int16_t y;
 } Point;
+
+
+typedef struct TouchPoint {
+    int32_t track_id;
+    Point point;
+} TouchPoint;
 
 typedef enum {
     DIR_NONE     = 0x00,
@@ -72,6 +81,8 @@ typedef enum {
     DIR_ALL      = DIR_HOR | DIR_VER,
 } Direction;
 
+// 2. Finger
+// ----------------------------------------
 typedef struct Gesture {
     Direction direction;
     Point sum;
@@ -82,10 +93,10 @@ typedef struct LongPress {
     TickType_t startTick;
 } LongPress;
 
-typedef struct TouchPoint {
-    int32_t track_id;
-    Point point;
-} TouchPoint;
+typedef struct Click {
+    uint8_t count;
+    TickType_t startTick;
+} Click;
 
 typedef struct Finger {
     TouchPoint touch_point;
@@ -96,8 +107,8 @@ typedef struct Finger {
 
     /* event base private data */
     Gesture gesture;
-    LongPress longPress
-
+    LongPress longPress;
+    Click click;
 } Finger;
 
 
@@ -123,6 +134,9 @@ typedef struct InputDevice {
 struct InputDevice *DEV;
 
 
+// ========================================
+// Input Framework Function
+// ========================================
 InputDevice *InputDeviceCreate() {
     InputDevice *indev = malloc(sizeof(*indev));
     memset(indev, 0, sizeof(*indev));
@@ -223,10 +237,13 @@ void fingerActive(InputDevice *indev, Finger *finger) {
 }
 
 void fingerEnd(InputDevice *indev, Finger *finger) {
+    void ClickStart(Finger *finger, Click *click);
+    ClickStart(indev, &finger->click);
 }
 
 void fingerIdle(InputDevice *indev, Finger *finger) {
-    // nothing
+    void ClickActive(Finger *finger, Click *click);
+    ClickActive(indev, &finger->click);
 }
 
 // 4.1 Call From finger*, Gesture relate
@@ -279,7 +296,7 @@ void GestureActive(Finger *finger, Gesture* gesture) {
     }
 }
 
-// 4.1 Call From finger*, LongPress relate
+// 4.2 Call From finger*, LongPress relate
 // ----------------------------------------
 void LongPressReset(LongPress *longPress) {
     longPress->isLong = 0;
@@ -298,6 +315,31 @@ void LongPressActive(Finger *finger, LongPress *longPress) {
         printf("LongPress\n");
     }
 
+}
+
+// 4.3 Call From finger*, Click relate
+// ----------------------------------------
+void ClickReset(Click *click) {
+    click->count = 0;
+}
+
+void ClickStart(Finger *finger, Click *click) {
+    click->count++;
+    click->startTick = xTaskGetTickCount();
+}
+
+
+#define MULTICLICK_THRESHOLD pdMS_TO_TICKS(100)
+void ClickActive(Finger *finger, Click *click) {
+    if (click->count == 0) { return; }
+
+    TickType_t current = xTaskGetTickCount();
+    if (current - click->startTick < MULTICLICK_THRESHOLD) {
+        return ;
+    }
+
+    printf("Click %d\n", click->count);
+    ClickReset(click);
 }
 
 // ========================================
@@ -352,10 +394,10 @@ void TouchIRQ_Handler() {
 
 // Call From Timer
 // ----------------------------------------
-const uint32_t PERIOD = 33; // ms
+const uint32_t PERIOD = 100; // ms
 static TimerHandle_t touch_timer = NULL;
 void touch_timer_callback(TimerHandle_t xTimer) {
-    printf("Tick count: %u\n ", xTaskGetTickCount());
+    // printf("Tick count: %u\n ", xTaskGetTickCount());
     InputDeviceScan(DEV);
 }
 
