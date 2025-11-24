@@ -344,9 +344,17 @@ void ClickReset(InputDevice *indev, Finger *finger) {
     click->count = 0;
 }
 
+#define MULTICLICK_MAX_CLICK 2
 void ClickStart(InputDevice *indev, Finger *finger) {
     Click *click = &finger->click;
 
+    #if defined(MULTICLICK_MAX_CLICK) && MULTICLICK_MAX_CLICK > 0
+    if (click->count == MULTICLICK_MAX_CLICK) {
+        click->isDetect = ST_RECOGNIZED;
+        printf("Click %d\n", click->count);
+        ClickReset(indev, finger);
+    }
+    #endif
 
     click->count++;
     click->watchdog = xTaskGetTickCount();
@@ -359,6 +367,14 @@ void ClickActive(InputDevice *indev, Finger *finger) {
     if(click->isDetect != ST_NONE ) { return; }
     if(click->count == 0) { return; }
 
+    #if defined(MULTICLICK_MAX_CLICK) && MULTICLICK_MAX_CLICK > 0
+    if (click->count == MULTICLICK_MAX_CLICK) {
+        click->isDetect = ST_RECOGNIZED;
+        printf("Click %d\n", click->count);
+        ClickReset(indev, finger);
+        return;
+    }
+    #endif
 
 
     if (xTaskGetTickCount() - click->watchdog > MULTICLICK_THRESHOLD) {
