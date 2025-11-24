@@ -99,40 +99,12 @@ static void touchpad_init(void) {
 /*Will be called by the library to read the touchpad*/
 static void touchpad_read(lv_indev_t * indev_drv, lv_indev_data_t * data)
 {
-    static int32_t last_x = 0;
-    static int32_t last_y = 0;
 
-    /*Save the pressed coordinates and the state*/
-    if(touchpad_is_pressed()) {
-        touchpad_get_xy(&last_x, &last_y);
-        data->state = LV_INDEV_STATE_PRESSED;
-    }
-    else {
-        data->state = LV_INDEV_STATE_RELEASED;
-    }
+    data->point.x = MPS2FB_TOUCH->points[0].x;
+    data->point.y = MPS2FB_TOUCH->points[0].y;
+    data->state =  MPS2FB_TOUCH->points[0].pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
 
-    /*Set the last pressed coordinates*/
-    data->point.x = last_x;
-    data->point.y = last_y;
 }
-
-/*Return true is the touchpad is pressed*/
-static bool touchpad_is_pressed(void)
-{
-    /*Read press state from memory-mapped register*/
-    return (*TOUCH_PRESS) != 0;
-}
-
-/*Get the x and y coordinates if the touchpad is pressed*/
-static void touchpad_get_xy(int32_t * x, int32_t * y)
-{
-    /*Read coordinates from memory-mapped registers*/
-    *x = (int32_t)(*TOUCH_X);
-    *y = (int32_t)(*TOUCH_Y);
-}
-
-
-
 
 /*------------------
  * Touchpad Event Mode Extra
