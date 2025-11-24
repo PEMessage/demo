@@ -2,7 +2,9 @@
 cmake_minimum_required(VERSION 3.12)
 project(freertos_lv_example_gestures LANGUAGES C ASM)
 
-message(WARNING "NOTICE: you may need to set LV_MEM_SIZE 1024*1024 to make this example work")
+# ===========================================================================
+# NOTICE: you may need to set LV_MEM_SIZE 1024*1024 to make this example work
+# ===========================================================================
 
 # Set module name
 set(MODULE_NAME freertos_lv_example_gestures)
