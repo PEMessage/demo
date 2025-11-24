@@ -99,6 +99,25 @@ static void touchpad_init(void) {
 /*Will be called by the library to read the touchpad*/
 static void touchpad_read(lv_indev_t * indev_drv, lv_indev_data_t * data)
 {
+    #if defined(LV_PORT_INDEV_SUPPORT_MULTI_TOUCH) && LV_PORT_INDEV_SUPPORT_MULTI_TOUCH == 1
+    lv_indev_touch_data_t touches[MAX_TOUCH_POINTS];
+
+    int touch_cnt = MAX_TOUCH_POINTS ;
+
+    for (int i = 0; i < MAX_TOUCH_POINTS ; i++) {
+        touches[i].point.x = MPS2FB_TOUCH->points[i].x;
+        touches[i].point.y = MPS2FB_TOUCH->points[i].y;
+        touches[i].state = MPS2FB_TOUCH->points[i].pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+        touches[i].id = i;
+    }
+
+    lv_indev_gesture_recognizers_update(indev_drv, touches, touch_cnt);
+    lv_indev_gesture_recognizers_set_data(indev_drv, data);
+    #endif
+
+    // NOTE: this is also important for mutlitouch
+    // without trdition single pointer data. all multitouch will not work.
+    // and should be one of touches
 
     data->point.x = MPS2FB_TOUCH->points[0].x;
     data->point.y = MPS2FB_TOUCH->points[0].y;
