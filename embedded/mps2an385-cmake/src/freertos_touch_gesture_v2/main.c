@@ -367,6 +367,18 @@ void ClickActive(InputDevice *indev, Finger *finger) {
     if(click->isDetect != ST_NONE ) { return; }
     if(click->count == 0) { return; }
 
+    if (finger->longPress.isDetect) {
+        click->isDetect = ST_RECOGNIZED;
+        printf("LongClick\n");
+        ClickReset(indev, finger);
+        return;
+    }
+
+    if (finger->gesture.isDetect) {
+        ClickReset(indev, finger);
+        return;
+    }
+
     #if defined(MULTICLICK_MAX_CLICK) && MULTICLICK_MAX_CLICK > 0
     if (click->count == MULTICLICK_MAX_CLICK) {
         click->isDetect = ST_RECOGNIZED;
