@@ -34,7 +34,7 @@ void setup() {
 }
 
 // ========================================
-// Helper Function
+// Helper Function or Macro
 // ========================================
 #define STR(x) #x
 #define STRINGIFY(x) STR(x)
@@ -51,10 +51,9 @@ void setup() {
 #define ARRAY_INDEX(ptr, array) ((size_t)((void *)(ptr) - (void *)(array)) / sizeof((array)[0]))
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
-// ========================================
-// Input Framework Helper
-// ========================================
-typedef uint16_t ObjectID;
+
+#define ASSERT_CREATE_MASK(n)  ASSERT_STATIC((n)>=0 && (n) < 63, "Error")
+#define CREATE_MASK(n)         ((1ULL << ((n) + 1)) - 1)
 
 
 // ========================================
@@ -75,12 +74,10 @@ typedef struct TouchPoint {
 } TouchPoint;
 
 
-
-
 // 2. Finger
 // ----------------------------------------
-// ST_NONE -(meet condition)-> ST_ONGOING -(loop eval)--- (meet condition) -----> ST_RECOGNIZED (do not eval anymore)
-//                                                     \- (meet cancel condition)-> ST_CANCEL (do not eval anymore)
+// ST_NONE -(meet condition)-> ST_ONGOING -(loop eval)--- (meet recoginze condition) -----> ST_RECOGNIZED (do not eval anymore)
+//                                                     \- (meet cancel condition) --------> ST_CANCEL (do not eval anymore)
 //
 
 typedef enum State {
@@ -587,25 +584,17 @@ void MultiGestureActive(InputDevice *indev, Finger *finger) {
 // Adapter
 // ========================================
 void InputDeviceScanCore(InputDevice* indev, ScanData *data) {
-    data->touch_points[0].point.x = *TOUCH_X;
-    data->touch_points[0].point.y = *TOUCH_Y;
+    ASSERT_CREATE_MASK(MAX_SUPPORT_SLOT - 1);
+    static const uint32_t SUPPORT_MASK = CREATE_MASK(MAX_SUPPORT_SLOT - 1);
 
-    // Mock two finger data
-    // data->touch_points[1].point.x = *TOUCH_X;
-    // data->touch_points[1].point.y = *TOUCH_Y + 10;
-    if (*TOUCH_PRESS) {
-        data->slot_mask |= (1 << 0);
-        data->touch_points[0].track_id = 1;
+    data->slot_mask = MPS2FB_TOUCH->header.points_mask & SUPPORT_MASK;
 
-        // data->slot_mask |= (1 << 1);
-        // data->touch_points[1].track_id = 1;
-    } else {
-        data->slot_mask &= ~(1 << 0);
-        data->touch_points[0].track_id = -1;
-
-        // data->slot_mask &= ~(1 << 1);
-        // data->touch_points[1].track_id = -1;
+    for (int i = 0 ; i < MAX_SUPPORT_SLOT ; i ++) {
+        data->touch_points[i].point.x = MPS2FB_TOUCH->points[i].x;
+        data->touch_points[i].point.y = MPS2FB_TOUCH->points[i].y;
+        data->touch_points[i].track_id = MPS2FB_TOUCH->points[i].track_id;
     }
+
     return ;
 }
 
