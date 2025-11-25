@@ -127,6 +127,7 @@ typedef struct Finger {
 
 typedef struct ScanData {
     uint32_t slot_mask;
+    TickType_t tick;
     TouchPoint touch_points[MAX_SUPPORT_SLOT];
 } ScanData;
 
@@ -137,6 +138,7 @@ typedef struct InputDevice {
     uint32_t prev_slot_mask;
     uint32_t curr_slot_mask;
 
+    TickType_t tick;
     Finger fingers[MAX_SUPPORT_SLOT];
 
 
@@ -168,16 +170,18 @@ void InputDeviceScan(InputDevice* indev) {
     { // Actually Read something
         struct ScanData data;
         {
-            data.slot_mask = indev->curr_slot_mask;
             for (int i = 0 ; i < MAX_SUPPORT_SLOT ; i ++ ) {
                 data.touch_points[i] = indev->fingers[i].touch_point;
             }
+            data.slot_mask = indev->curr_slot_mask;
+            data.tick = 0;
         }
 
         void InputDeviceScanCore(InputDevice* indev, ScanData *data);
         InputDeviceScanCore(indev, &data);
 
         {
+            if (data.tick == 0) { indev->tick = xTaskGetTickCount(); };
             indev->curr_slot_mask = data.slot_mask;
             for (int i = 0 ; i < MAX_SUPPORT_SLOT ; i ++ ) {
                 indev->fingers[i].touch_point = data.touch_points[i];
@@ -316,7 +320,7 @@ void GestureActive(InputDevice *indev, Finger *finger) {
 void LongPressReset(InputDevice *indev, Finger *finger) {
     LongPress *longPress = &finger->longPress;
     longPress->isDetect = ST_NONE;
-    longPress->startTick = xTaskGetTickCount();
+    longPress->startTick = indev->tick;
 }
 
 void LongPressStart(InputDevice *indev, Finger *finger) {
@@ -328,7 +332,7 @@ void LongPressActive(InputDevice *indev, Finger *finger) {
     LongPress *longPress = &finger->longPress;
     if(longPress->isDetect != ST_NONE ) { return; }
 
-    if (xTaskGetTickCount() - longPress->startTick > LONGPRESS_THRESHOLD) {
+    if (indev->tick - longPress->startTick > LONGPRESS_THRESHOLD) {
         longPress->isDetect = ST_RECOGNIZED;
         printf("LongPress\n");
     }
@@ -357,7 +361,7 @@ void ClickStart(InputDevice *indev, Finger *finger) {
     #endif
 
     click->count++;
-    click->watchdog = xTaskGetTickCount();
+    click->watchdog = indev->tick;
 }
 
 
@@ -389,7 +393,7 @@ void ClickActive(InputDevice *indev, Finger *finger) {
     #endif
 
 
-    if (xTaskGetTickCount() - click->watchdog > MULTICLICK_THRESHOLD) {
+    if (indev->tick - click->watchdog > MULTICLICK_THRESHOLD) {
         click->isDetect = ST_RECOGNIZED;
         printf("Click %d\n", click->count);
         ClickReset(indev, finger);
