@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <assert.h>
 
 void NVIC_Init() {
     size_t i = 0 ;
@@ -205,8 +206,8 @@ void detectProcess(InputDevice* indev) {
     uint32_t slot_mask_both_edge = indev->prev_slot_mask ^ indev->curr_slot_mask;
     uint32_t slot_mask_up_edge = slot_mask_both_edge & indev->curr_slot_mask;
     uint32_t slot_mask_down_edge = slot_mask_both_edge & indev->prev_slot_mask;
-    uint32_t slot_mask_without_change_high = ~slot_mask_both_edge & indev->curr_slot_mask;
-    uint32_t slot_mask_without_change_low = ~slot_mask_both_edge & ~indev->curr_slot_mask;
+    uint32_t slot_mask_high = ~slot_mask_both_edge & indev->curr_slot_mask;
+    uint32_t slot_mask_low = ~slot_mask_both_edge & ~indev->curr_slot_mask;
 
     FOREACH_SETBITS(slot_mask_up_edge, i) {
         void fingerStart(InputDevice *indev, Finger *finger);
@@ -218,12 +219,12 @@ void detectProcess(InputDevice* indev) {
         fingerEnd(indev, &indev->fingers[i]);
     }
 
-    FOREACH_SETBITS(slot_mask_without_change_high, i) {
+    FOREACH_SETBITS(slot_mask_high, i) {
         void fingerActive(InputDevice *indev, Finger *finger);
         fingerActive(indev, &indev->fingers[i]);
     }
 
-    FOREACH_SETBITS(slot_mask_without_change_low, i) {
+    FOREACH_SETBITS(slot_mask_low, i) {
         void fingerIdle(InputDevice *indev, Finger *finger);
         fingerIdle(indev, &indev->fingers[i]);
     }
@@ -358,25 +359,41 @@ void LongPressActive(InputDevice *indev, Finger *finger) {
 // ----------------------------------------
 // ST_NONE <-> count == 0
 // ST_ONGOING <-> count != 0
+void ClickAssert(InputDevice *indev, Finger *finger) {
+    assert(indev);
+    assert(finger);
+    assert( \
+            (finger->click.state == ST_NONE && finger->click.count == 0) ||
+            (finger->click.state == ST_ONGOING && finger->click.count != 0) ||
+            (
+             finger->click.state == ST_CANCEL ||
+             finger->click.state == ST_RECOGNIZED
+            ) );
+
+}
 void ClickReset(InputDevice *indev, Finger *finger) {
     Click *click = &finger->click;
-    click->count = 0;
+    ClickAssert(indev, finger);
 
+    click->count = 0;
     click->state = ST_NONE;
+
+    ClickAssert(indev, finger);
 }
 
 #define MULTICLICK_MAX_CLICK 2
 void ClickStart(InputDevice *indev, Finger *finger) {
     Click *click = &finger->click;
+    ClickAssert(indev, finger);
     switch(click->state) {
         case ST_NONE:
             click->count = 1;
-            click->watchdog = indev->tick;
+            click->watchdog = indev->tick; // init watchdog
             click->state = ST_ONGOING;
             break;
         case ST_ONGOING:
             click->count++;
-            click->watchdog = indev->tick;
+            click->watchdog = indev->tick; // feed the dog
 
             #if defined(MULTICLICK_MAX_CLICK) && MULTICLICK_MAX_CLICK > 0
             if (click->count == MULTICLICK_MAX_CLICK) {
@@ -421,6 +438,7 @@ void ClickActive(InputDevice *indev, Finger *finger) {
     #endif
 
 
+    // dog timeout
     if (indev->tick - click->watchdog > MULTICLICK_THRESHOLD) {
         click->state = ST_RECOGNIZED;
         printf("Click %d\n", click->count);
