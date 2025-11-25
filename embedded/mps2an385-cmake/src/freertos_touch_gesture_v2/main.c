@@ -75,10 +75,15 @@ typedef struct TouchPoint {
 
 // 2. Finger
 // ----------------------------------------
+// ST_NONE -(meet condition)-> ST_ONGOING -(loop eval)--- (meet condition) -----> ST_RECOGNIZED (do not eval anymore)
+//                                                     \- (meet cancel condition)-> ST_CANCEL (do not eval anymore)
+//
 
 typedef enum State {
     ST_NONE = 0,
-    ST_RECOGNIZED = 1
+    ST_ONGOING = 1,
+    ST_RECOGNIZED = 2,
+    ST_CANCEL = 3
 } State;
 
 typedef enum {
@@ -93,18 +98,18 @@ typedef enum {
 } Direction;
 
 typedef struct Gesture {
-    State isDetect;
+    State state;
     Direction direction;
     Point sum;
 } Gesture;
 
 typedef struct LongPress {
-    State isDetect;
+    State state;
     TickType_t startTick;
 } LongPress;
 
 typedef struct Click {
-    State isDetect;
+    State state;
     uint8_t count;
     TickType_t watchdog;
 } Click;
@@ -265,19 +270,23 @@ void fingerIdle(InputDevice *indev, Finger *finger) {
 // ----------------------------------------
 void GestureReset(InputDevice *indev, Finger *finger) {
     Gesture *gesture = &finger->gesture;
-    gesture->isDetect = ST_NONE;
     gesture->direction = DIR_NONE;
     gesture->sum.x = 0;
     gesture->sum.y = 0;
+
+    gesture->state = ST_NONE;
 }
 
 void GestureStart(InputDevice *indev, Finger *finger) {
     GestureReset(indev, finger);
+    Gesture *gesture = &finger->gesture;
+
+    gesture->state = ST_ONGOING;
 }
 
 void GestureActive(InputDevice *indev, Finger *finger) {
     Gesture *gesture = &finger->gesture;
-    if(gesture->isDetect != ST_NONE) { return; }
+    if(gesture->state != ST_ONGOING) { return; }
 
     Point diff = {
         finger->touch_point.point.x - finger->prev_point.x,
@@ -287,6 +296,7 @@ void GestureActive(InputDevice *indev, Finger *finger) {
     #define MIN_VELOCITY 3
     if ( LV_ABS(diff.x) < MIN_VELOCITY && LV_ABS(diff.y) < MIN_VELOCITY ) {
         GestureReset(indev, finger);
+        gesture->state = ST_ONGOING; // clean Gesture state, but still perform eval in same finger
         return;
     }
 
@@ -310,7 +320,7 @@ void GestureActive(InputDevice *indev, Finger *finger) {
                 gesture->direction = DIR_TOP;
             }
         }
-        gesture->isDetect = ST_RECOGNIZED;
+        gesture->state = ST_RECOGNIZED;
         printf("Direction %d\n", gesture->direction);
     }
 }
@@ -319,21 +329,26 @@ void GestureActive(InputDevice *indev, Finger *finger) {
 // ----------------------------------------
 void LongPressReset(InputDevice *indev, Finger *finger) {
     LongPress *longPress = &finger->longPress;
-    longPress->isDetect = ST_NONE;
     longPress->startTick = indev->tick;
+
+    longPress->state = ST_NONE;
 }
 
 void LongPressStart(InputDevice *indev, Finger *finger) {
     LongPressReset(indev, finger);
+
+    LongPress *longPress = &finger->longPress;
+    longPress->state = ST_ONGOING;
+
 }
 
 #define LONGPRESS_THRESHOLD pdMS_TO_TICKS(1000)
 void LongPressActive(InputDevice *indev, Finger *finger) {
     LongPress *longPress = &finger->longPress;
-    if(longPress->isDetect != ST_NONE ) { return; }
+    if(longPress->state != ST_ONGOING ) { return; }
 
     if (indev->tick - longPress->startTick > LONGPRESS_THRESHOLD) {
-        longPress->isDetect = ST_RECOGNIZED;
+        longPress->state = ST_RECOGNIZED;
         printf("LongPress\n");
     }
 
@@ -341,51 +356,64 @@ void LongPressActive(InputDevice *indev, Finger *finger) {
 
 // 4.3 Call From finger*, Click relate
 // ----------------------------------------
+// ST_NONE <-> count == 0
+// ST_ONGOING <-> count != 0
 void ClickReset(InputDevice *indev, Finger *finger) {
     Click *click = &finger->click;
-    click->isDetect = ST_NONE;
-
     click->count = 0;
+
+    click->state = ST_NONE;
 }
 
 #define MULTICLICK_MAX_CLICK 2
 void ClickStart(InputDevice *indev, Finger *finger) {
     Click *click = &finger->click;
+    switch(click->state) {
+        case ST_NONE:
+            click->count = 1;
+            click->watchdog = indev->tick;
+            click->state = ST_ONGOING;
+            break;
+        case ST_ONGOING:
+            click->count++;
+            click->watchdog = indev->tick;
 
-    #if defined(MULTICLICK_MAX_CLICK) && MULTICLICK_MAX_CLICK > 0
-    if (click->count == MULTICLICK_MAX_CLICK) {
-        click->isDetect = ST_RECOGNIZED;
-        printf("Click %d\n", click->count);
-        ClickReset(indev, finger);
+            #if defined(MULTICLICK_MAX_CLICK) && MULTICLICK_MAX_CLICK > 0
+            if (click->count == MULTICLICK_MAX_CLICK) {
+                click->state = ST_RECOGNIZED;
+                printf("Click %d\n", click->count);
+                ClickReset(indev, finger);
+            }
+            #endif
+            break;
+        default:
+            return;
+
     }
-    #endif
-
-    click->count++;
-    click->watchdog = indev->tick;
 }
 
 
 #define MULTICLICK_THRESHOLD pdMS_TO_TICKS(100)
 void ClickActive(InputDevice *indev, Finger *finger) {
     Click *click = &finger->click;
-    if(click->isDetect != ST_NONE ) { return; }
-    if(click->count == 0) { return; }
+    if(click->state != ST_ONGOING ) { return; }
 
-    if (finger->longPress.isDetect) {
-        click->isDetect = ST_RECOGNIZED;
+    if (finger->longPress.state == ST_RECOGNIZED) {
+        click->state = ST_RECOGNIZED;
         printf("LongClick\n");
         ClickReset(indev, finger);
         return;
     }
 
-    if (finger->gesture.isDetect) {
+    if (finger->gesture.state == ST_RECOGNIZED) {
+        click->state = ST_CANCEL;
         ClickReset(indev, finger);
         return;
     }
 
     #if defined(MULTICLICK_MAX_CLICK) && MULTICLICK_MAX_CLICK > 0
     if (click->count == MULTICLICK_MAX_CLICK) {
-        click->isDetect = ST_RECOGNIZED;
+        click->state = ST_RECOGNIZED;
         printf("Click %d\n", click->count);
         ClickReset(indev, finger);
         return;
@@ -394,7 +422,7 @@ void ClickActive(InputDevice *indev, Finger *finger) {
 
 
     if (indev->tick - click->watchdog > MULTICLICK_THRESHOLD) {
-        click->isDetect = ST_RECOGNIZED;
+        click->state = ST_RECOGNIZED;
         printf("Click %d\n", click->count);
         ClickReset(indev, finger);
         return;
