@@ -128,6 +128,13 @@ typedef struct Finger {
     Click click;
 } Finger;
 
+#define MULTIGESTURE_MAX_LIMIT 2
+typedef struct MultiGesture {
+    State state;
+    TickType_t watchdog;
+    uint8_t index;
+    Finger *pipe[MULTIGESTURE_MAX_LIMIT];
+} MultiGesture;
 
 #define MAX_SUPPORT_SLOT 3
 
@@ -147,7 +154,8 @@ typedef struct InputDevice {
     TickType_t tick;
     Finger fingers[MAX_SUPPORT_SLOT];
 
-
+    /* event base private data */
+    MultiGesture multigesture;
 } InputDevice;
 
 struct InputDevice *DEV;
@@ -249,6 +257,9 @@ void fingerActive(InputDevice *indev, Finger *finger) {
     void GestureActive(InputDevice *indev, Finger *finger);
     GestureActive(indev, finger);
 
+    void MultiGestureActive(InputDevice *indev, Finger *finger);
+    MultiGestureActive(indev, finger);
+
     void LongPressActive(InputDevice *indev, Finger *finger);
     LongPressActive(indev, finger);
 
@@ -258,6 +269,9 @@ void fingerActive(InputDevice *indev, Finger *finger) {
 }
 
 void fingerEnd(InputDevice *indev, Finger *finger) {
+    void MultiGestureEnd(InputDevice *indev, Finger *finger);
+    MultiGestureEnd(indev, finger);
+
     void ClickStart(InputDevice *indev, Finger *finger);
     ClickStart(indev, finger);
 }
@@ -326,6 +340,9 @@ void GestureActive(InputDevice *indev, Finger *finger) {
                 ARRAY_INDEX(indev->fingers, finger),
                 gesture->direction
               );
+
+        void MultiGestureStart(InputDevice *indev, Finger *finger);
+        MultiGestureStart(indev, finger);
     }
 }
 
@@ -464,6 +481,59 @@ void ClickActive(InputDevice *indev, Finger *finger) {
     }
 
     return;
+}
+
+// 5.1 Call From Gesture*, MultiGesture relate
+// ----------------------------------------
+// TODO: currently we simplely clean all fifo
+//          1. if full
+//          2. watdog bark
+//          3. any finger lift
+//       we should add gesture detect
+void MultiGestureReset(InputDevice *indev, Finger *finger) {
+    MultiGesture *mg = &indev->multigesture;
+
+    for (int i = 0; i < mg->index ; i++) {
+        printf("[EV %d]: [*] Direction %d\n",
+                ARRAY_INDEX(mg->pipe[i], indev->fingers),
+                mg->pipe[i]->gesture.direction
+              );
+    }
+    mg->index = 0;
+    mg->state = ST_NONE;
+}
+
+void MultiGestureStart(InputDevice *indev, Finger *finger) {
+    MultiGesture *mg = &indev->multigesture;
+    switch(mg->state) {
+        case ST_NONE:
+        case ST_ONGOING:
+            mg->watchdog = indev->tick; // init or feed the dog
+            mg->pipe[mg->index++] = finger; // push to fifo
+            mg->state = ST_ONGOING;
+            break;
+        default:
+            assert(0);
+    }
+
+    if (mg->index == MULTIGESTURE_MAX_LIMIT) {
+        MultiGestureReset(indev, finger);
+    }
+}
+
+void MultiGestureEnd(InputDevice *indev, Finger *finger) {
+    MultiGestureReset(indev, finger);
+}
+
+#define MULTIGESTURE_THRESHOLD pdMS_TO_TICKS(100)
+void MultiGestureActive(InputDevice *indev, Finger *finger) {
+    MultiGesture *mg = &indev->multigesture;
+    if(mg->state != ST_ONGOING) { return; }
+
+    // watchdog overtime
+    if(indev->tick - mg->watchdog > MULTIGESTURE_THRESHOLD ) {
+        MultiGestureReset(indev, finger);
+    }
 }
 
 // ========================================
