@@ -411,7 +411,7 @@ void ClickReset(InputDevice *indev, Finger *finger) {
     ClickAssert(indev, finger);
 }
 
-#define MULTICLICK_MAX_CLICK 2
+#define MULTICLICK_MAX_CLICK 3
 void ClickStart(InputDevice *indev, Finger *finger) {
     Click *click = &finger->click;
     ClickAssert(indev, finger);
@@ -464,20 +464,12 @@ void ClickActive(InputDevice *indev, Finger *finger) {
         return;
     }
 
+    // In ClickActive should already process case that meet limit
     #if defined(MULTICLICK_MAX_CLICK) && MULTICLICK_MAX_CLICK > 0
-    if (click->count == MULTICLICK_MAX_CLICK) {
-        click->state = ST_RECOGNIZED;
-        printf("[EV %d]: [L] Click %d\n",
-                ARRAY_INDEX(finger, indev->fingers),
-                click->count
-              );
-        ClickReset(indev, finger);
-        return;
-    }
+    assert(click->count != MULTICLICK_MAX_CLICK);
     #endif
 
-
-    // dog timeout
+    // watchdog bark
     if (indev->tick - click->watchdog > MULTICLICK_THRESHOLD) {
         click->state = ST_RECOGNIZED;
         printf("[EV %d]: [W] Click %d\n",
@@ -493,11 +485,11 @@ void ClickActive(InputDevice *indev, Finger *finger) {
 
 // 5.1 Call From Gesture*, MultiGesture relate
 // ----------------------------------------
-// TODO: currently we simplely clean all fifo
+// MultiGesture will be reset in following condition
 //          1. if full
 //          2. watdog bark
 //          3. any finger lift
-//       we should add gesture detect
+//          4. any gesture detect
 void MultiGestureReset(InputDevice *indev, Finger *finger) {
     MultiGesture *mg = &indev->multigesture;
 
@@ -583,7 +575,7 @@ void MultiGestureActive(InputDevice *indev, Finger *finger) {
     MultiGesture *mg = &indev->multigesture;
     if(mg->state != ST_ONGOING) { return; }
 
-    // watchdog overtime
+    // watchdog bark
     if(indev->tick - mg->watchdog > MULTIGESTURE_THRESHOLD ) {
         MultiGestureReset(indev, finger);
     }
