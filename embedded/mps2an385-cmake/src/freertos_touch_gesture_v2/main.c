@@ -132,8 +132,8 @@ typedef struct Finger {
 typedef struct MultiGesture {
     State state;
     TickType_t watchdog;
-    uint8_t index;
-    Finger *pipe[MULTIGESTURE_MAX_LIMIT];
+    uint8_t end;
+    Finger *fifo[MULTIGESTURE_MAX_LIMIT];
 } MultiGesture;
 
 #define MAX_SUPPORT_SLOT 3
@@ -493,13 +493,13 @@ void ClickActive(InputDevice *indev, Finger *finger) {
 void MultiGestureReset(InputDevice *indev, Finger *finger) {
     MultiGesture *mg = &indev->multigesture;
 
-    for (int i = 0; i < mg->index ; i++) {
+    for (int i = 0; i < mg->end ; i++) {
         printf("[EV %d]: [*] Direction %d\n",
-                ARRAY_INDEX(mg->pipe[i], indev->fingers),
-                mg->pipe[i]->gesture.direction
+                ARRAY_INDEX(mg->fifo[i], indev->fingers),
+                mg->fifo[i]->gesture.direction
               );
     }
-    mg->index = 0;
+    mg->end = 0;
     mg->state = ST_NONE;
 }
 
@@ -509,14 +509,14 @@ void MultiGestureStart(InputDevice *indev, Finger *finger) {
         case ST_NONE:
         case ST_ONGOING:
             mg->watchdog = indev->tick; // init or feed the dog
-            mg->pipe[mg->index++] = finger; // push to fifo
+            mg->fifo[mg->end++] = finger; // push to fifo
             mg->state = ST_ONGOING;
             break;
         default:
             assert(0);
     }
 
-    if (mg->index == MULTIGESTURE_MAX_LIMIT) {
+    if (mg->end == MULTIGESTURE_MAX_LIMIT) {
         MultiGestureReset(indev, finger);
     }
 }
