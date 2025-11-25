@@ -553,6 +553,8 @@ void MultiGestureStart(InputDevice *indev, Finger *finger) {
                   );
         }
 
+        // TODO: it's fine for now, since we only have one kind of multigesture
+        //       change it if we add more
         printf("[EV]: [R] Direction %d\n",
                 mg->direction
               );
