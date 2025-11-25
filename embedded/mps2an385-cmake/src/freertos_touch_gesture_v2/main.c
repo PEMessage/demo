@@ -322,7 +322,10 @@ void GestureActive(InputDevice *indev, Finger *finger) {
             }
         }
         gesture->state = ST_RECOGNIZED;
-        printf("Direction %d\n", gesture->direction);
+        printf("[EV %d]: Direction %d\n",
+                ARRAY_INDEX(indev->fingers, finger),
+                gesture->direction
+              );
     }
 }
 
@@ -350,7 +353,9 @@ void LongPressActive(InputDevice *indev, Finger *finger) {
 
     if (indev->tick - longPress->startTick > LONGPRESS_THRESHOLD) {
         longPress->state = ST_RECOGNIZED;
-        printf("LongPress\n");
+        printf("[EV %d]: LongPress\n",
+                ARRAY_INDEX(indev->fingers, finger)
+              );
     }
 
 }
@@ -398,12 +403,16 @@ void ClickStart(InputDevice *indev, Finger *finger) {
             #if defined(MULTICLICK_MAX_CLICK) && MULTICLICK_MAX_CLICK > 0
             if (click->count == MULTICLICK_MAX_CLICK) {
                 click->state = ST_RECOGNIZED;
-                printf("Click %d\n", click->count);
+                printf("[EV %d]: Click %d\n",
+                        ARRAY_INDEX(indev->fingers, finger),
+                        click->count
+                      );
                 ClickReset(indev, finger);
             }
             #endif
             break;
         default:
+            assert(0);
             return;
 
     }
@@ -417,7 +426,9 @@ void ClickActive(InputDevice *indev, Finger *finger) {
 
     if (finger->longPress.state == ST_RECOGNIZED) {
         click->state = ST_RECOGNIZED;
-        printf("LongClick\n");
+        printf("[EV %d]: LongClick\n",
+                ARRAY_INDEX(indev->fingers, finger)
+              );
         ClickReset(indev, finger);
         return;
     }
@@ -431,7 +442,10 @@ void ClickActive(InputDevice *indev, Finger *finger) {
     #if defined(MULTICLICK_MAX_CLICK) && MULTICLICK_MAX_CLICK > 0
     if (click->count == MULTICLICK_MAX_CLICK) {
         click->state = ST_RECOGNIZED;
-        printf("Click %d\n", click->count);
+        printf("[EV %d]: Click %d\n",
+                ARRAY_INDEX(indev->fingers, finger),
+                click->count
+              );
         ClickReset(indev, finger);
         return;
     }
@@ -441,7 +455,10 @@ void ClickActive(InputDevice *indev, Finger *finger) {
     // dog timeout
     if (indev->tick - click->watchdog > MULTICLICK_THRESHOLD) {
         click->state = ST_RECOGNIZED;
-        printf("Click %d\n", click->count);
+        printf("[EV %d]: Click %d\n",
+                ARRAY_INDEX(indev->fingers, finger),
+                click->count
+              );
         ClickReset(indev, finger);
         return;
     }
