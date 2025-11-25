@@ -18,6 +18,7 @@ add_subdirectory(lib/FreeRTOS-Hook)
 add_subdirectory(lib/FreeRTOS-Kernel)
 add_subdirectory(lib/LVGL)
 add_subdirectory(lib/TraceRecorder)
+add_subdirectory(lib/misc)
 
 # Credit: deepseek-v3-0324
 macro(add_executable_with_binaries MODULE_NAME)
