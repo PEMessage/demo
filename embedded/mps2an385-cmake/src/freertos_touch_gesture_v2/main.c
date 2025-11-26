@@ -128,7 +128,7 @@ typedef struct Finger {
     Click click;
 } Finger;
 
-#define MULTIGESTURE_MAX_LIMIT 2
+#define MULTIGESTURE_MAX_LIMIT 3
 typedef struct MultiGesture {
     State state;
 
@@ -482,12 +482,7 @@ void ClickActive(InputDevice *indev, Finger *finger) {
 
 // 5.1 Call From Gesture*, MultiGesture relate
 // ----------------------------------------
-// MultiGesture will be reset in following condition
-//          1. if full
-//          2. watdog bark
-//          3. any finger lift
-//          4. any gesture detect
-void MultiGestureReset(InputDevice *indev, Finger *finger) {
+void MultiGestureCleanAll(InputDevice *indev) {
     MultiGesture *mg = &indev->multigesture;
 
     for (int i = 0; i < mg->end ; i++) {
@@ -514,11 +509,81 @@ void MultiGestureDetect2Finger(InputDevice *indev, Finger *fingers[]) {
 
 }
 
+void MultiGestureDetect3Finger(InputDevice *indev, Finger *fingers[]) {
+    MultiGesture *mg = &indev->multigesture;
+
+    assert(fingers[0]->gesture.direction != DIR_NONE);
+    assert(fingers[1]->gesture.direction != DIR_NONE);
+    assert(fingers[2]->gesture.direction != DIR_NONE);
+
+    if (
+        fingers[0]->gesture.direction == fingers[1]->gesture.direction &&
+        fingers[1]->gesture.direction == fingers[2]->gesture.direction
+       ) {
+        mg->direction = fingers[0]->gesture.direction;
+        mg->state = ST_RECOGNIZED;
+    }
+
+}
+
+
+// Check order N -> N-1 -> ... -> 3 -> 2 -> 1
 void (*MULTIGESTURE_DETECTFUNC[])(InputDevice *indev, Finger *fingers[]) = {
     NULL, // `1 FingerDetectfunc` do not exist, we already know it in finger->gesture.direction
     MultiGestureDetect2Finger,
+    MultiGestureDetect3Finger,
 };
 ASSERT_STATIC(ARRAY_SIZE(MULTIGESTURE_DETECTFUNC) == MULTIGESTURE_MAX_LIMIT, "Out of Sync");
+
+
+// MultiGesture will be reset in following condition
+//          1. if full
+//          2. watdog bark
+//          3. any finger lift
+// and will check if any `gesture combination` exist in fifo
+void MultiGestureReset(InputDevice *indev, Finger *finger) {
+    MultiGesture *mg = &indev->multigesture;
+    // Iter all `N FingerDetectfunc` if `N <= len(fifo)`
+    // i == 0 <-> 1 FingerDetectfunc
+    // i == 1 <-> 2 FingerDetectfunc
+    // ...
+    for (int i = 0; i < mg->end; i ++) {
+        const int finger_number =  mg->end - i; // current len(mg->fifo)
+        assert(finger_number > 0);
+        const int detectfunc_index = finger_number - 1;
+
+        if(MULTIGESTURE_DETECTFUNC[detectfunc_index] == NULL) { continue; }
+
+        // 1. Check any know gesture combination exist in fifo
+        Finger **begin = &mg->fifo[i];
+        MULTIGESTURE_DETECTFUNC[detectfunc_index](indev, begin);
+        if (mg->state != ST_RECOGNIZED) { continue; } // pervious call do not output anything, check next
+
+        // 2. if any `gesture combination` exsit, dequeue fifo content until only gesture combination exist
+        for (int j = 0; j < i; j++) {
+
+            printf("[EV %d]: [L] Direction %d\n",
+                    ARRAY_INDEX(mg->fifo[j], indev->fingers),
+                    mg->fifo[j]->gesture.direction
+                  );
+        }
+
+        // 3. Send `gesture combination` instead of single gesture
+        // TODO: it's fine for now, since we only have one kind of multigesture
+        //       change it if we add more
+        printf("[EV M%d]: Direction %d\n",
+                finger_number,
+                mg->direction
+              );
+
+        mg->end = 0;
+        mg->state = ST_NONE;
+
+        break;
+    }
+
+    MultiGestureCleanAll(indev);
+}
 
 
 void MultiGestureStart(InputDevice *indev, Finger *finger) {
@@ -534,39 +599,6 @@ void MultiGestureStart(InputDevice *indev, Finger *finger) {
             assert(0);
     }
 
-    // Iter all `N FingerDetectfunc` if `N <= ARRAY_SIZE(fifo)`
-    // i == 0 <-> 1 FingerDetectfunc
-    // i == 1 <-> 2 FingerDetectfunc
-    // ...
-    for (int i = 0; i < mg->end; i ++) {
-        if(MULTIGESTURE_DETECTFUNC[i] == NULL) { continue; }
-
-        // 1. Check any know gesture combination exist in fifo
-        // len of [begin_index...end) == `N` of finger detect == `i + 1`
-        int begin_index = mg->end - (1 + i);
-        Finger **begin = &mg->fifo[begin_index];
-        MULTIGESTURE_DETECTFUNC[i](indev, begin);
-        if (mg->state != ST_RECOGNIZED) { continue; } // pervious call do not output anything, check next
-
-        // 2. if any `gesture combination` exsit, dequeue fifo content until only gesture combination exist
-        for (int j = 0; j < begin_index; j++) {
-
-            printf("[EV %d]: [L] Direction %d\n",
-                    ARRAY_INDEX(mg->fifo[j], indev->fingers),
-                    mg->fifo[j]->gesture.direction
-                  );
-        }
-
-        // 3. Send `gesture combination` instead of single gesture
-        // TODO: it's fine for now, since we only have one kind of multigesture
-        //       change it if we add more
-        printf("[EV]: [R] Direction %d\n",
-                mg->direction
-              );
-
-        mg->end = 0;
-        mg->state = ST_NONE;
-    }
 
     if (mg->end == MULTIGESTURE_MAX_LIMIT) {
         MultiGestureReset(indev, finger);
