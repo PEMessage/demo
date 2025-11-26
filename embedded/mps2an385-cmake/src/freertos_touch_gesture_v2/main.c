@@ -234,6 +234,10 @@ void detectProcess(InputDevice* indev) {
         void fingerActive(InputDevice *indev, Finger *finger);
         fingerActive(indev, &indev->fingers[i]);
     }
+    if (slot_mask_high) {
+        void fingerActivePostOnce(InputDevice *indev);
+        fingerActivePostOnce(indev);
+    }
 
     FOREACH_SETBITS(slot_mask_low, i) {
         void fingerIdle(InputDevice *indev, Finger *finger);
@@ -260,15 +264,17 @@ void fingerActive(InputDevice *indev, Finger *finger) {
     void GestureActive(InputDevice *indev, Finger *finger);
     GestureActive(indev, finger);
 
-    void MultiGestureActive(InputDevice *indev, Finger *finger);
-    MultiGestureActive(indev, finger);
-
     void LongPressActive(InputDevice *indev, Finger *finger);
     LongPressActive(indev, finger);
 
 
     // Keep this at the end
     finger->prev_point = finger->touch_point.point;
+}
+
+void fingerActivePostOnce(InputDevice *indev) {
+    void MultiGestureActive(InputDevice *indev);
+    MultiGestureActive(indev);
 }
 
 void fingerEnd(InputDevice *indev, Finger *finger) {
@@ -482,18 +488,6 @@ void ClickActive(InputDevice *indev, Finger *finger) {
 
 // 5.1 Call From Gesture*, MultiGesture relate
 // ----------------------------------------
-void MultiGestureCleanAll(InputDevice *indev) {
-    MultiGesture *mg = &indev->multigesture;
-
-    for (int i = 0; i < mg->end ; i++) {
-        printf("[EV %d]: [*] Direction %d\n",
-                ARRAY_INDEX(mg->fifo[i], indev->fingers),
-                mg->fifo[i]->gesture.direction
-              );
-    }
-    mg->end = 0;
-    mg->state = ST_NONE;
-}
 
 // Notice: fingers[] is not same order as `indev->fingers[]`
 void MultiGestureDetect2Finger(InputDevice *indev, Finger *fingers[]) {
@@ -538,11 +532,21 @@ ASSERT_STATIC(ARRAY_SIZE(MULTIGESTURE_DETECTFUNC) == MULTIGESTURE_MAX_LIMIT, "Ou
 
 // MultiGesture will be reset in following condition
 //          1. if full
-//          2. watdog bark
+//          2. watdog bark(finger will be NULL)
 //          3. any finger lift
 // and will check if any `gesture combination` exist in fifo
 void MultiGestureReset(InputDevice *indev, Finger *finger) {
     MultiGesture *mg = &indev->multigesture;
+
+    char *source = NULL;
+    if (finger == NULL) {
+        source = "[W]";
+    } else if ( (1 << ARRAY_INDEX(finger, indev->fingers)) & indev->curr_slot_mask) {
+        source = "[F]";
+    } else {
+        source = "[L]";
+    }
+
     // Iter all `N FingerDetectfunc` if `N <= len(fifo)`
     // i == 0 <-> 1 FingerDetectfunc
     // i == 1 <-> 2 FingerDetectfunc
@@ -562,8 +566,9 @@ void MultiGestureReset(InputDevice *indev, Finger *finger) {
         // 2. if any `gesture combination` exsit, dequeue fifo content until only gesture combination exist
         for (int j = 0; j < i; j++) {
 
-            printf("[EV %d]: [L] Direction %d\n",
+            printf("[EV %d]: %s Direction %d\n",
                     ARRAY_INDEX(mg->fifo[j], indev->fingers),
+                    source,
                     mg->fifo[j]->gesture.direction
                   );
         }
@@ -571,8 +576,9 @@ void MultiGestureReset(InputDevice *indev, Finger *finger) {
         // 3. Send `gesture combination` instead of single gesture
         // TODO: it's fine for now, since we only have one kind of multigesture
         //       change it if we add more
-        printf("[EV M%d]: Direction %d\n",
+        printf("[EV M%d]: %s Direction %d\n",
                 finger_number,
+                source,
                 mg->direction
               );
 
@@ -582,7 +588,16 @@ void MultiGestureReset(InputDevice *indev, Finger *finger) {
         break;
     }
 
-    MultiGestureCleanAll(indev);
+    // 4. if no gesture match, just clean all fifo
+    for (int i = 0; i < mg->end ; i++) {
+        printf("[EV %d]: %s Direction %d\n",
+                ARRAY_INDEX(mg->fifo[i], indev->fingers),
+                source,
+                mg->fifo[i]->gesture.direction
+              );
+    }
+    mg->end = 0;
+    mg->state = ST_NONE;
 }
 
 
@@ -610,13 +625,13 @@ void MultiGestureEnd(InputDevice *indev, Finger *finger) {
 }
 
 #define MULTIGESTURE_THRESHOLD pdMS_TO_TICKS(100)
-void MultiGestureActive(InputDevice *indev, Finger *finger) {
+void MultiGestureActive(InputDevice *indev) {
     MultiGesture *mg = &indev->multigesture;
     if(mg->state != ST_ONGOING) { return; }
 
     // watchdog bark
     if(indev->tick - mg->watchdog > MULTIGESTURE_THRESHOLD ) {
-        MultiGestureReset(indev, finger);
+        MultiGestureReset(indev, NULL);
     }
 }
 
