@@ -643,8 +643,18 @@ void InputDeviceScanCore(InputDevice* indev, ScanData *data) {
     static const uint32_t SUPPORT_MASK = CREATE_MASK(MAX_SUPPORT_SLOT - 1);
 
     data->slot_mask = MPS2FB_TOUCH->header.points_mask & SUPPORT_MASK;
+    // Mock 2/3 finger
+    // data->slot_mask |= (data->slot_mask & 1) << 1;
+    // data->slot_mask |= (data->slot_mask & 1) << 2;
 
     for (int i = 0 ; i < MAX_SUPPORT_SLOT ; i ++) {
+        // Mock 2/3 finger
+        // if (i == 1 || i == 2) {
+        //     data->touch_points[i].point.x = MPS2FB_TOUCH->points[0].x + 10 * i;
+        //     data->touch_points[i].point.y = MPS2FB_TOUCH->points[0].y + 10 * i;
+        //     data->touch_points[i].track_id = i + 1;
+        //     continue;
+        // }
         data->touch_points[i].point.x = MPS2FB_TOUCH->points[i].x;
         data->touch_points[i].point.y = MPS2FB_TOUCH->points[i].y;
         data->touch_points[i].track_id = MPS2FB_TOUCH->points[i].track_id;
