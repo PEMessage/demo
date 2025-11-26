@@ -624,7 +624,7 @@ void MultiGestureEnd(InputDevice *indev, Finger *finger) {
     MultiGestureReset(indev, finger);
 }
 
-#define MULTIGESTURE_THRESHOLD pdMS_TO_TICKS(100)
+#define MULTIGESTURE_THRESHOLD pdMS_TO_TICKS(200)
 void MultiGestureActive(InputDevice *indev) {
     MultiGesture *mg = &indev->multigesture;
     if(mg->state != ST_ONGOING) { return; }
@@ -655,9 +655,20 @@ void InputDeviceScanCore(InputDevice* indev, ScanData *data) {
 
 // Call From IRQ
 // ----------------------------------------
-void touch_pend_callback(void * arg1, uint32_t arg2) {
-    struct InputDevice *indev = (InputDevice *)arg1;
-    InputDeviceScan(indev);
+// Task handle for touch processing
+static TaskHandle_t touch_task_handle = NULL;
+
+// Touch task function
+void touch_task(void *pvParameters) {
+
+    struct InputDevice *indev = (struct InputDevice *)pvParameters;
+    while(1) {
+        // Wait for notification from ISR
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+        // Perform input device scan
+        InputDeviceScan(indev);
+    }
 }
 
 #define NO_HOVER_SUPPORT
@@ -674,26 +685,27 @@ void TouchIRQ_Handler() {
     }
     #endif
 
-    // See:
-    // https://freertos.org/zh-cn-cmn-s/Documentation/02-Kernel/04-API-references/11-Software-timers/18-xTimerPendFunctionCallFromISRhttps://freertos.org/zh-cn-cmn-s/Documentation/02-Kernel/04-API-references/11-Software-timers/18-xTimerPendFunctionCallFromISR
-    BaseType_t xHigherPriorityTaskWoken;
-    xTimerPendFunctionCallFromISR(
-            touch_pend_callback,
-            DEV,
-            NULL,
-            &xHigherPriorityTaskWoken
-            );
+    // Send direct notification to wake up touch task
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
+    if (touch_task_handle != NULL) {
+        vTaskNotifyGiveFromISR(touch_task_handle, &xHigherPriorityTaskWoken);
+    }
+
+    // Yield if necessary
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
 
 // Call From Timer
 // ----------------------------------------
-const uint32_t PERIOD = 100; // ms
+const uint32_t PERIOD = 50; // ms
 static TimerHandle_t touch_timer = NULL;
 void touch_timer_callback(TimerHandle_t xTimer) {
     // printf("Tick count: %u\n ", xTaskGetTickCount());
-    InputDeviceScan(DEV);
+    if (touch_task_handle) {
+        xTaskNotifyGive(touch_task_handle);
+    }
 }
 
 
@@ -701,11 +713,39 @@ void touch_timer_callback(TimerHandle_t xTimer) {
 // Main Task
 // ========================================
 
+void fill_framebuffer() {
+    volatile uint32_t *fb_ptr = FB_BASE_ADDRESS;
+    uint32_t y, x; // Use x_byte for iterating through bytes horizontally
+    int color_counter = 0;
+
+    for (y = 0; y < FB_HEIGHT; ++y) {
+
+        for (x = 0; x < FB_WIDTH; ++x) {
+            fb_ptr[x + y * FB_WIDTH] = 0xFFFFFFFF;
+        }
+    }
+}
+
 void MainTask() {
     // create indev
     DEV = InputDeviceCreate();
+    fill_framebuffer();
 
-    // Create a timer (initially not active)
+    // 1. Create touch processing task
+    if (xTaskCreate(
+            touch_task,
+            "TouchTask",
+            configMINIMAL_STACK_SIZE + 1024,  // Adjust stack size as needed
+            (void *)DEV,                      // Pass input device as parameter
+            (tskIDLE_PRIORITY + 2),           // Higher priority than main task
+            &touch_task_handle
+        ) != pdPASS) {
+        printf("Failed to create touch task\n");
+        return;
+    }
+    printf("Touch task created successfully\n");
+
+    // 2. Create a timer (initially not active)
     touch_timer = xTimerCreate(
         "TouchTimer",
         pdMS_TO_TICKS(PERIOD),  // 1 second period
@@ -718,6 +758,8 @@ void MainTask() {
     xTimerStart(touch_timer, portMAX_DELAY);
 
     while(1) {
+        // Main task can do other work here
+        vTaskDelay(pdMS_TO_TICKS(portMAX_DELAY));  // Example delay
     }
 }
 
