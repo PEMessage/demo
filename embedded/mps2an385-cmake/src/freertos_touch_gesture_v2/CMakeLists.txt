@@ -21,6 +21,7 @@ target_link_libraries(${MODULE_NAME}
     freertos_kernel
     freertos_config
     freertos_hook
+    misc
     m
     lvgl_port
     lvgl

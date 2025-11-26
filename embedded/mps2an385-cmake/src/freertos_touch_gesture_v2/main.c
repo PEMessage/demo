@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <assert.h>
+#include "assert_static.h"
 
 void NVIC_Init() {
     size_t i = 0 ;
@@ -48,6 +49,8 @@ void setup() {
         if (_temp_mask & 1)
 
 #define ARRAY_INDEX(ptr, array) ((size_t)((void *)(ptr) - (void *)(array)) / sizeof((array)[0]))
+
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 // ========================================
 // Input Framework Helper
 // ========================================
@@ -131,9 +134,12 @@ typedef struct Finger {
 #define MULTIGESTURE_MAX_LIMIT 2
 typedef struct MultiGesture {
     State state;
+
     TickType_t watchdog;
     uint8_t end;
     Finger *fifo[MULTIGESTURE_MAX_LIMIT];
+
+    Direction direction;
 } MultiGesture;
 
 #define MAX_SUPPORT_SLOT 3
@@ -336,10 +342,12 @@ void GestureActive(InputDevice *indev, Finger *finger) {
             }
         }
         gesture->state = ST_RECOGNIZED;
-        printf("[EV %d]: Direction %d\n",
-                ARRAY_INDEX(finger, indev->fingers),
-                gesture->direction
-              );
+
+        // Since we have multigesture, leave it to multigesture to handle
+        // printf("[EV %d]: Direction %d\n",
+        //         ARRAY_INDEX(finger, indev->fingers),
+        //         gesture->direction
+        //       );
 
         void MultiGestureStart(InputDevice *indev, Finger *finger);
         MultiGestureStart(indev, finger);
@@ -503,6 +511,25 @@ void MultiGestureReset(InputDevice *indev, Finger *finger) {
     mg->state = ST_NONE;
 }
 
+void MultiGestureDetect2Finger(InputDevice *indev, Finger *finger) {
+    MultiGesture *mg = &indev->multigesture;
+    assert(finger[0].gesture.direction != DIR_NONE);
+    assert(finger[1].gesture.direction != DIR_NONE);
+
+    if (finger[0].gesture.direction == finger[1].gesture.direction) {
+        mg->direction = finger[0].gesture.direction;
+        mg->state = ST_RECOGNIZED;
+    }
+
+}
+
+void (*MULTIGESTURE_DETECTFUNC[])(InputDevice *indev, Finger *finger) = {
+    NULL, // Only one finger do not need gesture detect, we already know it
+    MultiGestureDetect2Finger,
+};
+ASSERT_STATIC(ARRAY_SIZE(MULTIGESTURE_DETECTFUNC) == MULTIGESTURE_MAX_LIMIT, "Out of Sync");
+
+
 void MultiGestureStart(InputDevice *indev, Finger *finger) {
     MultiGesture *mg = &indev->multigesture;
     switch(mg->state) {
@@ -514,6 +541,32 @@ void MultiGestureStart(InputDevice *indev, Finger *finger) {
             break;
         default:
             assert(0);
+    }
+
+    for (int i = 0; i < mg->end; i ++) {
+        if(MULTIGESTURE_DETECTFUNC[i] == NULL) { continue; }
+
+        int begin_i = mg->end - (1 + i);
+        Finger *begin = mg->fifo[begin_i];
+        MULTIGESTURE_DETECTFUNC[i](indev, begin);
+
+        if (mg->state != ST_RECOGNIZED) {
+            return;
+        }
+
+        for (int j = 0; j < begin_i; j++) {
+            printf("[EV %d]: [L] Direction %d\n",
+                    ARRAY_INDEX(mg->fifo[j], indev->fingers),
+                    mg->fifo[j]->gesture.direction
+                  );
+        }
+
+        printf("[EV]: [R] Direction %d\n",
+                mg->direction
+              );
+
+        mg->end = 0;
+        mg->state = ST_NONE;
     }
 
     if (mg->end == MULTIGESTURE_MAX_LIMIT) {
@@ -542,12 +595,22 @@ void MultiGestureActive(InputDevice *indev, Finger *finger) {
 void InputDeviceScanCore(InputDevice* indev, ScanData *data) {
     data->touch_points[0].point.x = *TOUCH_X;
     data->touch_points[0].point.y = *TOUCH_Y;
+
+    // Mock two finger data
+    // data->touch_points[1].point.x = *TOUCH_X;
+    // data->touch_points[1].point.y = *TOUCH_Y + 10;
     if (*TOUCH_PRESS) {
         data->slot_mask |= (1 << 0);
         data->touch_points[0].track_id = 1;
+
+        // data->slot_mask |= (1 << 1);
+        // data->touch_points[1].track_id = 1;
     } else {
         data->slot_mask &= ~(1 << 0);
         data->touch_points[0].track_id = -1;
+
+        // data->slot_mask &= ~(1 << 1);
+        // data->touch_points[1].track_id = -1;
     }
     return ;
 }
