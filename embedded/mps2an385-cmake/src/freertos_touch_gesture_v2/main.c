@@ -659,15 +659,33 @@ void InputDeviceScanCore(InputDevice* indev, ScanData *data) {
 static TaskHandle_t touch_task_handle = NULL;
 
 // Touch task function
+#define STATISTICS_PERIOD 5
 void touch_task(void *pvParameters) {
 
     struct InputDevice *indev = (struct InputDevice *)pvParameters;
-    while(1) {
-        // Wait for notification from ISR
-        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-        // Perform input device scan
+    #if defined(STATISTICS_PERIOD) && STATISTICS_PERIOD > 0
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+    uint32_t notify_count = 0;
+    #endif
+
+    while(1) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         InputDeviceScan(indev);
+
+        #if defined(STATISTICS_PERIOD) && STATISTICS_PERIOD > 0
+        notify_count++;
+        if ((xTaskGetTickCount() - xLastWakeTime) > pdMS_TO_TICKS(STATISTICS_PERIOD * 1000)) {
+            // Get high water mark
+            UBaseType_t high_water_mark = uxTaskGetStackHighWaterMark(NULL);
+
+            // Print statistics
+            printf("Statistics: HighWaterMark %lu, Rate %d\n", high_water_mark, notify_count / STATISTICS_PERIOD);
+
+            notify_count = 0;
+            xLastWakeTime = xTaskGetTickCount();
+        }
+        #endif
     }
 }
 
