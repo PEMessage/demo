@@ -143,8 +143,13 @@ typedef struct {
 
     Point prev;
     Point sum;
-
 } cr_gesture_t;
+
+typedef struct {
+    CR_FIELD;
+
+    TickType_t timer;
+} cr_longpress_t;
 
 typedef struct Finger {
     TOUCHPOINT_FIELD;
@@ -153,6 +158,7 @@ typedef struct Finger {
     uint8_t is_edge : 1;
 
     cr_gesture_t cr_gesture;
+    cr_longpress_t cr_longpress;
 } Finger;
 
 typedef struct InputDevice {
@@ -238,6 +244,9 @@ void detectProcess(InputDevice* indev) {
     for(int i = 0; i < MAX_SUPPORT_SLOT ; i++) {
         void Co_Gesture(InputDevice *indev, Finger *f);
         Co_Gesture(indev, &indev->fingers[i]);
+
+        void Co_LongPress(InputDevice *indev, Finger *f);
+        Co_LongPress(indev, &indev->fingers[i]);
     }
 }
 
@@ -263,9 +272,17 @@ void Co_Gesture(InputDevice *indev, Finger *f) {
         CR_AWAIT(cr_gesture, f->is_active && f->is_edge);
 
         GestureReset(indev, f);
+        CR_YIELD(cr_gesture);
 
         while(1) {
-            CR_AWAIT(cr_gesture, f->is_active);
+            CR_AWAIT(cr_gesture, f->is_active || (!f->is_active && f->is_edge) );
+
+            // if pressup, do not reset tracking data until next press
+            if (!f->is_active && f->is_edge) {
+                // NOTE: Cancel
+                CR_RESET(cr_gesture);
+                return;
+            }
 
             Point diff = {
                 .x = f->point.x - cr_gesture->prev.x,
@@ -273,7 +290,7 @@ void Co_Gesture(InputDevice *indev, Finger *f) {
             };
 
             if ( LV_ABS(diff.x) < MIN_VELOCITY && LV_ABS(diff.y) < MIN_VELOCITY ) {
-
+                // NOTE: keep at ONGOING, but reset history
                 GestureReset(indev, f);
                 CR_YIELD(cr_gesture);
                 continue;
@@ -289,6 +306,7 @@ void Co_Gesture(InputDevice *indev, Finger *f) {
                 } else {
                     d = (cr_gesture->sum.y > 0) ? DIR_BOTTOM : DIR_TOP;
                 }
+                // NOTE: RECOGINZE, (so CR_RESET return is stop eval)
                 printf("[EV %d]: Direction %d\n",
                         ARRAY_INDEX(f, indev->fingers),
                         d
@@ -298,12 +316,48 @@ void Co_Gesture(InputDevice *indev, Finger *f) {
             }
             cr_gesture->prev = f->point;
             CR_YIELD(cr_gesture);
+            continue;
         }
 
     }
     CR_END(cr_gesture)
 }
 
+// 3.1 Call from detectProcess, LongPress
+// ----------------------------------------
+#define LONGPRESS_THRESHOLD pdMS_TO_TICKS(500)
+void Co_LongPress(InputDevice *indev, Finger *f) {
+    cr_longpress_t * const cr_longpress = &f->cr_longpress;
+    CR_START(cr_longpress);
+    while(1) {
+
+        CR_AWAIT(cr_longpress, f->is_active && f->is_edge);
+        cr_longpress->timer = indev->tick;
+        CR_YIELD(cr_longpress);
+
+        while(1) {
+            CR_AWAIT(cr_longpress, f->is_active || (!f->is_active && f->is_edge) );
+
+            if (!f->is_active && f->is_edge) {
+                CR_RESET(cr_longpress);
+                return;
+            }
+
+            if (!(indev->tick - cr_longpress->timer > LONGPRESS_THRESHOLD)) {
+                CR_YIELD(cr_longpress);
+                continue;
+            }
+
+            printf("[EV %d]: LongPress\n",
+                    ARRAY_INDEX(f, indev->fingers)
+                  );
+
+            CR_RESET(cr_longpress);
+            return;
+        }
+    }
+    CR_END(cr_longpress);
+}
 
 // ========================================
 // Adapter
@@ -314,17 +368,17 @@ void InputDeviceScanCore(InputDevice* indev, ScanData *data) {
 
     data->slot_mask = MPS2FB_TOUCH->header.points_mask & SUPPORT_MASK;
     // Mock 2/3 finger
-    // data->slot_mask |= (data->slot_mask & 1) << 1;
-    // data->slot_mask |= (data->slot_mask & 1) << 2;
+    data->slot_mask |= (data->slot_mask & 1) << 1;
+    data->slot_mask |= (data->slot_mask & 1) << 2;
 
     for (int i = 0 ; i < MAX_SUPPORT_SLOT ; i ++) {
         // Mock 2/3 finger
-        // if (i == 1 || i == 2) {
-        //     data->touch_points[i].point.x = MPS2FB_TOUCH->points[0].x + 10 * i;
-        //     data->touch_points[i].point.y = MPS2FB_TOUCH->points[0].y + 10 * i;
-        //     data->touch_points[i].track_id = i + 1;
-        //     continue;
-        // }
+        if (i == 1 || i == 2) {
+            data->touch_points[i].point.x = MPS2FB_TOUCH->points[0].x + 10 * i;
+            data->touch_points[i].point.y = MPS2FB_TOUCH->points[0].y + 10 * i;
+            data->touch_points[i].track_id = i + 1;
+            continue;
+        }
         data->touch_points[i].point.x = MPS2FB_TOUCH->points[i].x;
         data->touch_points[i].point.y = MPS2FB_TOUCH->points[i].y;
         data->touch_points[i].track_id = MPS2FB_TOUCH->points[i].track_id;
@@ -414,7 +468,6 @@ void touch_timer_callback(TimerHandle_t xTimer) {
 void fill_framebuffer() {
     volatile uint32_t *fb_ptr = FB_BASE_ADDRESS;
     uint32_t y, x; // Use x_byte for iterating through bytes horizontally
-    int color_counter = 0;
 
     for (y = 0; y < FB_HEIGHT; ++y) {
 
