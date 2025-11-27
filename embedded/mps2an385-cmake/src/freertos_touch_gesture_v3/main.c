@@ -55,6 +55,35 @@ void setup() {
 #define ASSERT_CREATE_MASK(n)  ASSERT_STATIC((n)>=0 && (n) < 63, "Error")
 #define CREATE_MASK(n)         ((1ULL << ((n) + 1)) - 1)
 
+// ========================================
+// Coroutine
+// ========================================
+/*
+ * This allows us to write functions that "pause" and "resume".
+ * It uses the line number (__LINE__) as the state ID.
+ */
+
+#define CR_FIELD \
+    int line; \
+    TickType_t timer_start;
+
+typedef struct {
+    CR_FIELD
+} cr_ctx_t;
+
+#define CR_START(ctx)     switch((ctx)->line) { case 0:
+#define CR_YIELD(ctx)     do { (ctx)->line = __LINE__; return; case __LINE__:; } while(0)
+#define CR_RESET(ctx)     do { (ctx)->line = 0; } while(0)
+#define CR_END(ctx)       } (ctx)->line = 0;
+
+/* Helpers for timing and waiting */
+#define CR_AWAIT(ctx, cond) \
+    while(!(cond)) { CR_YIELD(ctx); }
+
+#define CR_DELAY(ctx, tick_now, duration) \
+    (ctx)->timer_start = (tick_now); \
+    while(((tick_now) - (ctx)->timer_start) < (duration)) { CR_YIELD(ctx); }
+
 
 // ========================================
 // Input Framework Struct
