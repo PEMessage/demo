@@ -65,10 +65,10 @@ void setup() {
 
 #define CR_FIELD \
     int line; \
-    TickType_t timer_start;
+    TickType_t timer_start
 
 typedef struct {
-    CR_FIELD
+    CR_FIELD;
 } cr_ctx_t;
 
 #define CR_START(ctx)     switch((ctx)->line) { case 0:
@@ -96,10 +96,13 @@ typedef struct Point {
     int16_t y;
 } Point;
 
+#define TOUCHPOINT_FIELD \
+    int32_t track_id; \
+    Point point
+
 
 typedef struct TouchPoint {
-    int32_t track_id;
-    Point point;
+    TOUCHPOINT_FIELD;
 } TouchPoint;
 
 
@@ -127,7 +130,7 @@ typedef enum {
     DIR_ALL      = DIR_HOR | DIR_VER,
 } Direction;
 
-#define MAX_SUPPORT_SLOT 3
+#define MAX_SUPPORT_SLOT 1
 
 typedef struct ScanData {
     uint32_t slot_mask;
@@ -135,6 +138,22 @@ typedef struct ScanData {
     TouchPoint touch_points[MAX_SUPPORT_SLOT];
 } ScanData;
 
+typedef struct {
+    CR_FIELD;
+
+    Point prev;
+    Point sum;
+
+} cr_gesture_t;
+
+typedef struct Finger {
+    TOUCHPOINT_FIELD;
+
+    uint8_t is_active : 1;
+    uint8_t is_edge : 1;
+
+    cr_gesture_t cr_gesture;
+} Finger;
 
 typedef struct InputDevice {
     bool enabled : 1;
@@ -143,6 +162,8 @@ typedef struct InputDevice {
     uint32_t curr_slot_mask;
 
     TickType_t tick;
+
+    Finger fingers[MAX_SUPPORT_SLOT];
 } InputDevice;
 
 struct InputDevice *DEV;
@@ -167,12 +188,13 @@ void InputDeviceScan(InputDevice* indev) {
     if (!indev) { return; }
     if (!indev->enabled) { return; }
 
-    indev->prev_slot_mask = indev->curr_slot_mask;
+
     { // Actually Read something
         struct ScanData data;
         {
             for (int i = 0 ; i < MAX_SUPPORT_SLOT ; i ++ ) {
-                // data.touch_points[i] = indev->fingers[i].touch_point;
+                data.touch_points[i].point = indev->fingers[i].point;
+                data.touch_points[i].track_id = indev->fingers[i].track_id;
             }
             data.slot_mask = indev->curr_slot_mask;
             data.tick = 0;
@@ -182,10 +204,25 @@ void InputDeviceScan(InputDevice* indev) {
         InputDeviceScanCore(indev, &data);
 
         {
-            if (data.tick == 0) { indev->tick = xTaskGetTickCount(); };
+            if (data.tick == 0) {
+                indev->tick = xTaskGetTickCount();
+            } else {
+                indev->tick = data.tick;
+            }
+
+            indev->prev_slot_mask = indev->curr_slot_mask;
             indev->curr_slot_mask = data.slot_mask;
+
+            const uint32_t slot_mask_both_edge = indev->prev_slot_mask ^ indev->curr_slot_mask;
+
             for (int i = 0 ; i < MAX_SUPPORT_SLOT ; i ++ ) {
-                // indev->fingers[i].touch_point = data.touch_points[i];
+                indev->fingers[i].track_id = data.touch_points[i].track_id;
+                indev->fingers[i].point = data.touch_points[i].point;
+
+                // helper field relate from other indev->*mask
+                const uint32_t mask = (1 << i);
+                indev->fingers[i].is_active = (bool)(mask & indev->curr_slot_mask);
+                indev->fingers[i].is_edge = (bool)(mask & slot_mask_both_edge);
             }
         }
     }
@@ -198,13 +235,74 @@ void InputDeviceScan(InputDevice* indev) {
 // ----------------------------------------
 
 void detectProcess(InputDevice* indev) {
-    uint32_t slot_mask_both_edge = indev->prev_slot_mask ^ indev->curr_slot_mask;
-    uint32_t slot_mask_up_edge = slot_mask_both_edge & indev->curr_slot_mask;
-    uint32_t slot_mask_down_edge = slot_mask_both_edge & indev->prev_slot_mask;
-    uint32_t slot_mask_high = ~slot_mask_both_edge & indev->curr_slot_mask;
-    uint32_t slot_mask_low = ~slot_mask_both_edge & ~indev->curr_slot_mask;
+    for(int i = 0; i < MAX_SUPPORT_SLOT ; i++) {
+        void Co_Gesture(InputDevice *indev, Finger *f);
+        Co_Gesture(indev, &indev->fingers[i]);
+    }
 }
 
+// 3.1 Call from detectProcess, Gesture Relate
+// ----------------------------------------
+
+#define GESTURE_LIMIT 50
+#define MIN_VELOCITY 3
+
+
+void GestureReset(InputDevice *indev, Finger *f) {
+    cr_gesture_t * const cr_gesture = &f->cr_gesture;
+    cr_gesture->sum.x = 0;
+    cr_gesture->sum.y = 0;
+    cr_gesture->prev = f->point;
+}
+
+void Co_Gesture(InputDevice *indev, Finger *f) {
+    cr_gesture_t * const cr_gesture = &f->cr_gesture;
+
+    CR_START(&f->cr_gesture);
+    while(1) {
+        CR_AWAIT(cr_gesture, f->is_active && f->is_edge);
+
+        GestureReset(indev, f);
+
+        while(1) {
+            CR_AWAIT(cr_gesture, f->is_active);
+
+            Point diff = {
+                .x = f->point.x - cr_gesture->prev.x,
+                .y = f->point.y - cr_gesture->prev.y,
+            };
+
+            if ( LV_ABS(diff.x) < MIN_VELOCITY && LV_ABS(diff.y) < MIN_VELOCITY ) {
+
+                GestureReset(indev, f);
+                CR_YIELD(cr_gesture);
+                continue;
+            }
+
+            cr_gesture->sum.x += diff.x;
+            cr_gesture->sum.y += diff.y;
+
+            if (LV_ABS(cr_gesture->sum.x) > GESTURE_LIMIT || LV_ABS(cr_gesture->sum.y) > GESTURE_LIMIT) {
+                Direction d = DIR_NONE;
+                if (LV_ABS(cr_gesture->sum.x) > LV_ABS(cr_gesture->sum.y)) {
+                    d = (cr_gesture->sum.x > 0) ? DIR_RIGHT : DIR_LEFT;
+                } else {
+                    d = (cr_gesture->sum.y > 0) ? DIR_BOTTOM : DIR_TOP;
+                }
+                printf("[EV %d]: Direction %d\n",
+                        ARRAY_INDEX(f, indev->fingers),
+                        d
+                      );
+                CR_RESET(cr_gesture);
+                return;
+            }
+            cr_gesture->prev = f->point;
+            CR_YIELD(cr_gesture);
+        }
+
+    }
+    CR_END(cr_gesture)
+}
 
 
 // ========================================
@@ -299,7 +397,7 @@ void TouchIRQ_Handler() {
 
 // Call From Timer
 // ----------------------------------------
-const uint32_t PERIOD = 50; // ms
+const uint32_t PERIOD = 100; // ms
 static TimerHandle_t touch_timer = NULL;
 void touch_timer_callback(TimerHandle_t xTimer) {
     // printf("Tick count: %u\n ", xTaskGetTickCount());
