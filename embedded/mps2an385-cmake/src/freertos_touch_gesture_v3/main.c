@@ -130,7 +130,7 @@ typedef enum {
     DIR_ALL      = DIR_HOR | DIR_VER,
 } Direction;
 
-#define MAX_SUPPORT_SLOT 1
+#define MAX_SUPPORT_SLOT 3
 
 typedef struct ScanData {
     uint32_t slot_mask;
@@ -141,8 +141,12 @@ typedef struct ScanData {
 typedef struct {
     CR_FIELD;
 
+    // internal value
     Point prev;
     Point sum;
+
+    // result
+    Direction direction;
 } cr_gesture_t;
 
 typedef struct {
@@ -169,6 +173,19 @@ typedef struct Finger {
     cr_click_t cr_click;
 } Finger;
 
+#define MULTIGESTURE_MAX 3
+typedef struct {
+    CR_FIELD;
+
+    TickType_t watchdog;
+    uint8_t end;
+
+    uint32_t fifo_mask;
+    Finger *fifo[MULTIGESTURE_MAX];
+
+    Direction direction;
+} cr_multigesture_t;
+
 typedef struct InputDevice {
     bool enabled : 1;
 
@@ -178,6 +195,8 @@ typedef struct InputDevice {
     TickType_t tick;
 
     Finger fingers[MAX_SUPPORT_SLOT];
+
+    cr_multigesture_t cr_multigesture;
 } InputDevice;
 
 struct InputDevice *DEV;
@@ -259,6 +278,8 @@ void detectProcess(InputDevice* indev) {
         void Co_Click(InputDevice *indev, Finger *f);
         Co_Click(indev, &indev->fingers[i]);
     }
+    void Co_MultiGesture(InputDevice *indev, Finger *f);
+    Co_MultiGesture(indev, NULL);
 }
 
 // 3.1 Call from detectProcess, Gesture Relate
@@ -273,6 +294,7 @@ void GestureReset(InputDevice *indev, Finger *f) {
     cr_gesture->sum.x = 0;
     cr_gesture->sum.y = 0;
     cr_gesture->prev = f->point;
+    cr_gesture->direction = DIR_NONE;
 }
 
 void Co_Gesture(InputDevice *indev, Finger *f) {
@@ -311,17 +333,18 @@ void Co_Gesture(InputDevice *indev, Finger *f) {
             cr_gesture->sum.y += diff.y;
 
             if (LV_ABS(cr_gesture->sum.x) > GESTURE_LIMIT || LV_ABS(cr_gesture->sum.y) > GESTURE_LIMIT) {
-                Direction d = DIR_NONE;
                 if (LV_ABS(cr_gesture->sum.x) > LV_ABS(cr_gesture->sum.y)) {
-                    d = (cr_gesture->sum.x > 0) ? DIR_RIGHT : DIR_LEFT;
+                    cr_gesture->direction = (cr_gesture->sum.x > 0) ? DIR_RIGHT : DIR_LEFT;
                 } else {
-                    d = (cr_gesture->sum.y > 0) ? DIR_BOTTOM : DIR_TOP;
+                    cr_gesture->direction = (cr_gesture->sum.y > 0) ? DIR_BOTTOM : DIR_TOP;
                 }
                 // NOTE: RECOGINZE, (so CR_RESET return is stop eval)
-                printf("[EV %d]: Direction %d\n",
-                        ARRAY_INDEX(f, indev->fingers),
-                        d
-                      );
+                // printf("[EV %d]: Direction %d\n",
+                //         ARRAY_INDEX(f, indev->fingers),
+                //         cr_gesture->direction
+                //       );
+                void SendToMultiGesture(InputDevice *indev, Finger *f);
+                SendToMultiGesture(indev, f);
                 CR_RESET(cr_gesture);
                 return;
             }
@@ -405,18 +428,149 @@ void Co_Click(InputDevice *indev, Finger *f) {
                     CR_YIELD(cr_click);
                     continue;
                 }
+            } else {
+                printf("[EV %d]: [W] Click %d\n",
+                        ARRAY_INDEX(f, indev->fingers),
+                        cr_click->count
+                      );
+                CR_RESET(cr_click);
+                return;
             }
-
-            printf("[EV %d]: [W] Click %d\n",
-                    ARRAY_INDEX(f, indev->fingers),
-                    cr_click->count
-                  );
-            CR_RESET(cr_click);
-            return;
 
         }
     }
     CR_END(cr_click)
+}
+
+// 4.1 Call from detectProcess, MultiGesture
+// ----------------------------------------
+
+// Notice: fingers[] is not same order as `indev->fingers[]`
+void MultiGestureDetect2Finger(InputDevice *indev, Finger *fingers[]) {
+    cr_multigesture_t *mg = &indev->cr_multigesture;
+
+    assert(fingers[0]->cr_gesture.direction != DIR_NONE);
+    assert(fingers[1]->cr_gesture.direction != DIR_NONE);
+
+    if (fingers[0]->cr_gesture.direction == fingers[1]->cr_gesture.direction) {
+        mg->direction = fingers[0]->cr_gesture.direction;
+    }
+
+}
+
+void MultiGestureDetect3Finger(InputDevice *indev, Finger *fingers[]) {
+    cr_multigesture_t *mg = &indev->cr_multigesture;
+
+    assert(fingers[0]->cr_gesture.direction != DIR_NONE);
+    assert(fingers[1]->cr_gesture.direction != DIR_NONE);
+    assert(fingers[2]->cr_gesture.direction != DIR_NONE);
+
+    if (
+        fingers[0]->cr_gesture.direction == fingers[1]->cr_gesture.direction &&
+        fingers[1]->cr_gesture.direction == fingers[2]->cr_gesture.direction
+       ) {
+        mg->direction = fingers[0]->cr_gesture.direction;
+    }
+
+}
+
+
+// Check order N -> N-1 -> ... -> 3 -> 2 -> 1
+void (*MULTIGESTURE_DETECTFUNC[])(InputDevice *indev, Finger *fingers[]) = {
+    NULL, // `1 FingerDetectfunc` do not exist, we already know it in finger->gesture.direction
+    MultiGestureDetect2Finger,
+    MultiGestureDetect3Finger,
+};
+ASSERT_STATIC(ARRAY_SIZE(MULTIGESTURE_DETECTFUNC) == MULTIGESTURE_MAX, "Out of Sync");
+
+
+void MultiGestureReset(InputDevice *indev, Finger *finger) {
+    cr_multigesture_t *mg = &indev->cr_multigesture;
+
+    char *source = NULL;
+    if (finger == NULL) {
+        source = "[W]";
+    } else if ( (1 << ARRAY_INDEX(finger, indev->fingers)) & indev->curr_slot_mask) {
+        source = "[F]";
+    } else {
+        source = "[L]";
+    }
+
+    // Iter all `N FingerDetectfunc` if `N <= len(fifo)`
+    // i == 0 <-> 1 FingerDetectfunc
+    // i == 1 <-> 2 FingerDetectfunc
+    // ...
+    for (int i = 0; i < mg->end; i ++) {
+        const int finger_number =  mg->end - i; // current len(mg->fifo)
+        assert(finger_number > 0);
+        const int detectfunc_index = finger_number - 1;
+
+        if(MULTIGESTURE_DETECTFUNC[detectfunc_index] == NULL) { continue; }
+
+        // 1. Check any know gesture combination exist in fifo
+        Finger **begin = &mg->fifo[i];
+        MULTIGESTURE_DETECTFUNC[detectfunc_index](indev, begin);
+        if (mg->direction == DIR_NONE) { continue; } // pervious call do not output anything, check next
+
+        // 2. if any `gesture combination` exsit, dequeue fifo content until only gesture combination exist
+        for (int j = 0; j < i; j++) {
+
+            printf("[EV %d]: %s Direction %d\n",
+                    ARRAY_INDEX(mg->fifo[j], indev->fingers),
+                    source,
+                    mg->fifo[j]->cr_gesture.direction
+                  );
+        }
+
+        // 3. Send `gesture combination` instead of single gesture
+        // TODO: it's fine for now, since we only have one kind of multigesture
+        //       change it if we add more
+        printf("[EV M%d]: %s Direction %d\n",
+                finger_number,
+                source,
+                mg->direction
+              );
+
+        mg->end = 0;
+
+        break;
+    }
+
+    // 4. if no gesture match, just clean all fifo
+    for (int i = 0; i < mg->end ; i++) {
+        printf("[EV %d]: %s Direction %d\n",
+                ARRAY_INDEX(mg->fifo[i], indev->fingers),
+                source,
+                mg->fifo[i]->cr_gesture.direction
+              );
+    }
+    mg->end = 0;
+    mg->fifo_mask = 0;
+}
+
+void SendToMultiGesture(InputDevice *indev, Finger *f) {
+    cr_multigesture_t * const mg = &indev->cr_multigesture;
+    mg->watchdog = indev->tick;
+    mg->fifo_mask |= ARRAY_INDEX(f, indev->fingers);
+    mg->fifo[mg->end++] = f;
+    if (mg->end == MULTIGESTURE_MAX) {
+        MultiGestureReset(indev, f);
+    }
+}
+
+#define MULTIGESTURE_THRESHOLD pdMS_TO_TICKS(200)
+void Co_MultiGesture(InputDevice *indev, Finger *f) {
+    cr_multigesture_t * const cr_mg = &indev->cr_multigesture;
+    CR_START(cr_mg);
+    while(1) {
+        CR_AWAIT(cr_mg,
+                (cr_mg->end != 0 && indev->tick - cr_mg->watchdog > MULTIGESTURE_THRESHOLD) ||
+                (cr_mg->fifo_mask && indev->curr_slot_mask) != cr_mg->fifo_mask
+                )
+        MultiGestureReset(indev, f);
+    }
+    CR_END(cr_mg)
+
 }
 
 
