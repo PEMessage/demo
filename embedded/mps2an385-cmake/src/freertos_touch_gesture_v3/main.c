@@ -1,0 +1,808 @@
+#include <stdio.h>
+#include "CMSDK_CM3.h" // for SystemCoreClock
+#include "CMSDK_CM3_EXT.h" // for SystemCoreClock
+#include "FreeRTOS.h"
+#include "task.h"
+#include "timers.h"
+#include <stdint.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
+#include <assert.h>
+#include "assert_static.h"
+
+void NVIC_Init() {
+    size_t i = 0 ;
+    for ( i = 0; i < 32; i++) {
+        // NVIC_DisableIRQ(i);
+        NVIC_SetPriority((IRQn_Type)i, configMAX_SYSCALL_INTERRUPT_PRIORITY + 1);
+    }
+}
+
+void TouchIRQ_Init() {
+    TOUCH_CTRL->enable_irq = 1;
+    TOUCH_CTRL->reserved = 77; // random number to verify struct work
+    NVIC_EnableIRQ(Touch_IRQn);
+}
+
+
+void setup() {
+    extern int stdout_init (void);
+    stdout_init();
+    NVIC_Init();
+    TouchIRQ_Init();
+}
+
+// ========================================
+// Helper Function or Macro
+// ========================================
+#define STR(x) #x
+#define STRINGIFY(x) STR(x)
+#define FILE_LINE __FILE__ ":" STRINGIFY(__LINE__)
+
+#define LV_ABS(x) ((x) > 0 ? (x) : (-(x)))
+
+#define FOREACH_SETBITS(mask, _i) \
+    for (unsigned int _i = 0, _temp_mask = (mask); \
+         _temp_mask != 0; \
+         _temp_mask >>= 1, _i++) \
+        if (_temp_mask & 1)
+
+#define ARRAY_INDEX(ptr, array) ((size_t)((void *)(ptr) - (void *)(array)) / sizeof((array)[0]))
+
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+
+#define ASSERT_CREATE_MASK(n)  ASSERT_STATIC((n)>=0 && (n) < 63, "Error")
+#define CREATE_MASK(n)         ((1ULL << ((n) + 1)) - 1)
+
+
+// ========================================
+// Input Framework Struct
+// ========================================
+
+// 1. Basic
+// ----------------------------------------
+typedef struct Point {
+    int16_t x;
+    int16_t y;
+} Point;
+
+
+typedef struct TouchPoint {
+    int32_t track_id;
+    Point point;
+} TouchPoint;
+
+
+// 2. Finger
+// ----------------------------------------
+// ST_NONE -(meet condition)-> ST_ONGOING -(loop eval)--- (meet recoginze condition) -----> ST_RECOGNIZED (do not eval anymore)
+//                                                     \- (meet cancel condition) --------> ST_CANCEL (do not eval anymore)
+//
+
+typedef enum State {
+    ST_NONE = 0,
+    ST_ONGOING = 1,
+    ST_RECOGNIZED = 2,
+    ST_CANCEL = 3
+} State;
+
+typedef enum {
+    DIR_NONE     = 0x00,
+    DIR_LEFT     = (1 << 0),
+    DIR_RIGHT    = (1 << 1),
+    DIR_TOP      = (1 << 2),
+    DIR_BOTTOM   = (1 << 3),
+    DIR_HOR      = DIR_LEFT | DIR_RIGHT,
+    DIR_VER      = DIR_TOP | DIR_BOTTOM,
+    DIR_ALL      = DIR_HOR | DIR_VER,
+} Direction;
+
+typedef struct Gesture {
+    State state;
+    Direction direction;
+    Point sum;
+} Gesture;
+
+typedef struct LongPress {
+    State state;
+    TickType_t startTick;
+} LongPress;
+
+typedef struct Click {
+    State state;
+    uint8_t count;
+    TickType_t watchdog;
+} Click;
+
+typedef struct Finger {
+    TouchPoint touch_point;
+
+
+    Point start_point;
+    Point prev_point;
+
+    /* event base private data */
+    Gesture gesture;
+    LongPress longPress;
+    Click click;
+} Finger;
+
+#define MULTIGESTURE_MAX_LIMIT 3
+typedef struct MultiGesture {
+    State state;
+
+    TickType_t watchdog;
+    uint8_t end;
+    Finger *fifo[MULTIGESTURE_MAX_LIMIT];
+
+    Direction direction;
+} MultiGesture;
+
+#define MAX_SUPPORT_SLOT 3
+
+typedef struct ScanData {
+    uint32_t slot_mask;
+    TickType_t tick;
+    TouchPoint touch_points[MAX_SUPPORT_SLOT];
+} ScanData;
+
+
+typedef struct InputDevice {
+    bool enabled : 1;
+
+    uint32_t prev_slot_mask;
+    uint32_t curr_slot_mask;
+
+    TickType_t tick;
+    Finger fingers[MAX_SUPPORT_SLOT];
+
+    /* event base private data */
+    MultiGesture multigesture;
+} InputDevice;
+
+struct InputDevice *DEV;
+
+
+// ========================================
+// Input Framework Function
+// ========================================
+InputDevice *InputDeviceCreate() {
+    InputDevice *indev = malloc(sizeof(*indev));
+    memset(indev, 0, sizeof(*indev));
+
+    indev->enabled = true;
+
+    return indev;
+}
+
+
+// 1. Call From IRQ or Timer
+// ----------------------------------------
+void InputDeviceScan(InputDevice* indev) {
+    if (!indev) { return; }
+    if (!indev->enabled) { return; }
+
+    indev->prev_slot_mask = indev->curr_slot_mask;
+    { // Actually Read something
+        struct ScanData data;
+        {
+            for (int i = 0 ; i < MAX_SUPPORT_SLOT ; i ++ ) {
+                data.touch_points[i] = indev->fingers[i].touch_point;
+            }
+            data.slot_mask = indev->curr_slot_mask;
+            data.tick = 0;
+        }
+
+        void InputDeviceScanCore(InputDevice* indev, ScanData *data);
+        InputDeviceScanCore(indev, &data);
+
+        {
+            if (data.tick == 0) { indev->tick = xTaskGetTickCount(); };
+            indev->curr_slot_mask = data.slot_mask;
+            for (int i = 0 ; i < MAX_SUPPORT_SLOT ; i ++ ) {
+                indev->fingers[i].touch_point = data.touch_points[i];
+            }
+        }
+    }
+
+    void detectProcess(InputDevice* indev);
+    detectProcess(indev);
+}
+
+// 2. Call from InputDeviceScan
+// ----------------------------------------
+
+void detectProcess(InputDevice* indev) {
+    uint32_t slot_mask_both_edge = indev->prev_slot_mask ^ indev->curr_slot_mask;
+    uint32_t slot_mask_up_edge = slot_mask_both_edge & indev->curr_slot_mask;
+    uint32_t slot_mask_down_edge = slot_mask_both_edge & indev->prev_slot_mask;
+    uint32_t slot_mask_high = ~slot_mask_both_edge & indev->curr_slot_mask;
+    uint32_t slot_mask_low = ~slot_mask_both_edge & ~indev->curr_slot_mask;
+
+    FOREACH_SETBITS(slot_mask_up_edge, i) {
+        void fingerStart(InputDevice *indev, Finger *finger);
+        fingerStart(indev, &indev->fingers[i]);
+    }
+
+    FOREACH_SETBITS(slot_mask_down_edge, i) {
+        void fingerEnd(InputDevice *indev, Finger *finger);
+        fingerEnd(indev, &indev->fingers[i]);
+    }
+
+    FOREACH_SETBITS(slot_mask_high, i) {
+        void fingerActive(InputDevice *indev, Finger *finger);
+        fingerActive(indev, &indev->fingers[i]);
+    }
+    if (slot_mask_high) {
+        void fingerActivePostOnce(InputDevice *indev);
+        fingerActivePostOnce(indev);
+    }
+
+    FOREACH_SETBITS(slot_mask_low, i) {
+        void fingerIdle(InputDevice *indev, Finger *finger);
+        fingerIdle(indev, &indev->fingers[i]);
+    }
+
+}
+
+
+// 3.1 Call from detectProcess, Finger relate
+// ----------------------------------------
+void fingerStart(InputDevice *indev, Finger *finger) {
+    finger->start_point = finger->touch_point.point;
+    finger->prev_point = finger->touch_point.point;
+
+    void GestureStart(InputDevice *indev, Finger *finger);
+    GestureStart(indev, finger);
+
+    void LongPressStart(InputDevice *indev, Finger *finger);
+    LongPressStart(indev, finger);
+}
+
+void fingerActive(InputDevice *indev, Finger *finger) {
+    void GestureActive(InputDevice *indev, Finger *finger);
+    GestureActive(indev, finger);
+
+    void LongPressActive(InputDevice *indev, Finger *finger);
+    LongPressActive(indev, finger);
+
+
+    // Keep this at the end
+    finger->prev_point = finger->touch_point.point;
+}
+
+void fingerActivePostOnce(InputDevice *indev) {
+    void MultiGestureActive(InputDevice *indev);
+    MultiGestureActive(indev);
+}
+
+void fingerEnd(InputDevice *indev, Finger *finger) {
+    void MultiGestureEnd(InputDevice *indev, Finger *finger);
+    MultiGestureEnd(indev, finger);
+
+    void ClickStart(InputDevice *indev, Finger *finger);
+    ClickStart(indev, finger);
+}
+
+void fingerIdle(InputDevice *indev, Finger *finger) {
+    void ClickActive(InputDevice *indev, Finger *finger);
+    ClickActive(indev, finger);
+}
+
+// 4.1 Call From finger*, Gesture relate
+// ----------------------------------------
+void GestureReset(InputDevice *indev, Finger *finger) {
+    Gesture *gesture = &finger->gesture;
+    gesture->direction = DIR_NONE;
+    gesture->sum.x = 0;
+    gesture->sum.y = 0;
+
+    gesture->state = ST_NONE;
+}
+
+void GestureStart(InputDevice *indev, Finger *finger) {
+    GestureReset(indev, finger);
+    Gesture *gesture = &finger->gesture;
+
+    gesture->state = ST_ONGOING;
+}
+
+void GestureActive(InputDevice *indev, Finger *finger) {
+    Gesture *gesture = &finger->gesture;
+    if(gesture->state != ST_ONGOING) { return; }
+
+    Point diff = {
+        finger->touch_point.point.x - finger->prev_point.x,
+        finger->touch_point.point.y - finger->prev_point.y
+    };
+
+    #define MIN_VELOCITY 3
+    if ( LV_ABS(diff.x) < MIN_VELOCITY && LV_ABS(diff.y) < MIN_VELOCITY ) {
+        GestureReset(indev, finger);
+        gesture->state = ST_ONGOING; // clean Gesture state, but still perform eval in same finger
+        return;
+    }
+
+    gesture->sum.x += diff.x;
+    gesture->sum.y += diff.y;
+
+    #define GESTURE_LIMIT 50
+    if (LV_ABS(gesture->sum.x) > GESTURE_LIMIT ||
+        LV_ABS(gesture->sum.y) > GESTURE_LIMIT)
+    {
+        if(LV_ABS(gesture->sum.x) > LV_ABS(gesture->sum.y)) {
+            if(gesture->sum.x > 0) {
+                gesture->direction = DIR_RIGHT;
+            } else {
+                gesture->direction = DIR_LEFT;
+            }
+        } else {
+            if(gesture->sum.y > 0) {
+                gesture->direction = DIR_BOTTOM;
+            } else {
+                gesture->direction = DIR_TOP;
+            }
+        }
+        gesture->state = ST_RECOGNIZED;
+
+        // Since we have multigesture, leave it to multigesture to handle
+        // printf("[EV %d]: Direction %d\n",
+        //         ARRAY_INDEX(finger, indev->fingers),
+        //         gesture->direction
+        //       );
+
+        void MultiGestureStart(InputDevice *indev, Finger *finger);
+        MultiGestureStart(indev, finger);
+    }
+}
+
+// 4.2 Call From finger*, LongPress relate
+// ----------------------------------------
+void LongPressReset(InputDevice *indev, Finger *finger) {
+    LongPress *longPress = &finger->longPress;
+    longPress->startTick = indev->tick;
+
+    longPress->state = ST_NONE;
+}
+
+void LongPressStart(InputDevice *indev, Finger *finger) {
+    LongPressReset(indev, finger);
+
+    LongPress *longPress = &finger->longPress;
+    longPress->state = ST_ONGOING;
+
+}
+
+#define LONGPRESS_THRESHOLD pdMS_TO_TICKS(500)
+void LongPressActive(InputDevice *indev, Finger *finger) {
+    LongPress *longPress = &finger->longPress;
+    if(longPress->state != ST_ONGOING ) { return; }
+
+    if (indev->tick - longPress->startTick > LONGPRESS_THRESHOLD) {
+        longPress->state = ST_RECOGNIZED;
+        printf("[EV %d]: LongPress\n",
+                ARRAY_INDEX(finger, indev->fingers)
+              );
+    }
+
+}
+
+// 4.3 Call From finger*, Click relate
+// ----------------------------------------
+// ST_NONE <-> count == 0
+// ST_ONGOING <-> count != 0
+void ClickAssert(InputDevice *indev, Finger *finger) {
+    assert(indev);
+    assert(finger);
+    assert( \
+            (finger->click.state == ST_NONE && finger->click.count == 0) ||
+            (finger->click.state == ST_ONGOING && finger->click.count != 0) ||
+            (
+             finger->click.state == ST_CANCEL ||
+             finger->click.state == ST_RECOGNIZED
+            ) );
+
+}
+void ClickReset(InputDevice *indev, Finger *finger) {
+    Click *click = &finger->click;
+    ClickAssert(indev, finger);
+
+    click->count = 0;
+    click->state = ST_NONE;
+
+    ClickAssert(indev, finger);
+}
+
+#define MULTICLICK_MAX_CLICK 3
+void ClickStart(InputDevice *indev, Finger *finger) {
+    Click *click = &finger->click;
+    ClickAssert(indev, finger);
+    switch(click->state) {
+        case ST_NONE:
+            click->count = 1;
+            click->watchdog = indev->tick; // init watchdog
+            click->state = ST_ONGOING;
+            break;
+        case ST_ONGOING:
+            click->count++;
+            click->watchdog = indev->tick; // feed the dog
+
+            #if defined(MULTICLICK_MAX_CLICK) && MULTICLICK_MAX_CLICK > 0
+            if (click->count == MULTICLICK_MAX_CLICK) {
+                click->state = ST_RECOGNIZED;
+                printf("[EV %d]: [L] Click %d\n",
+                        ARRAY_INDEX(finger, indev->fingers),
+                        click->count
+                      );
+                ClickReset(indev, finger);
+            }
+            #endif
+            break;
+        default:
+            assert(0);
+            return;
+
+    }
+}
+
+
+#define MULTICLICK_THRESHOLD pdMS_TO_TICKS(100)
+void ClickActive(InputDevice *indev, Finger *finger) {
+    Click *click = &finger->click;
+    if(click->state != ST_ONGOING ) { return; }
+
+    if (finger->longPress.state == ST_RECOGNIZED) {
+        click->state = ST_RECOGNIZED;
+        printf("[EV %d]: LongClick\n",
+                ARRAY_INDEX(finger, indev->fingers)
+              );
+        ClickReset(indev, finger);
+        return;
+    }
+
+    if (finger->gesture.state == ST_RECOGNIZED) {
+        click->state = ST_CANCEL;
+        ClickReset(indev, finger);
+        return;
+    }
+
+    // In ClickActive should already process case that meet limit
+    #if defined(MULTICLICK_MAX_CLICK) && MULTICLICK_MAX_CLICK > 0
+    assert(click->count != MULTICLICK_MAX_CLICK);
+    #endif
+
+    // watchdog bark
+    if (indev->tick - click->watchdog > MULTICLICK_THRESHOLD) {
+        click->state = ST_RECOGNIZED;
+        printf("[EV %d]: [W] Click %d\n",
+                ARRAY_INDEX(finger, indev->fingers),
+                click->count
+              );
+        ClickReset(indev, finger);
+        return;
+    }
+
+    return;
+}
+
+// 5.1 Call From Gesture*, MultiGesture relate
+// ----------------------------------------
+
+// Notice: fingers[] is not same order as `indev->fingers[]`
+void MultiGestureDetect2Finger(InputDevice *indev, Finger *fingers[]) {
+    MultiGesture *mg = &indev->multigesture;
+
+    assert(fingers[0]->gesture.direction != DIR_NONE);
+    assert(fingers[1]->gesture.direction != DIR_NONE);
+
+    if (fingers[0]->gesture.direction == fingers[1]->gesture.direction) {
+        mg->direction = fingers[0]->gesture.direction;
+        mg->state = ST_RECOGNIZED;
+    }
+
+}
+
+void MultiGestureDetect3Finger(InputDevice *indev, Finger *fingers[]) {
+    MultiGesture *mg = &indev->multigesture;
+
+    assert(fingers[0]->gesture.direction != DIR_NONE);
+    assert(fingers[1]->gesture.direction != DIR_NONE);
+    assert(fingers[2]->gesture.direction != DIR_NONE);
+
+    if (
+        fingers[0]->gesture.direction == fingers[1]->gesture.direction &&
+        fingers[1]->gesture.direction == fingers[2]->gesture.direction
+       ) {
+        mg->direction = fingers[0]->gesture.direction;
+        mg->state = ST_RECOGNIZED;
+    }
+
+}
+
+
+// Check order N -> N-1 -> ... -> 3 -> 2 -> 1
+void (*MULTIGESTURE_DETECTFUNC[])(InputDevice *indev, Finger *fingers[]) = {
+    NULL, // `1 FingerDetectfunc` do not exist, we already know it in finger->gesture.direction
+    MultiGestureDetect2Finger,
+    MultiGestureDetect3Finger,
+};
+ASSERT_STATIC(ARRAY_SIZE(MULTIGESTURE_DETECTFUNC) == MULTIGESTURE_MAX_LIMIT, "Out of Sync");
+
+
+// MultiGesture will be reset in following condition
+//          1. if full
+//          2. watdog bark(finger will be NULL)
+//          3. any finger lift
+// and will check if any `gesture combination` exist in fifo
+void MultiGestureReset(InputDevice *indev, Finger *finger) {
+    MultiGesture *mg = &indev->multigesture;
+
+    char *source = NULL;
+    if (finger == NULL) {
+        source = "[W]";
+    } else if ( (1 << ARRAY_INDEX(finger, indev->fingers)) & indev->curr_slot_mask) {
+        source = "[F]";
+    } else {
+        source = "[L]";
+    }
+
+    // Iter all `N FingerDetectfunc` if `N <= len(fifo)`
+    // i == 0 <-> 1 FingerDetectfunc
+    // i == 1 <-> 2 FingerDetectfunc
+    // ...
+    for (int i = 0; i < mg->end; i ++) {
+        const int finger_number =  mg->end - i; // current len(mg->fifo)
+        assert(finger_number > 0);
+        const int detectfunc_index = finger_number - 1;
+
+        if(MULTIGESTURE_DETECTFUNC[detectfunc_index] == NULL) { continue; }
+
+        // 1. Check any know gesture combination exist in fifo
+        Finger **begin = &mg->fifo[i];
+        MULTIGESTURE_DETECTFUNC[detectfunc_index](indev, begin);
+        if (mg->state != ST_RECOGNIZED) { continue; } // pervious call do not output anything, check next
+
+        // 2. if any `gesture combination` exsit, dequeue fifo content until only gesture combination exist
+        for (int j = 0; j < i; j++) {
+
+            printf("[EV %d]: %s Direction %d\n",
+                    ARRAY_INDEX(mg->fifo[j], indev->fingers),
+                    source,
+                    mg->fifo[j]->gesture.direction
+                  );
+        }
+
+        // 3. Send `gesture combination` instead of single gesture
+        // TODO: it's fine for now, since we only have one kind of multigesture
+        //       change it if we add more
+        printf("[EV M%d]: %s Direction %d\n",
+                finger_number,
+                source,
+                mg->direction
+              );
+
+        mg->end = 0;
+        mg->state = ST_NONE;
+
+        break;
+    }
+
+    // 4. if no gesture match, just clean all fifo
+    for (int i = 0; i < mg->end ; i++) {
+        printf("[EV %d]: %s Direction %d\n",
+                ARRAY_INDEX(mg->fifo[i], indev->fingers),
+                source,
+                mg->fifo[i]->gesture.direction
+              );
+    }
+    mg->end = 0;
+    mg->state = ST_NONE;
+}
+
+
+void MultiGestureStart(InputDevice *indev, Finger *finger) {
+    MultiGesture *mg = &indev->multigesture;
+    switch(mg->state) {
+        case ST_NONE:
+        case ST_ONGOING:
+            mg->watchdog = indev->tick; // init or feed the dog
+            mg->fifo[mg->end++] = finger; // push to fifo
+            mg->state = ST_ONGOING;
+            break;
+        default:
+            assert(0);
+    }
+
+
+    if (mg->end == MULTIGESTURE_MAX_LIMIT) {
+        MultiGestureReset(indev, finger);
+    }
+}
+
+void MultiGestureEnd(InputDevice *indev, Finger *finger) {
+    MultiGestureReset(indev, finger);
+}
+
+#define MULTIGESTURE_THRESHOLD pdMS_TO_TICKS(200)
+void MultiGestureActive(InputDevice *indev) {
+    MultiGesture *mg = &indev->multigesture;
+    if(mg->state != ST_ONGOING) { return; }
+
+    // watchdog bark
+    if(indev->tick - mg->watchdog > MULTIGESTURE_THRESHOLD ) {
+        MultiGestureReset(indev, NULL);
+    }
+}
+
+// ========================================
+// Adapter
+// ========================================
+void InputDeviceScanCore(InputDevice* indev, ScanData *data) {
+    ASSERT_CREATE_MASK(MAX_SUPPORT_SLOT - 1);
+    static const uint32_t SUPPORT_MASK = CREATE_MASK(MAX_SUPPORT_SLOT - 1);
+
+    data->slot_mask = MPS2FB_TOUCH->header.points_mask & SUPPORT_MASK;
+    // Mock 2/3 finger
+    // data->slot_mask |= (data->slot_mask & 1) << 1;
+    // data->slot_mask |= (data->slot_mask & 1) << 2;
+
+    for (int i = 0 ; i < MAX_SUPPORT_SLOT ; i ++) {
+        // Mock 2/3 finger
+        // if (i == 1 || i == 2) {
+        //     data->touch_points[i].point.x = MPS2FB_TOUCH->points[0].x + 10 * i;
+        //     data->touch_points[i].point.y = MPS2FB_TOUCH->points[0].y + 10 * i;
+        //     data->touch_points[i].track_id = i + 1;
+        //     continue;
+        // }
+        data->touch_points[i].point.x = MPS2FB_TOUCH->points[i].x;
+        data->touch_points[i].point.y = MPS2FB_TOUCH->points[i].y;
+        data->touch_points[i].track_id = MPS2FB_TOUCH->points[i].track_id;
+    }
+
+    return ;
+}
+
+// Call From IRQ
+// ----------------------------------------
+// Task handle for touch processing
+static TaskHandle_t touch_task_handle = NULL;
+
+// Touch task function
+#define STATISTICS_PERIOD 5
+void touch_task(void *pvParameters) {
+
+    struct InputDevice *indev = (struct InputDevice *)pvParameters;
+
+    #if defined(STATISTICS_PERIOD) && STATISTICS_PERIOD > 0
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+    uint32_t notify_count = 0;
+    #endif
+
+    while(1) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        InputDeviceScan(indev);
+
+        #if defined(STATISTICS_PERIOD) && STATISTICS_PERIOD > 0
+        notify_count++;
+        if ((xTaskGetTickCount() - xLastWakeTime) > pdMS_TO_TICKS(STATISTICS_PERIOD * 1000)) {
+            // Get high water mark
+            UBaseType_t high_water_mark = uxTaskGetStackHighWaterMark(NULL);
+
+            // Print statistics
+            printf("Statistics: HighWaterMark %lu, Rate %d\n", high_water_mark, notify_count / STATISTICS_PERIOD);
+
+            notify_count = 0;
+            xLastWakeTime = xTaskGetTickCount();
+        }
+        #endif
+    }
+}
+
+#define NO_HOVER_SUPPORT
+void TouchIRQ_Handler() {
+    static uint32_t prev_pressed = 0;
+    uint32_t prev = prev_pressed;
+    uint32_t curr = *TOUCH_PRESS;
+    prev_pressed = curr; // update prev
+
+    #ifdef NO_HOVER_SUPPORT
+    // if neither edge nor pressed skip it -- skip hover event
+    if (!( (prev ^ curr) || curr )) {
+        return;
+    }
+    #endif
+
+    // Send direct notification to wake up touch task
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
+    if (touch_task_handle != NULL) {
+        vTaskNotifyGiveFromISR(touch_task_handle, &xHigherPriorityTaskWoken);
+    }
+
+    // Yield if necessary
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+}
+
+
+// Call From Timer
+// ----------------------------------------
+const uint32_t PERIOD = 50; // ms
+static TimerHandle_t touch_timer = NULL;
+void touch_timer_callback(TimerHandle_t xTimer) {
+    // printf("Tick count: %u\n ", xTaskGetTickCount());
+    if (touch_task_handle) {
+        xTaskNotifyGive(touch_task_handle);
+    }
+}
+
+
+// ========================================
+// Main Task
+// ========================================
+
+void fill_framebuffer() {
+    volatile uint32_t *fb_ptr = FB_BASE_ADDRESS;
+    uint32_t y, x; // Use x_byte for iterating through bytes horizontally
+    int color_counter = 0;
+
+    for (y = 0; y < FB_HEIGHT; ++y) {
+
+        for (x = 0; x < FB_WIDTH; ++x) {
+            fb_ptr[x + y * FB_WIDTH] = 0xFFFFFFFF;
+        }
+    }
+}
+
+void MainTask() {
+    // create indev
+    DEV = InputDeviceCreate();
+    fill_framebuffer();
+
+    // 1. Create touch processing task
+    if (xTaskCreate(
+            touch_task,
+            "TouchTask",
+            configMINIMAL_STACK_SIZE + 1024,  // Adjust stack size as needed
+            (void *)DEV,                      // Pass input device as parameter
+            (tskIDLE_PRIORITY + 2),           // Higher priority than main task
+            &touch_task_handle
+        ) != pdPASS) {
+        printf("Failed to create touch task\n");
+        return;
+    }
+    printf("Touch task created successfully\n");
+
+    // 2. Create a timer (initially not active)
+    touch_timer = xTimerCreate(
+        "TouchTimer",
+        pdMS_TO_TICKS(PERIOD),  // 1 second period
+        pdTRUE,               // Auto-reload
+        NULL,                 // Timer ID
+        touch_timer_callback
+    );
+
+    // Start the timer
+    xTimerStart(touch_timer, portMAX_DELAY);
+
+    while(1) {
+        // Main task can do other work here
+        vTaskDelay(pdMS_TO_TICKS(portMAX_DELAY));  // Example delay
+    }
+}
+
+int main() {
+    setup();
+    printf("Init complete\n");
+
+    xTaskCreate( MainTask,
+            "MainTask",
+            configMINIMAL_STACK_SIZE + 3*1024,
+            NULL,
+            (tskIDLE_PRIORITY + 1),
+            NULL );
+
+
+    vTaskStartScheduler();
+    while(1);
+}
