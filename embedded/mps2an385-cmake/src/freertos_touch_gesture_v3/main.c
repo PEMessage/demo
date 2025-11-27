@@ -151,6 +151,13 @@ typedef struct {
     TickType_t timer;
 } cr_longpress_t;
 
+typedef struct {
+    CR_FIELD;
+
+    int count;
+    TickType_t watchdog;
+} cr_click_t;
+
 typedef struct Finger {
     TOUCHPOINT_FIELD;
 
@@ -159,6 +166,7 @@ typedef struct Finger {
 
     cr_gesture_t cr_gesture;
     cr_longpress_t cr_longpress;
+    cr_click_t cr_click;
 } Finger;
 
 typedef struct InputDevice {
@@ -247,6 +255,9 @@ void detectProcess(InputDevice* indev) {
 
         void Co_LongPress(InputDevice *indev, Finger *f);
         Co_LongPress(indev, &indev->fingers[i]);
+
+        void Co_Click(InputDevice *indev, Finger *f);
+        Co_Click(indev, &indev->fingers[i]);
     }
 }
 
@@ -323,7 +334,7 @@ void Co_Gesture(InputDevice *indev, Finger *f) {
     CR_END(cr_gesture)
 }
 
-// 3.1 Call from detectProcess, LongPress
+// 3.2 Call from detectProcess, LongPress
 // ----------------------------------------
 #define LONGPRESS_THRESHOLD pdMS_TO_TICKS(500)
 void Co_LongPress(InputDevice *indev, Finger *f) {
@@ -359,6 +370,56 @@ void Co_LongPress(InputDevice *indev, Finger *f) {
     CR_END(cr_longpress);
 }
 
+// 3.2 Call from detectProcess, Click
+// ----------------------------------------
+#define CLICK_MAX 3
+#define CLICK_THRESHOLD pdMS_TO_TICKS(300)
+void Co_Click(InputDevice *indev, Finger *f) {
+    cr_click_t * const cr_click = &f->cr_click;
+    CR_START(cr_click);
+    while(1) {
+        CR_AWAIT(cr_click, !f->is_active && f->is_edge);
+
+        cr_click->count = 1;
+        cr_click->watchdog = indev->tick;
+        CR_YIELD(cr_click);
+
+        while(1) {
+            CR_AWAIT(cr_click,
+                    (!f->is_active && f->is_edge) ||
+                    (indev->tick - cr_click->watchdog > CLICK_THRESHOLD)
+                    )
+
+            if (!f->is_active && f->is_edge) {
+                cr_click->count++;
+                cr_click->watchdog = indev->tick;
+
+                if (cr_click->count == CLICK_MAX) {
+                    printf("[EV %d]: [M] Click %d\n",
+                            ARRAY_INDEX(f, indev->fingers),
+                            cr_click->count
+                          );
+                    CR_RESET(cr_click);
+                    return;
+                } else {
+                    CR_YIELD(cr_click);
+                    continue;
+                }
+            }
+
+            printf("[EV %d]: [W] Click %d\n",
+                    ARRAY_INDEX(f, indev->fingers),
+                    cr_click->count
+                  );
+            CR_RESET(cr_click);
+            return;
+
+        }
+    }
+    CR_END(cr_click)
+}
+
+
 // ========================================
 // Adapter
 // ========================================
@@ -393,7 +454,7 @@ void InputDeviceScanCore(InputDevice* indev, ScanData *data) {
 static TaskHandle_t touch_task_handle = NULL;
 
 // Touch task function
-#define STATISTICS_PERIOD 5
+#define STATISTICS_PERIOD 5000
 void touch_task(void *pvParameters) {
 
     struct InputDevice *indev = (struct InputDevice *)pvParameters;
@@ -409,7 +470,7 @@ void touch_task(void *pvParameters) {
 
         #if defined(STATISTICS_PERIOD) && STATISTICS_PERIOD > 0
         notify_count++;
-        if ((xTaskGetTickCount() - xLastWakeTime) > pdMS_TO_TICKS(STATISTICS_PERIOD * 1000)) {
+        if ((xTaskGetTickCount() - xLastWakeTime) > pdMS_TO_TICKS(STATISTICS_PERIOD)) {
             // Get high water mark
             UBaseType_t high_water_mark = uxTaskGetStackHighWaterMark(NULL);
 
