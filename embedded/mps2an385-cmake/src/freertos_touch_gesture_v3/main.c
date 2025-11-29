@@ -308,11 +308,14 @@ void Co_Gesture(InputDevice *indev, Finger *f) {
         CR_YIELD(cr_gesture);
 
         while(1) {
-            CR_AWAIT(cr_gesture, f->is_active || (!f->is_active && f->is_edge) );
+            // equal to `f->is_active || (!f->is_active && f->is_edge)`
+            CR_AWAIT(cr_gesture, f->is_active || f->is_edge);
 
-            // if pressup, do not reset tracking data until next press
-            if (!f->is_active && f->is_edge) {
-                // NOTE: Cancel
+            // This part handle signal: `___/\___` (up and down real quick)
+            // If could ensure that signal will not change that fast,
+            // something like `___/-\___`, we don't need this part
+            if (f->is_edge) {
+                // NOTE: Cancel: execute flow but do not reset closure
                 CR_RESET(cr_gesture);
                 return;
             }
@@ -323,7 +326,7 @@ void Co_Gesture(InputDevice *indev, Finger *f) {
             };
 
             if ( LV_ABS(diff.x) < MIN_VELOCITY && LV_ABS(diff.y) < MIN_VELOCITY ) {
-                // NOTE: keep at ONGOING, but reset history
+                // NOTE: keep at ONGOING, but reset all closure
                 GestureReset(indev, f);
                 CR_YIELD(cr_gesture);
                 continue;
@@ -370,9 +373,9 @@ void Co_LongPress(InputDevice *indev, Finger *f) {
         CR_YIELD(cr_longpress);
 
         while(1) {
-            CR_AWAIT(cr_longpress, f->is_active || (!f->is_active && f->is_edge) );
+            CR_AWAIT(cr_longpress, f->is_active || f->is_edge);
 
-            if (!f->is_active && f->is_edge) {
+            if (f->is_edge) {
                 CR_RESET(cr_longpress);
                 return;
             }
