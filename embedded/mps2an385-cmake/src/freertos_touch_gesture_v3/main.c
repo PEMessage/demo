@@ -499,11 +499,18 @@ void MultiGestureReset(InputDevice *indev, Finger *finger) {
         source = "[L]";
     }
 
+    // 1. Found if any gesture meet
+    //  [0 ... [      i      ) ... end)
+    //  \______|_____________/        |  : Send Raw Gesture
+    //         \______________________/  : Send Multi Gesture
+    //
     // Iter all `N FingerDetectfunc` if `N <= len(fifo)`
     // i == 0 <-> 1 FingerDetectfunc
     // i == 1 <-> 2 FingerDetectfunc
     // ...
-    for (int i = 0; i < mg->end; i ++) {
+    //
+    int i;
+    for (i = 0; i < mg->end; i ++) {
         const int finger_number =  mg->end - i; // current len(mg->fifo)
         assert(finger_number > 0);
         const int detectfunc_index = finger_number - 1;
@@ -513,44 +520,37 @@ void MultiGestureReset(InputDevice *indev, Finger *finger) {
         // 1. Check any know gesture combination exist in fifo
         Finger **begin = &mg->fifo[i];
         MULTIGESTURE_DETECTFUNC[detectfunc_index](indev, begin);
-        if (mg->direction == DIR_NONE) { continue; } // pervious call do not output anything, check next
-
-        // 2. if any `gesture combination` exsit, dequeue fifo content until only gesture combination exist
-        for (int j = 0; j < i; j++) {
-
-            printf("[EV %d]: %s Direction %d\n",
-                    ARRAY_INDEX(mg->fifo[j], indev->fingers),
-                    source,
-                    mg->fifo[j]->cr_gesture.direction
-                  );
+        if (mg->direction == DIR_NONE) {
+            continue;  // pervious call do not output anything, check next
+        } else {
+            break;
         }
+    }
 
-        // 3. Send `gesture combination` instead of single gesture
-        // TODO: it's fine for now, since we only have one kind of multigesture
-        //       change it if we add more
+
+    // 2. if any `gesture combination` exsit, dequeue fifo content until only gesture combination exist
+    for (int j = 0; j < i; j++) {
+        printf("[EV %d]: %s Direction %d\n",
+                ARRAY_INDEX(mg->fifo[j], indev->fingers),
+                source,
+                mg->fifo[j]->cr_gesture.direction
+              );
+    }
+
+    // 3. Send `gesture combination` instead of single gesture
+    // TODO: it's fine for now, since we only have one kind of multigesture
+    //       change it if we add more
+    if(i != mg->end) {
+        const int finger_number =  mg->end - i; // current len(mg->fifo)
         printf("[EV M%d]: %s Direction %d\n",
                 finger_number,
                 source,
                 mg->direction
               );
-
-        mg->end = 0;
-        mg->fifo_mask = 0;
-
-        return;
     }
 
-    // 4. if no gesture match(trigger match above), just clean all fifo
-    for (int i = 0; i < mg->end ; i++) {
-        printf("[EV %d]: %s Direction %d\n",
-                ARRAY_INDEX(mg->fifo[i], indev->fingers),
-                source,
-                mg->fifo[i]->cr_gesture.direction
-              );
-    }
     mg->end = 0;
     mg->fifo_mask = 0;
-    return;
 }
 
 void SendToMultiGesture(InputDevice *indev, Finger *f) {
