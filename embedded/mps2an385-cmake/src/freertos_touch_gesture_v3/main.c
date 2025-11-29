@@ -532,11 +532,12 @@ void MultiGestureReset(InputDevice *indev, Finger *finger) {
               );
 
         mg->end = 0;
+        mg->fifo_mask = 0;
 
-        break;
+        return;
     }
 
-    // 4. if no gesture match, just clean all fifo
+    // 4. if no gesture match(trigger match above), just clean all fifo
     for (int i = 0; i < mg->end ; i++) {
         printf("[EV %d]: %s Direction %d\n",
                 ARRAY_INDEX(mg->fifo[i], indev->fingers),
@@ -546,12 +547,13 @@ void MultiGestureReset(InputDevice *indev, Finger *finger) {
     }
     mg->end = 0;
     mg->fifo_mask = 0;
+    return;
 }
 
 void SendToMultiGesture(InputDevice *indev, Finger *f) {
     cr_multigesture_t * const mg = &indev->cr_multigesture;
     mg->watchdog = indev->tick;
-    mg->fifo_mask |= ARRAY_INDEX(f, indev->fingers);
+    mg->fifo_mask |= 1 << ARRAY_INDEX(f, indev->fingers);
     mg->fifo[mg->end++] = f;
     if (mg->end == MULTIGESTURE_MAX) {
         MultiGestureReset(indev, f);
@@ -565,7 +567,7 @@ void Co_MultiGesture(InputDevice *indev, Finger *f) {
     while(1) {
         CR_AWAIT(cr_mg,
                 (cr_mg->end != 0 && indev->tick - cr_mg->watchdog > MULTIGESTURE_THRESHOLD) ||
-                (cr_mg->fifo_mask && indev->curr_slot_mask) != cr_mg->fifo_mask
+                (cr_mg->end != 0 && ((cr_mg->fifo_mask & indev->curr_slot_mask) != cr_mg->fifo_mask))
                 )
         MultiGestureReset(indev, f);
     }
