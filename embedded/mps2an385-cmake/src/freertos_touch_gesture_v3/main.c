@@ -420,26 +420,20 @@ void Co_Click(InputDevice *indev, Finger *f) {
                 cr_click->count++;
                 cr_click->watchdog = indev->tick;
 
-                if (cr_click->count == CLICK_MAX) {
-                    printf("[EV %d]: [M] Click %d\n",
-                            ARRAY_INDEX(f, indev->fingers),
-                            cr_click->count
-                          );
-                    CR_RESET(cr_click);
-                    return;
-                } else {
+                if (cr_click->count != CLICK_MAX) {
                     CR_YIELD(cr_click);
                     continue;
                 }
-            } else {
-                printf("[EV %d]: [W] Click %d\n",
-                        ARRAY_INDEX(f, indev->fingers),
-                        cr_click->count
-                      );
-                CR_RESET(cr_click);
-                return;
             }
 
+            // Common handling for both timeout and max clicks
+            printf("[EV %d]: [%c] Click %d\n",
+                    ARRAY_INDEX(f, indev->fingers),
+                    (cr_click->count == CLICK_MAX) ? 'M' : 'W',
+                    cr_click->count
+                  );
+            CR_RESET(cr_click);
+            return;
         }
     }
     CR_END(cr_click)
