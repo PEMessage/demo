@@ -160,6 +160,9 @@ typedef struct {
 
     int count;
     TickType_t watchdog;
+
+    uint8_t is_long :1;
+    uint8_t is_gesture :1;
 } cr_click_t;
 
 typedef struct Finger {
@@ -348,6 +351,8 @@ void Co_Gesture(InputDevice *indev, Finger *f) {
                 //       );
                 void SendToMultiGesture(InputDevice *indev, Finger *f);
                 SendToMultiGesture(indev, f);
+                void NotifyClickGesture(InputDevice *indev, Finger *f);
+                NotifyClickGesture(indev, f);
                 CR_RESET(cr_gesture);
                 return;
             }
@@ -388,6 +393,8 @@ void Co_LongPress(InputDevice *indev, Finger *f) {
             printf("[EV %d]: LongPress\n",
                     ARRAY_INDEX(f, indev->fingers)
                   );
+            void NotifyClickLong(InputDevice *indev, Finger *f);
+            NotifyClickLong(indev, f);
 
             CR_RESET(cr_longpress);
             return;
@@ -400,15 +407,64 @@ void Co_LongPress(InputDevice *indev, Finger *f) {
 // ----------------------------------------
 #define CLICK_MAX 3
 #define CLICK_THRESHOLD pdMS_TO_TICKS(300)
+
+void NotifyClickLong(InputDevice *indev, Finger *f) {
+    f->cr_click.is_long = 1;
+}
+
+void NotifyClickGesture(InputDevice *indev, Finger *f) {
+    f->cr_click.is_gesture = 1;
+}
+
+void ClickReset(InputDevice *indev, Finger *f) {
+    cr_click_t * const click = &f->cr_click;
+    const int is_special = (click->is_long || click->is_gesture);
+    const int normal_count = click->count - is_special;
+
+    assert(normal_count >= 0);
+
+    if (normal_count != 0) {
+        printf("[EV %d]: [%c] Click %d\n",
+                ARRAY_INDEX(f, indev->fingers),
+                (normal_count == CLICK_MAX) ? 'M' : 'W',
+                normal_count
+              );
+    }
+
+    if (click->is_long) {
+        printf("[EV %d]: LongClick\n",
+                ARRAY_INDEX(f, indev->fingers)
+              );
+    }
+
+    if (click->is_gesture) {
+        // do nothing
+    }
+
+    click->count = 0;
+    click->is_long = 0;
+    click->is_gesture = 0;
+}
+
 void Co_Click(InputDevice *indev, Finger *f) {
     cr_click_t * const cr_click = &f->cr_click;
+    const int is_special = (cr_click->is_long || cr_click->is_gesture);
     CR_START(cr_click);
     while(1) {
         CR_AWAIT(cr_click, !f->is_active && f->is_edge);
 
+
         cr_click->count = 1;
         cr_click->watchdog = indev->tick;
-        CR_YIELD(cr_click);
+
+        if (is_special) {
+            ClickReset(indev, f);
+            CR_RESET(cr_click);
+            return;
+        } else {
+            CR_YIELD(cr_click);
+        }
+
 
         while(1) {
             CR_AWAIT(cr_click,
@@ -420,18 +476,13 @@ void Co_Click(InputDevice *indev, Finger *f) {
                 cr_click->count++;
                 cr_click->watchdog = indev->tick;
 
-                if (cr_click->count != CLICK_MAX) {
+                if (cr_click->count != CLICK_MAX && !is_special) {
                     CR_YIELD(cr_click);
                     continue;
                 }
             }
 
-            // Common handling for both timeout and max clicks
-            printf("[EV %d]: [%c] Click %d\n",
-                    ARRAY_INDEX(f, indev->fingers),
-                    (cr_click->count == CLICK_MAX) ? 'M' : 'W',
-                    cr_click->count
-                  );
+            ClickReset(indev, f);
             CR_RESET(cr_click);
             return;
         }
@@ -582,17 +633,17 @@ void InputDeviceScanCore(InputDevice* indev, ScanData *data) {
 
     data->slot_mask = MPS2FB_TOUCH->header.points_mask & SUPPORT_MASK;
     // Mock 2/3 finger
-    data->slot_mask |= (data->slot_mask & 1) << 1;
-    data->slot_mask |= (data->slot_mask & 1) << 2;
+    // data->slot_mask |= (data->slot_mask & 1) << 1;
+    // data->slot_mask |= (data->slot_mask & 1) << 2;
 
     for (int i = 0 ; i < MAX_SUPPORT_SLOT ; i ++) {
         // Mock 2/3 finger
-        if (i == 1 || i == 2) {
-            data->touch_points[i].point.x = MPS2FB_TOUCH->points[0].x + 10 * i;
-            data->touch_points[i].point.y = MPS2FB_TOUCH->points[0].y + 10 * i;
-            data->touch_points[i].track_id = i + 1;
-            continue;
-        }
+        // if (i == 1 || i == 2) {
+        //     data->touch_points[i].point.x = MPS2FB_TOUCH->points[0].x + 10 * i;
+        //     data->touch_points[i].point.y = MPS2FB_TOUCH->points[0].y + 10 * i;
+        //     data->touch_points[i].track_id = i + 1;
+        //     continue;
+        // }
         data->touch_points[i].point.x = MPS2FB_TOUCH->points[i].x;
         data->touch_points[i].point.y = MPS2FB_TOUCH->points[i].y;
         data->touch_points[i].track_id = MPS2FB_TOUCH->points[i].track_id;
