@@ -311,17 +311,17 @@ void Co_Common(InputDevice *indev, Finger *f) {
         CR_AWAIT(cr_common, f->is_active && f->is_edge);
         cr_common->start_point = f->point;
         cr_common->end_point = f->point;
-        printf("[EV %d]: start x %d, y %d\n",
-                ARRAY_INDEX(f, indev->fingers),
-                cr_common->start_point.x, cr_common->start_point.y
-                );
+        // printf("[EV %d]: start x %d, y %d\n",
+        //         ARRAY_INDEX(f, indev->fingers),
+        //         cr_common->start_point.x, cr_common->start_point.y
+        //         );
         CR_YIELD(cr_common);
         while(1) {
             if (!f->is_active) {
-                printf("[EV %d]: end x %d, y %d\n",
-                        ARRAY_INDEX(f, indev->fingers),
-                        cr_common->start_point.x, cr_common->start_point.y
-                      );
+                // printf("[EV %d]: end x %d, y %d\n",
+                //         ARRAY_INDEX(f, indev->fingers),
+                //         cr_common->start_point.x, cr_common->start_point.y
+                //       );
                 CR_RESET(cr_common);
                 return;
             }
@@ -453,7 +453,7 @@ void Co_LongPress(InputDevice *indev, Finger *f) {
 // 3.2 Call from detectProcess, Click
 // ----------------------------------------
 #define CLICK_MAX 3
-#define CLICK_THRESHOLD pdMS_TO_TICKS(150)
+#define CLICK_THRESHOLD pdMS_TO_TICKS(300)
 #define CLICK_REGION_MAX 25
 
 void NotifyClickLong(InputDevice *indev, Finger *f) {
@@ -466,30 +466,34 @@ void NotifyClickGesture(InputDevice *indev, Finger *f) {
 
 void ClickReset(InputDevice *indev, Finger *f) {
     cr_click_t * const click = &f->cr_click;
+    cr_common_t * const common = &f->cr_common;
     const int is_special = (click->is_long || click->is_gesture || click->is_not_same);
     const int normal_count = click->count - is_special;
 
     assert(normal_count >= 0);
 
     if (normal_count != 0) {
-        printf("[EV %d]: [%c] Click %d\n",
+        printf("[EV %d]: [%c] Click %d, x %d, y %d\n",
                 ARRAY_INDEX(f, indev->fingers),
                 (normal_count == CLICK_MAX) ? 'M' : 'W',
-                normal_count
+                normal_count,
+                click->point.x, click->point.y
               );
     }
 
     if (click->is_long) {
-        printf("[EV %d]: LongClick\n",
-                ARRAY_INDEX(f, indev->fingers)
+        printf("[EV %d]: LongClick, x %d, y%d\n",
+                ARRAY_INDEX(f, indev->fingers),
+                common->end_point.x, common->end_point.y
               );
     } else if(click->is_gesture) {
         // do nothing
     } else if (click->is_not_same) {
-        printf("[EV %d]: [%c] Click %d\n",
+        printf("[EV %d]: [%c] Click %d, x %d, y %d\n",
                 ARRAY_INDEX(f, indev->fingers),
                 'N',
-                1
+                1,
+                common->end_point.x, common->end_point.y
               );
     } else {
         // do nothing
