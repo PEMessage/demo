@@ -171,6 +171,9 @@ typedef struct {
 
     uint8_t is_long :1;
     uint8_t is_gesture :1;
+    uint8_t is_not_same :1;
+
+    Point point;
 } cr_click_t;
 
 typedef struct Finger {
@@ -450,7 +453,8 @@ void Co_LongPress(InputDevice *indev, Finger *f) {
 // 3.2 Call from detectProcess, Click
 // ----------------------------------------
 #define CLICK_MAX 3
-#define CLICK_THRESHOLD pdMS_TO_TICKS(300)
+#define CLICK_THRESHOLD pdMS_TO_TICKS(150)
+#define CLICK_REGION_MAX 25
 
 void NotifyClickLong(InputDevice *indev, Finger *f) {
     f->cr_click.is_long = 1;
@@ -462,7 +466,7 @@ void NotifyClickGesture(InputDevice *indev, Finger *f) {
 
 void ClickReset(InputDevice *indev, Finger *f) {
     cr_click_t * const click = &f->cr_click;
-    const int is_special = (click->is_long || click->is_gesture);
+    const int is_special = (click->is_long || click->is_gesture || click->is_not_same);
     const int normal_count = click->count - is_special;
 
     assert(normal_count >= 0);
@@ -479,9 +483,15 @@ void ClickReset(InputDevice *indev, Finger *f) {
         printf("[EV %d]: LongClick\n",
                 ARRAY_INDEX(f, indev->fingers)
               );
-    }
-
-    if (click->is_gesture) {
+    } else if(click->is_gesture) {
+        // do nothing
+    } else if (click->is_not_same) {
+        printf("[EV %d]: [%c] Click %d\n",
+                ARRAY_INDEX(f, indev->fingers),
+                'N',
+                1
+              );
+    } else {
         // do nothing
     }
 
@@ -492,7 +502,7 @@ void ClickReset(InputDevice *indev, Finger *f) {
 
 void Co_Click(InputDevice *indev, Finger *f) {
     cr_click_t * const cr_click = &f->cr_click;
-    const int is_special = (cr_click->is_long || cr_click->is_gesture);
+    cr_common_t * const cr_common = &f->cr_common;
     CR_START(cr_click);
     while(1) {
         CR_AWAIT(cr_click, !f->is_active && f->is_edge);
@@ -501,6 +511,9 @@ void Co_Click(InputDevice *indev, Finger *f) {
         cr_click->count = 1;
         cr_click->watchdog = indev->tick;
 
+        cr_click->point = f->point;
+        cr_click->is_not_same = 0;
+        const int is_special = (cr_click->is_long || cr_click->is_gesture || cr_click->is_not_same);
         if (is_special) {
             ClickReset(indev, f);
             CR_RESET(cr_click);
@@ -516,10 +529,23 @@ void Co_Click(InputDevice *indev, Finger *f) {
                     (indev->tick - cr_click->watchdog > CLICK_THRESHOLD)
                     )
 
+
             if (!f->is_active && f->is_edge) {
+
                 cr_click->count++;
                 cr_click->watchdog = indev->tick;
 
+                if (!(LV_ABS(cr_common->end_point.x - cr_click->point.x) < CLICK_REGION_MAX &&
+                    LV_ABS(cr_common->end_point.y - cr_click->point.y) < CLICK_REGION_MAX))
+                {
+                    cr_click->is_not_same = 1;
+                } else {
+                    cr_click->is_not_same = 0;
+                    cr_click->point = cr_common->end_point;
+                }
+
+
+                const int is_special = (cr_click->is_long || cr_click->is_gesture || cr_click->is_not_same);
                 if (cr_click->count != CLICK_MAX && !is_special) {
                     CR_YIELD(cr_click);
                     continue;
@@ -627,7 +653,7 @@ void MultiGestureReset(InputDevice *indev, Finger *finger) {
     }
 
     // 3. Send `gesture combination` instead of single gesture
-    // TODO: it's fine for now, since we only have one kind of multigesture
+    // TODO: it's fine for now, since we only have one kind of multigesture,
     //       change it if we add more
     if(i != mg->end) {
         const int finger_number =  mg->end - i; // current len(mg->fifo)
