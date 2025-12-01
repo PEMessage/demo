@@ -138,6 +138,14 @@ typedef struct ScanData {
     TouchPoint touch_points[MAX_SUPPORT_SLOT];
 } ScanData;
 
+// Common data might be used for other coroutine
+typedef struct {
+    CR_FIELD;
+
+    Point start_point;
+    Point end_point;
+} cr_common_t;
+
 typedef struct {
     CR_FIELD;
 
@@ -171,6 +179,7 @@ typedef struct Finger {
     uint8_t is_active : 1;
     uint8_t is_edge : 1;
 
+    cr_common_t cr_common;
     cr_gesture_t cr_gesture;
     cr_longpress_t cr_longpress;
     cr_click_t cr_click;
@@ -273,6 +282,9 @@ void InputDeviceScan(InputDevice* indev) {
 
 void detectProcess(InputDevice* indev) {
     for(int i = 0; i < MAX_SUPPORT_SLOT ; i++) {
+        void Co_Common(InputDevice *indev, Finger *f);
+        Co_Common(indev, &indev->fingers[i]);
+
         void Co_Gesture(InputDevice *indev, Finger *f);
         Co_Gesture(indev, &indev->fingers[i]);
 
@@ -284,6 +296,37 @@ void detectProcess(InputDevice* indev) {
     }
     void Co_MultiGesture(InputDevice *indev, Finger *f);
     Co_MultiGesture(indev, NULL);
+}
+
+// 3.0 Call from detectProcess, Common Relate
+// ----------------------------------------
+
+void Co_Common(InputDevice *indev, Finger *f) {
+    cr_common_t * const cr_common = &f->cr_common;
+    CR_START(cr_common);
+    while(1) {
+        CR_AWAIT(cr_common, f->is_active && f->is_edge);
+        cr_common->start_point = f->point;
+        cr_common->end_point = f->point;
+        printf("[EV %d]: start x %d, y %d\n",
+                ARRAY_INDEX(f, indev->fingers),
+                cr_common->start_point.x, cr_common->start_point.y
+                );
+        CR_YIELD(cr_common);
+        while(1) {
+            if (!f->is_active) {
+                printf("[EV %d]: end x %d, y %d\n",
+                        ARRAY_INDEX(f, indev->fingers),
+                        cr_common->start_point.x, cr_common->start_point.y
+                      );
+                CR_RESET(cr_common);
+                return;
+            }
+            cr_common->end_point = f->point;
+            CR_YIELD(cr_common);
+        }
+    }
+    CR_END(cr_common);
 }
 
 // 3.1 Call from detectProcess, Gesture Relate
