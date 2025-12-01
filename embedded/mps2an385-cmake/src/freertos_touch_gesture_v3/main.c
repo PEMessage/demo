@@ -197,6 +197,7 @@ typedef struct InputDevice {
 
     TickType_t tick;
 
+
     Finger fingers[MAX_SUPPORT_SLOT];
 
     cr_multigesture_t cr_multigesture;
@@ -613,11 +614,14 @@ void Co_MultiGesture(InputDevice *indev, Finger *f) {
     cr_multigesture_t * const cr_mg = &indev->cr_multigesture;
     CR_START(cr_mg);
     while(1) {
+        // watchdog bark or any finger which already detect gesture lift
         CR_AWAIT(cr_mg,
                 (cr_mg->end != 0 && indev->tick - cr_mg->watchdog > MULTIGESTURE_THRESHOLD) ||
                 (cr_mg->end != 0 && ((cr_mg->fifo_mask & indev->curr_slot_mask) != cr_mg->fifo_mask))
                 )
         MultiGestureReset(indev, f);
+        CR_RESET(cr_mg);
+        return;
     }
     CR_END(cr_mg)
 
@@ -679,7 +683,7 @@ void touch_task(void *pvParameters) {
             UBaseType_t high_water_mark = uxTaskGetStackHighWaterMark(NULL);
 
             // Print statistics
-            printf("Statistics: HighWaterMark %lu, Rate %d\n", high_water_mark, notify_count / STATISTICS_PERIOD);
+            printf("Statistics: HighWaterMark %lu Byte, Rate %d\n", high_water_mark * sizeof(StackType_t), notify_count / STATISTICS_PERIOD);
 
             notify_count = 0;
             xLastWakeTime = xTaskGetTickCount();
@@ -751,7 +755,7 @@ void MainTask() {
     if (xTaskCreate(
             touch_task,
             "TouchTask",
-            configMINIMAL_STACK_SIZE + 1024,  // Adjust stack size as needed
+            configMINIMAL_STACK_SIZE + 512 / sizeof(StackType_t),  // Adjust stack size as needed
             (void *)DEV,                      // Pass input device as parameter
             (tskIDLE_PRIORITY + 2),           // Higher priority than main task
             &touch_task_handle
