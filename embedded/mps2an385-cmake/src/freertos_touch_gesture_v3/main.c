@@ -481,13 +481,13 @@ void ClickReset(InputDevice *indev, Finger *f) {
               );
     }
 
-    if (click->is_long) {
+    if (click->is_gesture) {
+        // do nothing, do not handle event here
+    } else if (click->is_long) {
         printf("[EV %d]: LongClick, x %d, y%d\n",
                 ARRAY_INDEX(f, indev->fingers),
                 common->end_point.x, common->end_point.y
               );
-    } else if(click->is_gesture) {
-        // do nothing
     } else if (click->is_not_same) {
         printf("[EV %d]: [%c] Click %d, x %d, y %d\n",
                 ARRAY_INDEX(f, indev->fingers),
@@ -509,7 +509,7 @@ void Co_Click(InputDevice *indev, Finger *f) {
     cr_common_t * const cr_common = &f->cr_common;
     CR_START(cr_click);
     while(1) {
-        CR_AWAIT(cr_click, !f->is_active && f->is_edge);
+        CR_AWAIT(cr_click, !f->is_active && f->is_edge && !indev->curr_slot_mask);
 
 
         cr_click->count = 1;
@@ -518,7 +518,7 @@ void Co_Click(InputDevice *indev, Finger *f) {
         cr_click->point = f->point;
         cr_click->is_not_same = 0;
         const int is_special = (cr_click->is_long || cr_click->is_gesture || cr_click->is_not_same);
-        if (is_special) {
+        if (is_special || cr_click->count == CLICK_MAX) {
             ClickReset(indev, f);
             CR_RESET(cr_click);
             return;
@@ -529,12 +529,12 @@ void Co_Click(InputDevice *indev, Finger *f) {
 
         while(1) {
             CR_AWAIT(cr_click,
-                    (!f->is_active && f->is_edge) ||
+                    (!f->is_active && f->is_edge && !indev->curr_slot_mask) ||
                     (indev->tick - cr_click->watchdog > CLICK_THRESHOLD)
                     )
 
 
-            if (!f->is_active && f->is_edge) {
+            if (!f->is_active && f->is_edge && !indev->curr_slot_mask) {
 
                 cr_click->count++;
                 cr_click->watchdog = indev->tick;
