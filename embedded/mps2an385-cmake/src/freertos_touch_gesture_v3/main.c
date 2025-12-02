@@ -201,6 +201,26 @@ typedef struct {
     Direction direction;
 } cr_multigesture_t;
 
+// Configuration structure for runtime settings
+typedef struct InputDeviceConfig {
+    // Gesture configuration
+    int16_t gesture_limit;
+    int16_t gesture_min_velocity;
+
+    // Long press configuration
+    TickType_t longpress_threshold;
+
+    // Click configuration
+    uint8_t click_max;
+    TickType_t click_threshold;
+    int16_t click_region_max;
+
+    // Multi-gesture configuration
+    TickType_t multigesture_threshold;
+    uint8_t multigesture_max;
+
+} InputDeviceConfig;
+
 typedef struct InputDevice {
     bool enabled : 1;
 
@@ -209,6 +229,8 @@ typedef struct InputDevice {
 
     TickType_t tick;
 
+    // Configuration
+    InputDeviceConfig config;
 
     Finger fingers[MAX_SUPPORT_SLOT];
 
@@ -217,17 +239,58 @@ typedef struct InputDevice {
 
 struct InputDevice *DEV;
 
+// ========================================
+// Default Configuration Values
+// ========================================
+#define DEFAULT_GESTURE_LIMIT 50
+#define DEFAULT_GESTURE_MIN_VELOCITY 3
+
+#define DEFAULT_LONGPRESS_THRESHOLD pdMS_TO_TICKS(500)
+
+#define DEFAULT_CLICK_MAX 3
+#define DEFAULT_CLICK_THRESHOLD pdMS_TO_TICKS(300)
+#define DEFAULT_CLICK_REGION_MAX 25
+
+#define DEFAULT_MULTIGESTURE_THRESHOLD pdMS_TO_TICKS(200)
 
 // ========================================
 // Input Framework Function
 // ========================================
+
+const InputDeviceConfig DEFAULT_INPUTDEVICE_CONFIG = {
+    .gesture_limit = DEFAULT_GESTURE_LIMIT,
+    .gesture_min_velocity = DEFAULT_GESTURE_MIN_VELOCITY,
+
+    .longpress_threshold = DEFAULT_LONGPRESS_THRESHOLD,
+
+    .click_max = DEFAULT_CLICK_MAX,
+    .click_threshold = DEFAULT_CLICK_THRESHOLD,
+    .click_region_max = DEFAULT_CLICK_REGION_MAX,
+
+    .multigesture_threshold = DEFAULT_MULTIGESTURE_THRESHOLD,
+    .multigesture_max = MULTIGESTURE_MAX
+};
+
+
+// Backward compatibility function
 InputDevice *InputDeviceCreate() {
     InputDevice *indev = malloc(sizeof(*indev));
+    if (!indev) return NULL;
+
     memset(indev, 0, sizeof(*indev));
 
-    indev->enabled = true;
+    // Set configuration
+    indev->config = DEFAULT_INPUTDEVICE_CONFIG;
 
     return indev;
+}
+
+void InputDeviceEnable(InputDevice *indev) {
+    indev->enabled = true;
+}
+
+void InputDeviceDisable(InputDevice *indev) {
+    indev->enabled = false;
 }
 
 
@@ -335,10 +398,6 @@ void Co_Common(InputDevice *indev, Finger *f) {
 // 3.1 Call from detectProcess, Gesture Relate
 // ----------------------------------------
 
-#define GESTURE_LIMIT 50
-#define MIN_VELOCITY 3
-
-
 void GestureReset(InputDevice *indev, Finger *f) {
     cr_gesture_t * const cr_gesture = &f->cr_gesture;
     cr_gesture->sum.x = 0;
@@ -375,7 +434,8 @@ void Co_Gesture(InputDevice *indev, Finger *f) {
                 .y = f->point.y - cr_gesture->prev.y,
             };
 
-            if ( LV_ABS(diff.x) < MIN_VELOCITY && LV_ABS(diff.y) < MIN_VELOCITY ) {
+            if ( LV_ABS(diff.x) < indev->config.gesture_min_velocity &&
+                 LV_ABS(diff.y) < indev->config.gesture_min_velocity ) {
                 // NOTE: keep at ONGOING, but reset all closure
                 GestureReset(indev, f);
                 CR_YIELD(cr_gesture);
@@ -385,7 +445,8 @@ void Co_Gesture(InputDevice *indev, Finger *f) {
             cr_gesture->sum.x += diff.x;
             cr_gesture->sum.y += diff.y;
 
-            if (LV_ABS(cr_gesture->sum.x) > GESTURE_LIMIT || LV_ABS(cr_gesture->sum.y) > GESTURE_LIMIT) {
+            if (LV_ABS(cr_gesture->sum.x) > indev->config.gesture_limit ||
+                LV_ABS(cr_gesture->sum.y) > indev->config.gesture_limit) {
                 if (LV_ABS(cr_gesture->sum.x) > LV_ABS(cr_gesture->sum.y)) {
                     cr_gesture->direction = (cr_gesture->sum.x > 0) ? DIR_RIGHT : DIR_LEFT;
                 } else {
@@ -414,7 +475,6 @@ void Co_Gesture(InputDevice *indev, Finger *f) {
 
 // 3.2 Call from detectProcess, LongPress
 // ----------------------------------------
-#define LONGPRESS_THRESHOLD pdMS_TO_TICKS(500)
 void Co_LongPress(InputDevice *indev, Finger *f) {
     cr_longpress_t * const cr_longpress = &f->cr_longpress;
     CR_START(cr_longpress);
@@ -432,7 +492,7 @@ void Co_LongPress(InputDevice *indev, Finger *f) {
                 return;
             }
 
-            if (!(indev->tick - cr_longpress->timer > LONGPRESS_THRESHOLD)) {
+            if (!(indev->tick - cr_longpress->timer > indev->config.longpress_threshold)) {
                 CR_YIELD(cr_longpress);
                 continue;
             }
@@ -452,10 +512,6 @@ void Co_LongPress(InputDevice *indev, Finger *f) {
 
 // 3.2 Call from detectProcess, Click
 // ----------------------------------------
-#define CLICK_MAX 3
-#define CLICK_THRESHOLD pdMS_TO_TICKS(300)
-#define CLICK_REGION_MAX 25
-
 void NotifyClickLong(InputDevice *indev, Finger *f) {
     f->cr_click.is_long = 1;
 }
@@ -475,7 +531,7 @@ void ClickReset(InputDevice *indev, Finger *f) {
     if (normal_count != 0) {
         printf("[EV %d]: [%c] Click %d, x %d, y %d\n",
                 ARRAY_INDEX(f, indev->fingers),
-                (normal_count == CLICK_MAX) ? 'M' : 'W',
+                (normal_count == indev->config.click_max) ? 'M' : 'W',
                 normal_count,
                 click->point.x, click->point.y
               );
@@ -518,7 +574,7 @@ void Co_Click(InputDevice *indev, Finger *f) {
         cr_click->point = f->point;
         cr_click->is_not_same = 0;
         const int is_special = (cr_click->is_long || cr_click->is_gesture || cr_click->is_not_same);
-        if (is_special || cr_click->count == CLICK_MAX) {
+        if (is_special || cr_click->count == indev->config.click_max) {
             ClickReset(indev, f);
             CR_RESET(cr_click);
             return;
@@ -530,7 +586,7 @@ void Co_Click(InputDevice *indev, Finger *f) {
         while(1) {
             CR_AWAIT(cr_click,
                     (!f->is_active && f->is_edge && !indev->curr_slot_mask) ||
-                    (indev->tick - cr_click->watchdog > CLICK_THRESHOLD)
+                    (indev->tick - cr_click->watchdog > indev->config.click_threshold)
                     )
 
 
@@ -539,8 +595,8 @@ void Co_Click(InputDevice *indev, Finger *f) {
                 cr_click->count++;
                 cr_click->watchdog = indev->tick;
 
-                if (!(LV_ABS(cr_common->end_point.x - cr_click->point.x) < CLICK_REGION_MAX &&
-                    LV_ABS(cr_common->end_point.y - cr_click->point.y) < CLICK_REGION_MAX))
+                if (!(LV_ABS(cr_common->end_point.x - cr_click->point.x) < indev->config.click_region_max &&
+                    LV_ABS(cr_common->end_point.y - cr_click->point.y) < indev->config.click_region_max))
                 {
                     cr_click->is_not_same = 1;
                 } else {
@@ -550,7 +606,7 @@ void Co_Click(InputDevice *indev, Finger *f) {
 
 
                 const int is_special = (cr_click->is_long || cr_click->is_gesture || cr_click->is_not_same);
-                if (cr_click->count != CLICK_MAX && !is_special) {
+                if (cr_click->count != indev->config.click_max && !is_special) {
                     CR_YIELD(cr_click);
                     continue;
                 }
@@ -677,19 +733,18 @@ void SendToMultiGesture(InputDevice *indev, Finger *f) {
     mg->watchdog = indev->tick;
     mg->fifo_mask |= 1 << ARRAY_INDEX(f, indev->fingers);
     mg->fifo[mg->end++] = f;
-    if (mg->end == MULTIGESTURE_MAX) {
+    if (mg->end == indev->config.multigesture_max) {
         MultiGestureReset(indev, f);
     }
 }
 
-#define MULTIGESTURE_THRESHOLD pdMS_TO_TICKS(200)
 void Co_MultiGesture(InputDevice *indev, Finger *f) {
     cr_multigesture_t * const cr_mg = &indev->cr_multigesture;
     CR_START(cr_mg);
     while(1) {
         // watchdog bark or any finger which already detect gesture lift
         CR_AWAIT(cr_mg,
-                (cr_mg->end != 0 && indev->tick - cr_mg->watchdog > MULTIGESTURE_THRESHOLD) ||
+                (cr_mg->end != 0 && indev->tick - cr_mg->watchdog > indev->config.multigesture_threshold) ||
                 (cr_mg->end != 0 && ((cr_mg->fifo_mask & indev->curr_slot_mask) != cr_mg->fifo_mask))
                 )
         MultiGestureReset(indev, f);
