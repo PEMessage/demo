@@ -64,8 +64,7 @@ void setup() {
  */
 
 #define CR_FIELD \
-    int line; \
-    TickType_t timer_start
+    int line
 
 typedef struct {
     CR_FIELD;
@@ -79,10 +78,6 @@ typedef struct {
 /* Helpers for timing and waiting */
 #define CR_AWAIT(ctx, cond) \
     while(!(cond)) { CR_YIELD(ctx); }
-
-#define CR_DELAY(ctx, tick_now, duration) \
-    (ctx)->timer_start = (tick_now); \
-    while(((tick_now) - (ctx)->timer_start) < (duration)) { CR_YIELD(ctx); }
 
 
 // ========================================
