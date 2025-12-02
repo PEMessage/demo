@@ -3,12 +3,12 @@
  */
 package org.example;
 
-public class App {
-    public String getGreeting() {
-        return "Hello World!";
-    }
+import com.example.greeter.Greeter;
 
+
+public class App {
     public static void main(String[] args) {
-        System.out.println(new App().getGreeting());
+        Greeter greeter = new Greeter();
+        System.out.println(greeter.sayHello("HelloWorld"));
     }
 }

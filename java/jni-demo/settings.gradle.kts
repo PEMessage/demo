@@ -10,5 +10,22 @@
 //     id("org.gradle.toolchains.foojay-resolver-convention") version "0.10.0"
 // }
 
+pluginManagement {
+	repositories {
+		gradlePluginPortal() // 1. 默认的 Gradle 插件门户
+		maven { url = uri("https://repo.nokee.dev/release") } // 2. Nokee 的发布仓库
+		maven { url = uri("https://repo.nokee.dev/snapshot") } // 3. Nokee 的快照仓库
+	}
+	val nokeeVersion = "0.5.0-930919a0"
+	resolutionStrategy {
+		eachPlugin {
+            // 当请求的插件 ID 以 dev.nokee. 开头时，使用特定的 Maven 坐标格式
+			if (requested.id.id.startsWith("dev.nokee.")) {
+				useModule("${requested.id.id}:${requested.id.id}.gradle.plugin:${nokeeVersion}")
+			}
+		}
+	}
+}
+
 rootProject.name = "helloworld"
-include("app")
+include("app", "jni-library")

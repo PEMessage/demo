@@ -23,6 +23,7 @@ dependencies {
 
     // This dependency is used by the application.
     // implementation(libs.guava)
+    implementation(project(":jni-library"))
 }
 
 // Apply a specific Java toolchain to ease working on different environments.
@@ -35,6 +36,9 @@ java {
 application {
     // Define the main class for the application.
     mainClass = "org.example.App"
+    applicationDefaultJvmArgs += listOf(
+        "-Djava.library.path=${project(":jni-library").projectDir}/build/libs/main"
+    )
 }
 
 tasks.named<Test>("test") {
