@@ -99,6 +99,30 @@ std::set<std::string> PersistableBundle::GetPersistableBundleKeys() const
     return GetKeys(bundleMap_);
 }
 
+std::set<std::string> PersistableBundle::GetAllKeys() const
+{
+    std::set<std::string> allKeys;
+
+    // Helper lambda to merge keys from maps
+    auto mergeKeys = [&allKeys](const auto& map) {
+        for (const auto& pair : map) {
+            allKeys.insert(pair.first);
+        }
+    };
+
+    #define ADD_KEYS_FROM_MAP(_, name) mergeKeys(name##Map_);
+    PERSISTABLE_BUNDLE_TYPES(ADD_KEYS_FROM_MAP)
+    #undef ADD_KEYS_FROM_MAP
+
+    #define ADD_KEYS_FROM_VECTOR_MAP(_, name) mergeKeys(name##VectorMap_);
+    PERSISTABLE_BUNDLE_VECTOR_TYPES(ADD_KEYS_FROM_VECTOR_MAP)
+    #undef ADD_KEYS_FROM_VECTOR_MAP
+
+    mergeKeys(bundleMap_);
+
+    return allKeys;
+}
+
 // Main methods
 bool PersistableBundle::Marshalling(Parcel &parcel) const
 {

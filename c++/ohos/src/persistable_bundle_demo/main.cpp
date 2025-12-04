@@ -64,6 +64,17 @@ void CopyParcel(const OHOS::Parcel& source, OHOS::Parcel& target)
     }
 }
 
+void PrintBundleKeys(const OHOS::PersistableBundle& bundle) {
+    auto stringKeys = bundle.GetAllKeys();
+    if (!stringKeys.empty()) {
+        std::cout << "String keys: ";
+        for (const auto& key : stringKeys) {
+            std::cout << key << " ";
+        }
+        std::cout << std::endl;
+    }
+}
+
 
 int main() {
     std::cout << "\n=== Create PersistableBundle ===" << std::endl;
@@ -123,9 +134,13 @@ int main() {
     PrintBundleInfo(*restoredBundle);
 
     std::cout << "\n===  erasing key 'enable' ===" << std::endl;
+    std::cout << "-- Before erasing" << std::endl;
+    PrintBundleKeys(*restoredBundle);
+
     // Test erasing a key
     restoredBundle->Erase("enabled");
-    std::cout << "After erasing 'enabled':" << std::endl;
+    std::cout << "-- After erasing 'enabled':" << std::endl;
+    PrintBundleKeys(*restoredBundle);
     std::cout << "Bundle size: " << restoredBundle->Size() << std::endl;
 
     bool exists;
@@ -133,16 +148,6 @@ int main() {
         std::cout << "'enabled' key no longer exists" << std::endl;
     }
     PrintBundleInfo(*restoredBundle);
-
-    // Test getting all keys
-    auto stringKeys = restoredBundle->GetStringKeys();
-    if (!stringKeys.empty()) {
-        std::cout << "String keys: ";
-        for (const auto& key : stringKeys) {
-            std::cout << key << " ";
-        }
-        std::cout << std::endl;
-    }
 
     delete restoredBundle;
 

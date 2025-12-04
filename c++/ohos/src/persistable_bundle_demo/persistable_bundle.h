@@ -88,6 +88,8 @@ public:
     PERSISTABLE_BUNDLE_TYPES(DECLARE_GET_KEYS_METHOD)
     PERSISTABLE_BUNDLE_VECTOR_TYPES(DECLARE_GET_VECTOR_KEYS_METHOD)
     std::set<std::string> GetPersistableBundleKeys() const;
+    std::set<std::string> GetAllKeys() const;
+
 
 private:
     // DISALLOW_COPY_AND_MOVE(PersistableBundle);
