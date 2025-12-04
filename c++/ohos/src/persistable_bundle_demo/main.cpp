@@ -1,6 +1,7 @@
 #include <iostream>
 #include "parcel.h"
 #include "xxd.h"
+#include "string.h"
 
 using namespace OHOS;
 
@@ -27,12 +28,27 @@ void PrintBundleInfo(const PersistableBundle& bundle) {
     if (bundle.GetBool("enabled", enabled)) {
         std::cout << "enabled: " << (enabled ? "true" : "false") << std::endl;
     }
-
-    std::cout << std::endl;
 }
 
+void CopyParcel(const OHOS::Parcel& source, OHOS::Parcel& target)
+{
+    OHOS::Parcel* dest = new OHOS::Parcel();
+
+    size_t dataSize = source.GetDataSize();
+    const uint8_t* srcData = reinterpret_cast<const uint8_t*>(source.GetData());
+
+    if (dataSize > 0 && srcData != nullptr) {
+        uint8_t* buffer = new uint8_t[dataSize];
+        memcpy(buffer, srcData, dataSize);
+
+        target.ParseFrom(reinterpret_cast<uintptr_t>(buffer), dataSize);
+
+    }
+}
+
+
 int main() {
-    std::cout << "=== PersistableBundle Demo ===" << std::endl;
+    std::cout << "\n=== Create PersistableBundle ===" << std::endl;
 
     // Create a bundle
     PersistableBundle bundle;
@@ -42,7 +58,6 @@ int main() {
     bundle.PutInt32("version", 4);
     bundle.PutBool("enabled", true);
 
-    std::cout << "Original bundle:" << std::endl;
     PrintBundleInfo(bundle);
 
     // Serialize to parcel
@@ -54,8 +69,11 @@ int main() {
 
     std::cout << "Parcel data size: " << parcel.GetDataSize() << " bytes" << std::endl;
 
+
+    std::cout << "\n===  After restore ===" << std::endl;
     // Deserialize from parcel
     Parcel parcel2;
+    CopyParcel(parcel, parcel2);
     parcel2.ParseFrom(parcel.GetData(), parcel.GetDataSize());
 
     PersistableBundle* restoredBundle = PersistableBundle::Unmarshalling(parcel2);
@@ -64,9 +82,9 @@ int main() {
         return 1;
     }
 
-    std::cout << "Restored bundle:" << std::endl;
     PrintBundleInfo(*restoredBundle);
 
+    std::cout << "\n===  erasing key 'enable' ===" << std::endl;
     // Test erasing a key
     restoredBundle->Erase("enabled");
     std::cout << "After erasing 'enabled':" << std::endl;
@@ -76,6 +94,7 @@ int main() {
     if (!restoredBundle->GetBool("enabled", exists)) {
         std::cout << "'enabled' key no longer exists" << std::endl;
     }
+    PrintBundleInfo(*restoredBundle);
 
     // Test getting all keys
     auto stringKeys = restoredBundle->GetStringKeys();
@@ -89,6 +108,6 @@ int main() {
 
     delete restoredBundle;
 
-    std::cout << "=== Demo Completed ===" << std::endl;
+    std::cout << "\n=== Demo Completed ===" << std::endl;
     return 0;
 }

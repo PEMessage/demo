@@ -43,6 +43,19 @@ public:
         X(std::string, String) \
         X(std::u16string, String16)
 
+    #define PERSISTABLE_BUNDLE_VECTOR_TYPES(X) \
+        X(bool, Bool) \
+        X(int32_t, Int32) \
+        X(int64_t, Int64) \
+        X(uint8_t, UInt8) \
+        X(uint16_t, UInt16) \
+        X(uint32_t, UInt32) \
+        X(uint64_t, UInt64) \
+        X(float, Float) \
+        X(double, Double) \
+        X(std::string, String) \
+        X(std::u16string, String16)
+
     // Generate Put methods
     #define DECLARE_PUT_METHOD(type, name) \
         void Put##name(const std::string &key, const type &value);
@@ -51,7 +64,7 @@ public:
         void Put##name##Vectors(const std::string &key, const std::vector<type> &value);
 
     PERSISTABLE_BUNDLE_TYPES(DECLARE_PUT_METHOD)
-    PERSISTABLE_BUNDLE_TYPES(DECLARE_PUT_VECTOR_METHOD)
+    PERSISTABLE_BUNDLE_VECTOR_TYPES(DECLARE_PUT_VECTOR_METHOD)
     void PutPersistableBundle(const std::string &key, const PersistableBundle &value);
 
     // Generate Get methods
@@ -62,7 +75,7 @@ public:
         bool Get##name##Vectors(const std::string &key, std::vector<type> &value) const;
 
     PERSISTABLE_BUNDLE_TYPES(DECLARE_GET_METHOD)
-    PERSISTABLE_BUNDLE_TYPES(DECLARE_GET_VECTOR_METHOD)
+    PERSISTABLE_BUNDLE_VECTOR_TYPES(DECLARE_GET_VECTOR_METHOD)
     bool GetPersistableBundle(const std::string &key, PersistableBundle &value) const;
 
     // Generate GetKeys methods
@@ -73,7 +86,7 @@ public:
         std::set<std::string> Get##name##VectorsKeys() const;
 
     PERSISTABLE_BUNDLE_TYPES(DECLARE_GET_KEYS_METHOD)
-    PERSISTABLE_BUNDLE_TYPES(DECLARE_GET_VECTOR_KEYS_METHOD)
+    PERSISTABLE_BUNDLE_VECTOR_TYPES(DECLARE_GET_VECTOR_KEYS_METHOD)
     std::set<std::string> GetPersistableBundleKeys() const;
 
 private:
@@ -84,7 +97,7 @@ private:
     #define ENUM_FIELD_VECTORS(_, name) VAL_##name##_VECTOR,
     enum ValueType {
         PERSISTABLE_BUNDLE_TYPES(ENUM_FIELD)
-        PERSISTABLE_BUNDLE_TYPES(ENUM_FIELD_VECTORS)
+        PERSISTABLE_BUNDLE_VECTOR_TYPES(ENUM_FIELD_VECTORS)
         VAL_PERSISTABLE_BUNDLE
     };
     #undef ENUM_FIELD
@@ -108,7 +121,7 @@ private:
         std::map<std::string, std::vector<type>> name##VectorMap_;
 
     PERSISTABLE_BUNDLE_TYPES(DECLARE_MAP)
-    PERSISTABLE_BUNDLE_TYPES(DECLARE_VECTOR_MAP)
+    PERSISTABLE_BUNDLE_VECTOR_TYPES(DECLARE_VECTOR_MAP)
     std::map<std::string, PersistableBundle> bundleMap_;
 
     // Internal serialization methods

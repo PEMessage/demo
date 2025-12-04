@@ -1,6 +1,7 @@
 #include "persistable_bundle.h"
 #include <limits>
 #include <type_traits>
+#include "string_ex.h"
 
 namespace OHOS {
 
@@ -49,7 +50,7 @@ void PersistableBundle::Put##name##Vectors(const std::string &key, const std::ve
 }
 
 PERSISTABLE_BUNDLE_TYPES(IMPLEMENT_PUT_METHOD)
-PERSISTABLE_BUNDLE_TYPES(IMPLEMENT_PUT_VECTOR_METHOD)
+PERSISTABLE_BUNDLE_VECTOR_TYPES(IMPLEMENT_PUT_VECTOR_METHOD)
 
 void PersistableBundle::PutPersistableBundle(const std::string &key, const PersistableBundle &value)
 {
@@ -70,7 +71,7 @@ bool PersistableBundle::Get##name##Vectors(const std::string &key, std::vector<t
 }
 
 PERSISTABLE_BUNDLE_TYPES(IMPLEMENT_GET_METHOD)
-PERSISTABLE_BUNDLE_TYPES(IMPLEMENT_GET_VECTOR_METHOD)
+PERSISTABLE_BUNDLE_VECTOR_TYPES(IMPLEMENT_GET_VECTOR_METHOD)
 
 bool PersistableBundle::GetPersistableBundle(const std::string &key, PersistableBundle &value) const
 {
@@ -91,7 +92,7 @@ std::set<std::string> PersistableBundle::Get##name##VectorsKeys() const \
 }
 
 PERSISTABLE_BUNDLE_TYPES(IMPLEMENT_GET_KEYS_METHOD)
-PERSISTABLE_BUNDLE_TYPES(IMPLEMENT_GET_VECTOR_KEYS_METHOD)
+PERSISTABLE_BUNDLE_VECTOR_TYPES(IMPLEMENT_GET_VECTOR_KEYS_METHOD)
 
 std::set<std::string> PersistableBundle::GetPersistableBundleKeys() const
 {
@@ -128,7 +129,7 @@ size_t PersistableBundle::Size() const
     #define COUNT_VECTOR_MAP(_, name) total += name##VectorMap_.size();
 
     PERSISTABLE_BUNDLE_TYPES(COUNT_MAP)
-    PERSISTABLE_BUNDLE_TYPES(COUNT_VECTOR_MAP)
+    PERSISTABLE_BUNDLE_VECTOR_TYPES(COUNT_VECTOR_MAP)
     total += bundleMap_.size();
 
     #undef COUNT_MAP
@@ -143,7 +144,7 @@ void PersistableBundle::Clear()
     #define CLEAR_VECTOR_MAP(type, name) name##VectorMap_.clear();
 
     PERSISTABLE_BUNDLE_TYPES(CLEAR_MAP)
-    PERSISTABLE_BUNDLE_TYPES(CLEAR_VECTOR_MAP)
+    PERSISTABLE_BUNDLE_VECTOR_TYPES(CLEAR_VECTOR_MAP)
     bundleMap_.clear();
 
     #undef CLEAR_MAP
@@ -159,7 +160,7 @@ size_t PersistableBundle::Erase(const std::string &key)
     #define ERASE_FROM_VECTOR_MAP(type, name) erased += name##VectorMap_.erase(key);
 
     PERSISTABLE_BUNDLE_TYPES(ERASE_FROM_MAP)
-    PERSISTABLE_BUNDLE_TYPES(ERASE_FROM_VECTOR_MAP)
+    PERSISTABLE_BUNDLE_VECTOR_TYPES(ERASE_FROM_VECTOR_MAP)
     erased += bundleMap_.erase(key);
 
     #undef ERASE_FROM_MAP
@@ -170,12 +171,141 @@ size_t PersistableBundle::Erase(const std::string &key)
 
 bool PersistableBundle::WriteToParcelInner(Parcel &parcel) const
 {
-    // TODO
+    // Write the total number of entries across all maps
+    size_t totalEntries = Size();
+    if (!parcel.WriteUint32(static_cast<uint32_t>(totalEntries))) {
+        return false;
+    }
+
+    // Define helper macros for processing different types of maps
+    #define WRITE_MAP_ENTRIES(type, name, write_func) \
+    do { \
+        for (const auto &pair : name##Map_) { \
+            if (!parcel.WriteString16(Str8ToStr16(pair.first))) { \
+                return false; \
+            } \
+            if (!parcel.WriteInt32(VAL_##name)) { \
+                return false; \
+            } \
+            if (!parcel.write_func(pair.second)) { \
+                return false; \
+            } \
+        } \
+    } while(0); \
+
+
+
+    #define WRITE_VECTOR_MAP_ENTRIES(type, name, write_func) \
+    do { \
+        for (const auto &pair : name##VectorMap_) { \
+            if (!parcel.WriteString16(Str8ToStr16(pair.first))) { \
+                return false; \
+            } \
+            if (!parcel.WriteInt32(VAL_##name##_VECTOR)) { \
+                return false; \
+            } \
+            if (!parcel.write_func(pair.second)) { \
+                return false; \
+            } \
+        } \
+    } while(0);
+
+    // Write entries from all maps using X-macro
+    #define WRITE_MAP(type, name) WRITE_MAP_ENTRIES(type, name, Write##name)
+    #define WRITE_VECTOR_MAP(type, name) WRITE_VECTOR_MAP_ENTRIES(type, name, Write##name##Vector)
+    PERSISTABLE_BUNDLE_TYPES(WRITE_MAP)
+    PERSISTABLE_BUNDLE_VECTOR_TYPES(WRITE_VECTOR_MAP)
+    #undef WRITE_MAP
+    #undef WRITE_VECTOR_MAP
+
+    // Write PersistableBundle entries
+    for (const auto &pair : bundleMap_) {
+        if (!parcel.WriteString16(Str8ToStr16(pair.first))) {
+            return false;
+        }
+        if (!parcel.WriteInt32(VAL_PERSISTABLE_BUNDLE)) {
+            return false;
+        }
+        if (!parcel.WriteParcelable(&pair.second)) {
+            return false;
+        }
+    }
+
+    #undef WRITE_MAP_ENTRIES
+    #undef WRITE_VECTOR_MAP_ENTRIES
+
+    return true;
 }
 
 bool PersistableBundle::ReadFromParcelInner(Parcel &parcel)
 {
-    // TODO
+    // Read the total number of entries
+    uint32_t totalEntries = 0;
+    if (!parcel.ReadUint32(totalEntries)) {
+        return false;
+    }
+
+    // Clear existing data in case this bundle is being reused
+    Clear();
+
+    // Loop through each entry
+    for (uint32_t i = 0; i < totalEntries; ++i) {
+        // Read the key
+        std::u16string key16;
+        if (!parcel.ReadString16(key16)) {
+            return false;
+        }
+        std::string key = Str16ToStr8(key16);
+
+        // Read the value type
+        int32_t valueType = 0;
+        if (!parcel.ReadInt32(valueType)) {
+            return false;
+        }
+
+        // Based on the value type, read the appropriate value
+        switch (valueType) {
+#define CASE_READ_VALUE(type, name, read_func) \
+            case VAL_##name: { \
+                type value = parcel.read_func(); \
+                PutValue(key, value, name##Map_); \
+                break; \
+            }
+
+#define CASE_READ_VECTOR_VALUE(type, name, read_func) \
+            case VAL_##name##_VECTOR: { \
+                std::vector<type> value; \
+                if (!parcel.read_func(&value)) { \
+                    return false; \
+                } \
+                PutValue(key, value, name##VectorMap_); \
+                break; \
+            }
+
+            #define PROCESS_READ_VALUE(type, name) CASE_READ_VALUE(type, name, Read##name)
+            #define PROCESS_READ_VECTOR_VALUE(type, name) CASE_READ_VECTOR_VALUE(type, name, Read##name##Vector)
+            PERSISTABLE_BUNDLE_TYPES(PROCESS_READ_VALUE)
+            PERSISTABLE_BUNDLE_VECTOR_TYPES(PROCESS_READ_VECTOR_VALUE)
+            #undef PROCESS_READ_VALUE
+            #undef PROCESS_READ_VECTOR_VALUE
+
+            case VAL_PERSISTABLE_BUNDLE: {
+                PersistableBundle *bundle = parcel.ReadParcelable<PersistableBundle>();
+                if (bundle == nullptr) {
+                    return false;
+                }
+                PutValue(key, *bundle, bundleMap_);
+                delete bundle;  // Transfer ownership to the map
+                break;
+            }
+
+            default:
+                // Unsupported type
+                return false;
+        }
+    }
+
+    return true;
 }
 
 } // namespace OHOS
