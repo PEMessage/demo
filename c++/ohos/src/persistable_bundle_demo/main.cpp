@@ -2,12 +2,22 @@
 #include "parcel.h"
 #include "xxd.h"
 #include "string.h"
+#include "persistable_bundle.h"
 
 using namespace OHOS;
 
+#define DUMP_PARCEL(parcel) xxd_color2(parcel.GetDataSize(), (unsigned char*)parcel.GetData())
 
-#include <iostream>
-#include "persistable_bundle.h"
+void dump_bundle(const PersistableBundle& bundle) {
+    Parcel parcel;
+    if (!bundle.Marshalling(parcel)) {
+        std::cerr << "Failed to marshal bundle!" << std::endl;
+        abort();
+    }
+
+    DUMP_PARCEL(parcel);
+}
+
 
 using namespace OHOS;
 
@@ -27,6 +37,14 @@ void PrintBundleInfo(const PersistableBundle& bundle) {
     bool enabled;
     if (bundle.GetBool("enabled", enabled)) {
         std::cout << "enabled: " << (enabled ? "true" : "false") << std::endl;
+    }
+
+    std::vector<std::string> message;
+    if (bundle.GetStringVectors("message", message)) {
+        std::cout << "message: " << std::endl;
+        for (auto x: message) {
+            std::cout << " | " << x << std::endl;
+        }
     }
 }
 
@@ -54,10 +72,21 @@ int main() {
     PersistableBundle bundle;
 
     // Put some values
+    std::cout << "-- Write 'String'" << std::endl;
     bundle.PutString("name", "OpenHarmony");
-    bundle.PutInt32("version", 4);
-    bundle.PutBool("enabled", true);
+    dump_bundle(bundle);
 
+    std::cout << "-- Write 'Int32'" << std::endl;
+    bundle.PutInt32("version", 4);
+    dump_bundle(bundle);
+
+    std::cout << "-- Write 'Bool'" << std::endl;
+    bundle.PutBool("enabled", true);
+    dump_bundle(bundle);
+
+    std::cout << "-- Write StringVector" << std::endl;
+    bundle.PutStringVectors("message", std::vector<std::string> {"Hello", "World"});
+    dump_bundle(bundle);
     PrintBundleInfo(bundle);
 
     // Serialize to parcel
@@ -66,6 +95,12 @@ int main() {
         std::cerr << "Failed to marshal bundle!" << std::endl;
         return 1;
     }
+
+
+    std::cout << "-- Write 77 after PersistableBundle" << std::endl;
+    parcel.WriteInt32(77);
+    DUMP_PARCEL(parcel);
+
 
     std::cout << "Parcel data size: " << parcel.GetDataSize() << " bytes" << std::endl;
 
@@ -81,6 +116,8 @@ int main() {
         std::cerr << "Failed to unmarshal bundle!" << std::endl;
         return 1;
     }
+    int32_t restoreValue = parcel2.ReadInt32();
+    std::cout << "restoreValue: " << restoreValue << std::endl;
 
     PrintBundleInfo(*restoredBundle);
 
