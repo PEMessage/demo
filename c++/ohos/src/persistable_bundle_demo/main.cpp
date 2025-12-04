@@ -68,8 +68,9 @@ void CopyParcel(const OHOS::Parcel& source, OHOS::Parcel& target)
 int main() {
     std::cout << "\n=== Create PersistableBundle ===" << std::endl;
 
-    // Create a bundle
+    std::cout << "-- Create " << std::endl;
     PersistableBundle bundle;
+    dump_bundle(bundle);
 
     // Put some values
     std::cout << "-- Write 'String'" << std::endl;
