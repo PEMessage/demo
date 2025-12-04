@@ -44,7 +44,7 @@ void PersistableBundle::Put##name(const std::string &key, const type &value) \
 }
 
 #define IMPLEMENT_PUT_VECTOR_METHOD(type, name) \
-void PersistableBundle::Put##name##Vectors(const std::string &key, const std::vector<type> &value) \
+void PersistableBundle::Put##name##Vector(const std::string &key, const std::vector<type> &value) \
 { \
     PutValue(key, value, name##VectorMap_); \
 }
@@ -65,7 +65,7 @@ bool PersistableBundle::Get##name(const std::string &key, type &value) const \
 }
 
 #define IMPLEMENT_GET_VECTOR_METHOD(type, name) \
-bool PersistableBundle::Get##name##Vectors(const std::string &key, std::vector<type> &value) const \
+bool PersistableBundle::Get##name##Vector(const std::string &key, std::vector<type> &value) const \
 { \
     return GetValue(key, value, name##VectorMap_); \
 }
@@ -86,7 +86,7 @@ std::set<std::string> PersistableBundle::Get##name##Keys() const \
 }
 
 #define IMPLEMENT_GET_VECTOR_KEYS_METHOD(_, name) \
-std::set<std::string> PersistableBundle::Get##name##VectorsKeys() const \
+std::set<std::string> PersistableBundle::Get##name##VectorKeys() const \
 { \
     return GetKeys(name##VectorMap_); \
 }

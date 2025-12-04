@@ -40,7 +40,7 @@ void PrintBundleInfo(const PersistableBundle& bundle) {
     }
 
     std::vector<std::string> message;
-    if (bundle.GetStringVectors("message", message)) {
+    if (bundle.GetStringVector("message", message)) {
         std::cout << "message: " << std::endl;
         for (auto x: message) {
             std::cout << " | " << x << std::endl;
@@ -85,7 +85,7 @@ int main() {
     dump_bundle(bundle);
 
     std::cout << "-- Write StringVector" << std::endl;
-    bundle.PutStringVectors("message", std::vector<std::string> {"Hello", "World"});
+    bundle.PutStringVector("message", std::vector<std::string> {"Hello", "World"});
     dump_bundle(bundle);
     PrintBundleInfo(bundle);
 

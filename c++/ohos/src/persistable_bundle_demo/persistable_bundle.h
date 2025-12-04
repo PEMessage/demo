@@ -61,7 +61,7 @@ public:
         void Put##name(const std::string &key, const type &value);
 
     #define DECLARE_PUT_VECTOR_METHOD(type, name) \
-        void Put##name##Vectors(const std::string &key, const std::vector<type> &value);
+        void Put##name##Vector(const std::string &key, const std::vector<type> &value);
 
     PERSISTABLE_BUNDLE_TYPES(DECLARE_PUT_METHOD)
     PERSISTABLE_BUNDLE_VECTOR_TYPES(DECLARE_PUT_VECTOR_METHOD)
@@ -72,7 +72,7 @@ public:
         bool Get##name(const std::string &key, type &value) const;
 
     #define DECLARE_GET_VECTOR_METHOD(type, name) \
-        bool Get##name##Vectors(const std::string &key, std::vector<type> &value) const;
+        bool Get##name##Vector(const std::string &key, std::vector<type> &value) const;
 
     PERSISTABLE_BUNDLE_TYPES(DECLARE_GET_METHOD)
     PERSISTABLE_BUNDLE_VECTOR_TYPES(DECLARE_GET_VECTOR_METHOD)
@@ -83,7 +83,7 @@ public:
         std::set<std::string> Get##name##Keys() const;
 
     #define DECLARE_GET_VECTOR_KEYS_METHOD(_, name) \
-        std::set<std::string> Get##name##VectorsKeys() const;
+        std::set<std::string> Get##name##VectorKeys() const;
 
     PERSISTABLE_BUNDLE_TYPES(DECLARE_GET_KEYS_METHOD)
     PERSISTABLE_BUNDLE_VECTOR_TYPES(DECLARE_GET_VECTOR_KEYS_METHOD)
@@ -94,14 +94,14 @@ private:
 
     // Type identifiers for serialization
     #define ENUM_FIELD(_, name) VAL_##name,
-    #define ENUM_FIELD_VECTORS(_, name) VAL_##name##_VECTOR,
+    #define ENUM_FIELD_VECTOR(_, name) VAL_##name##_VECTOR,
     enum ValueType {
         PERSISTABLE_BUNDLE_TYPES(ENUM_FIELD)
-        PERSISTABLE_BUNDLE_VECTOR_TYPES(ENUM_FIELD_VECTORS)
+        PERSISTABLE_BUNDLE_VECTOR_TYPES(ENUM_FIELD_VECTOR)
         VAL_PERSISTABLE_BUNDLE
     };
     #undef ENUM_FIELD
-    #undef ENUM_FIELD_VECTORS
+    #undef ENUM_FIELD_VECTOR
 
     // Helper templates
     template<typename T>
