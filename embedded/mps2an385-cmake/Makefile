@@ -111,6 +111,7 @@ $(1):
 run-$(1):
 	qemu-system-arm \
 		-machine mps2-an385 \
+		-device mps2-fb \
 		-cpu cortex-m3 \
 		-kernel $(PRIVATE_BIN) \
 		-serial stdio
@@ -121,6 +122,7 @@ debug-$(1):
 	@echo '======================='
 	qemu-system-arm \
 		-machine mps2-an385 \
+		-device mps2-fb \
 		-cpu cortex-m3 \
 		-kernel $(PRIVATE_BIN) \
 		-d int,cpu_reset \
