@@ -1,6 +1,7 @@
 
 #include "FreeRTOS.h"
 #include "task.h"
+#include <stdio.h>
 
 void vAssertCalled( const char * pcFileName,
                     uint32_t ulLine )
