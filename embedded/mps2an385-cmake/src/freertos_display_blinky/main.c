@@ -7,24 +7,14 @@
 
 #include <stdint.h>
 
-
-// Define framebuffer properties based on the QEMU code
-// #define FB_BASE_ADDRESS ((volatile uint32_t*)(0x41001000))
-// #define FB_WIDTH        640
-// #define FB_HEIGHT       480
-// #define FB_BPP          32 // Bits per pixel
-// #define FB_BYTE_PER_PIXEL (FB_BPP / 8 ) // Should be 4
-// #define FB_BYTES_PER_ROW (FB_WIDTH * FB_BYTE_PER_PIXEL) // 1120 / 4 = 280
-
-// Define color indices (matching the deduction from the QEMU palette)
-#define COLOR_IDX_BLACK     0 
-#define COLOR_IDX_DK_GRAY   1 
-#define COLOR_IDX_LT_GRAY   2 
-#define COLOR_IDX_WHITE     3 
+#define COLOR_IDX_BLACK     0
+#define COLOR_IDX_DK_GRAY   1
+#define COLOR_IDX_LT_GRAY   2
+#define COLOR_IDX_WHITE     3
 #define COLOR_IDX_RED       4
 #define COLOR_IDX_GREEN     5
 #define COLOR_IDX_BLUE      6
-#define COLOR_IDX_NUM       7 
+#define COLOR_IDX_NUM       7
 
 /**
  * @brief Fills the NeXT framebuffer with a single color.
@@ -49,7 +39,7 @@ void fill_framebuffer(uint8_t color_index) {
     int color_counter = 0;
 
     for (y = 0; y < FB_HEIGHT; ++y) {
-        
+
         for (x = 0; x < FB_WIDTH; ++x) {
             *fb_ptr = fill_byte;
             fb_ptr++; // Move to the next byte in memory
