@@ -112,6 +112,7 @@ run-$(1):
 	qemu-system-arm \
 		-machine mps2-an385 \
 		-device mps2-fb \
+		-trace *i2c* \
 		-cpu cortex-m3 \
 		-kernel $(PRIVATE_BIN) \
 		-serial stdio
