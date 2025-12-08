@@ -872,6 +872,7 @@ void fill_framebuffer() {
 void MainTask() {
     // create indev
     DEV = InputDeviceCreate();
+    InputDeviceEnable(DEV);
     fill_framebuffer();
 
     // 1. Create touch processing task
