@@ -1,9 +1,9 @@
 # Hello World Module
 cmake_minimum_required(VERSION 3.12)
-project(freertos_blinky LANGUAGES C ASM)
+project(freertos_service_task LANGUAGES C ASM)
 
 # Set module name
-set(MODULE_NAME freertos_blinky)
+set(MODULE_NAME freertos_service_task)
 
 # Source files
 file(GLOB SRCS *.c)
