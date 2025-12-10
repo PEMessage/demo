@@ -71,6 +71,8 @@ void ServiceDelete(struct Service* s) {
         vTaskDelete(s->task);
         s->task = NULL;
     }
+
+    free(s);
 }
 
 #define PERIOD 100
@@ -150,6 +152,8 @@ void MainTask() {
         }
 
         ServiceDelete(s);
+        s = NULL;
+
         if (xSemaphoreTake(resource_mutex, 0) != pdTRUE) {
             printf("%s: resource_mutex not clean!!\n", __func__);
             return; // return from task to cause kernel pannic
