@@ -100,6 +100,7 @@ Channel *ch;
 Channel *end;
 
 #define ARRAY_INDEX(ptr, array) ((size_t)((void *)(ptr) - (void *)(array)) / sizeof((array)[0]))
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
 int TASK_ARG[] = {
     300, // TaskSend0
@@ -133,7 +134,7 @@ void TaskRecv(void *arg) {
     while(1) {
         vTaskDelay(pdMS_TO_TICKS(delay));
 
-        for (int i = 1; i < 2 ; i ++) {
+        for (int i = 0; i < 2 ; i ++) {
             printf("%d: Recv Start %d\n", id, i);
             void *data;
             channel_recv(ch, &data, portMAX_DELAY);
@@ -172,9 +173,8 @@ void TaskMain() {
             NULL );
 
 
-    for (int i = 0; i < 2 ; i++) {
+    for (int i = 0; i < ARRAY_SIZE(TASK_ARG) ; i++) {
         void* data;
-
         channel_recv(end, &data, portMAX_DELAY);
     }
     printf("End !!\n");
