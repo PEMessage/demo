@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <assert.h>
+
 #include "CMSDK_CM3.h" // for SystemCoreClock
 #include "FreeRTOS.h"
 #include "task.h"
@@ -21,9 +23,7 @@ void setup() {
 // ==============================================
 
 typedef struct {
-    SemaphoreHandle_t data_ready;  // Receiver waits on this
-    SemaphoreHandle_t data_taken;  // Sender waits on this
-    void* data;                    // Shared data pointer
+    QueueHandle_t queue;
 } Channel;
 
 // Initialize channel
@@ -31,68 +31,38 @@ Channel* channel_create(void) {
     Channel* ch = pvPortMalloc(sizeof(Channel));
     if (ch == NULL) return NULL;
 
-    ch->data_ready = xSemaphoreCreateBinary();
-    ch->data_taken = xSemaphoreCreateBinary();
-    ch->data = NULL;
+    ch->queue = xQueueCreate(1, sizeof(void*));
 
     return ch;
 }
+
+const int HEADER = 0xFFAE;
 
 // Send data (blocks until receiver takes it)
 BaseType_t channel_send(Channel* ch, void* data, TickType_t timeout) {
     if (ch == NULL) return pdFALSE;
 
-    // Store data
-    ch->data = data;
-
-    // Signal receiver that data is ready
-    xSemaphoreGive(ch->data_ready);
-
-    // Wait for any previous data to be taken
-    if (xSemaphoreTake(ch->data_taken, timeout) != pdTRUE) {
-        return pdFALSE;  // Timeout
-    }
-
-
-    return pdTRUE;
+    xQueueSend(ch->queue, &HEADER, portMAX_DELAY);
+    return xQueueSend(ch->queue, &data, timeout);
 }
 
 // Receive data (blocks until sender sends)
 BaseType_t channel_recv(Channel* ch, void** data_ptr, TickType_t timeout) {
     if (ch == NULL || data_ptr == NULL) return pdFALSE;
 
-    // Wait for data to be ready
-    if (xSemaphoreTake(ch->data_ready, timeout) != pdTRUE) {
-        return pdFALSE;  // Timeout
-    }
-
-    // Get data
-    *data_ptr = ch->data;
-    ch->data = NULL;
-
-    // Signal sender that data has been taken
-    xSemaphoreGive(ch->data_taken);
-
-    return pdTRUE;
-}
-
-// Try to receive without blocking
-BaseType_t channel_try_recv(Channel* ch, void** data_ptr) {
-    return channel_recv(ch, data_ptr, 0);
-}
-
-// Try to send without blocking
-BaseType_t channel_try_send(Channel* ch, void* data) {
-    return channel_send(ch, data, 0);
+    int header;
+    xQueueReceive(ch->queue, &header , portMAX_DELAY);
+    // assert(header == HEADER);
+    return xQueueReceive(ch->queue, data_ptr, timeout);
 }
 
 // Destroy channel
 void channel_destroy(Channel* ch) {
-    if (ch) {
-        vSemaphoreDelete(ch->data_ready);
-        vSemaphoreDelete(ch->data_taken);
-        vPortFree(ch);
-    }
+    // if (ch) {
+    //     vSemaphoreDelete(ch->data_ready);
+    //     vSemaphoreDelete(ch->data_taken);
+    //     vPortFree(ch);
+    // }
 }
 
 // ==============================================
@@ -104,8 +74,8 @@ Channel *end;
 
 int TASK_ARG[] = {
     300, // TaskSend0
-    400, // TaskSend1
-    100, // TaskRecv
+    301, // TaskSend1
+    500, // TaskRecv
 };
 
 void TaskSend(void *arg) {
@@ -113,16 +83,20 @@ void TaskSend(void *arg) {
     int id = ARRAY_INDEX(arg, TASK_ARG);
 
     while(1) {
-
         vTaskDelay(pdMS_TO_TICKS(delay));
+
         printf("%d: Send Start\n", id);
-        channel_send(ch, NULL, portMAX_DELAY);
+        channel_send(ch, (void *)id, portMAX_DELAY);
         printf("%d: Send End\n", id);
 
-        channel_send(end, NULL, portMAX_DELAY);
+        channel_send(end, (void *)id, portMAX_DELAY);
         printf("%d: Send Final\n", id);
 
-        while(1);
+        // if task have high prio,
+        // `while(1)` or `while(1) { portYIELD(); }`
+        // will cause any task lowwer then it unable to schedule
+        // we should `vTaskDelete(NULL)` this or `while(1) { vTaskDelay(SOMETIME); }`
+        vTaskDelete(NULL);
 
     }
 }
@@ -138,13 +112,15 @@ void TaskRecv(void *arg) {
             printf("%d: Recv Start %d\n", id, i);
             void *data;
             channel_recv(ch, &data, portMAX_DELAY);
-            printf("%d: Recv End %d\n", id, i);
+
+            int recv = (int)data;
+            printf("%d: Recv End %d -- %d\n", id, i, recv);
         }
 
-        channel_send(end, NULL, portMAX_DELAY);
+        channel_send(end, (void *)id, portMAX_DELAY);
         printf("%d: Recv Final\n", id);
 
-        while(1);
+        vTaskDelete(NULL);
     }
 }
 
@@ -152,32 +128,36 @@ void TaskMain() {
     ch = channel_create();
     end = channel_create();
 
-    xTaskCreate( TaskSend,
-            "TaskSend0",
-            configMINIMAL_STACK_SIZE + 3*1024,
-            &TASK_ARG[0],
-            (tskIDLE_PRIORITY + 1),
-            NULL );
+    while(1) {
+        vTaskDelay(10);
+        xTaskCreate( TaskSend,
+                "TaskSend0",
+                configMINIMAL_STACK_SIZE + 3*1024,
+                &TASK_ARG[0],
+                (tskIDLE_PRIORITY + 1),
+                NULL );
 
-    xTaskCreate( TaskSend,
-            "TaskSend1",
-            configMINIMAL_STACK_SIZE + 3*1024,
-            &TASK_ARG[1],
-            (tskIDLE_PRIORITY + 1),
-            NULL );
-    xTaskCreate( TaskRecv,
-            "TaskRecv",
-            configMINIMAL_STACK_SIZE + 3*1024,
-            &TASK_ARG[2],
-            (tskIDLE_PRIORITY + 1),
-            NULL );
+        xTaskCreate( TaskSend,
+                "TaskSend1",
+                configMINIMAL_STACK_SIZE + 3*1024,
+                &TASK_ARG[1],
+                (tskIDLE_PRIORITY + 1),
+                NULL );
+        xTaskCreate( TaskRecv,
+                "TaskRecv",
+                configMINIMAL_STACK_SIZE + 3*1024,
+                &TASK_ARG[2],
+                (tskIDLE_PRIORITY + 1),
+                NULL );
 
 
-    for (int i = 0; i < ARRAY_SIZE(TASK_ARG) ; i++) {
-        void* data;
-        channel_recv(end, &data, portMAX_DELAY);
+        int data[ARRAY_SIZE(TASK_ARG)] = {0};
+        for (int i = 0; i < ARRAY_SIZE(TASK_ARG) ; i++) {
+            channel_recv(end, &data[i], portMAX_DELAY);
+            printf("End %d, data -- %d\n",i, data[i]);
+        }
+        printf("End !!\n");
     }
-    printf("End !!\n");
     while(1);
 
 }
