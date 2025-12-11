@@ -3,6 +3,7 @@
 
 #include "CMSDK_CM3.h" // for SystemCoreClock
 #include "FreeRTOS.h"
+#include "portable.h"
 #include "task.h"
 #include "semphr.h"
 
@@ -262,27 +263,38 @@ void TaskMain() {
 
         printf("Start !! ====================== %d\n", prio_group_index);
 
-        vTaskDelay(2); // TODO: decrease it to zero without error
+        printf("Mini Free Heap: %d bytes\n", xPortGetMinimumEverFreeHeapSize());
+
+        size_t before_heap_size = xPortGetFreeHeapSize();
+        printf("Current Free Heap: %d bytes\n", before_heap_size);
+
+        // vTaskDelay(2);
+        // TODO: decrease it to zero without error
+        // Update1: This isn't need, if we tweak MainTask Prio to lowwest
+        // Update2: semm like heap size effect, if we reduce stack size aslo work
+        //          add tweak  MainTask Prio to lowwest will also reduce xPortGetMinimumEverFreeHeapSize
         xTaskCreate( TaskSend,
                 "TaskSend0",
-                configMINIMAL_STACK_SIZE + 3*1024,
+                configMINIMAL_STACK_SIZE + 256,
                 &prio_group[0],
-                prio_group[0] + tskIDLE_PRIORITY + 1,
+                prio_group[0] + tskIDLE_PRIORITY + 2,
                 NULL );
 
         xTaskCreate( TaskSend,
                 "TaskSend1",
-                configMINIMAL_STACK_SIZE + 3*1024,
+                configMINIMAL_STACK_SIZE + 256,
                 &prio_group[1],
-                prio_group[1] + tskIDLE_PRIORITY + 1,
+                prio_group[1] + tskIDLE_PRIORITY + 2,
                 NULL );
         xTaskCreate( TaskRecv,
                 "TaskRecv",
-                configMINIMAL_STACK_SIZE + 3*1024,
+                configMINIMAL_STACK_SIZE + 256,
                 &prio_group[2],
-                prio_group[2] + tskIDLE_PRIORITY + 1,
+                prio_group[2] + tskIDLE_PRIORITY + 2,
                 NULL );
 
+        size_t after_heap_size = xPortGetFreeHeapSize();
+        printf("Used Free Heap: %d bytes\n", before_heap_size - after_heap_size);
 
         int data[ARRAY_SIZE(TASK_ARG)] = {0};
         for (int i = 0; i < ARRAY_SIZE(TASK_ARG) ; i++) {
@@ -308,7 +320,10 @@ int main() {
             "TaskMain",
             configMINIMAL_STACK_SIZE + 3*1024,
             NULL,
-            (tskIDLE_PRIORITY + 1),
+            (tskIDLE_PRIORITY + 10 ),
+            // It we use a brand new priority other than tskIDLE_PRIORITY
+            // xPortGetMinimumEverFreeHeapSize seem like will be reduce
+            // Why?
             NULL );
 
     vTaskStartScheduler();
