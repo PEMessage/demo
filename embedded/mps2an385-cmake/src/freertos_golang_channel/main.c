@@ -99,33 +99,49 @@ void channel_destroy(Channel* ch) {
 Channel *ch;
 Channel *end;
 
-void TaskSend() {
+#define ARRAY_INDEX(ptr, array) ((size_t)((void *)(ptr) - (void *)(array)) / sizeof((array)[0]))
+
+int TASK_ARG[] = {
+    300, // TaskSend0
+    400, // TaskSend1
+    100, // TaskRecv
+};
+
+void TaskSend(void *arg) {
+    int delay = *(int*)arg;
+    int id = ARRAY_INDEX(arg, TASK_ARG);
+
     while(1) {
 
-        printf("Send Start\n");
+        vTaskDelay(pdMS_TO_TICKS(delay));
+        printf("%d: Send Start\n", id);
         channel_send(ch, NULL, portMAX_DELAY);
-        printf("Send End\n");
+        printf("%d: Send End\n", id);
 
         channel_send(end, NULL, portMAX_DELAY);
-        printf("Send Final\n");
+        printf("%d: Send Final\n", id);
 
         while(1);
 
     }
 }
 
-void TaskRecv() {
+void TaskRecv(void *arg) {
+    int delay = *(int*)arg;
+    int id = ARRAY_INDEX(arg, TASK_ARG);
+
     while(1) {
+        vTaskDelay(pdMS_TO_TICKS(delay));
 
-        vTaskDelay(pdMS_TO_TICKS(500));
-
-        printf("Recv Start\n");
-        void *data;
-        channel_recv(ch, &data, portMAX_DELAY);
-        printf("Recv End\n");
+        for (int i = 1; i < 2 ; i ++) {
+            printf("%d: Recv Start %d\n", id, i);
+            void *data;
+            channel_recv(ch, &data, portMAX_DELAY);
+            printf("%d: Recv End %d\n", id, i);
+        }
 
         channel_send(end, NULL, portMAX_DELAY);
-        printf("Recv Final\n");
+        printf("%d: Recv Final\n", id);
 
         while(1);
     }
@@ -136,15 +152,22 @@ void TaskMain() {
     end = channel_create();
 
     xTaskCreate( TaskSend,
-            "TaskSend",
+            "TaskSend0",
             configMINIMAL_STACK_SIZE + 3*1024,
-            NULL,
+            &TASK_ARG[0],
+            (tskIDLE_PRIORITY + 1),
+            NULL );
+
+    xTaskCreate( TaskSend,
+            "TaskSend1",
+            configMINIMAL_STACK_SIZE + 3*1024,
+            &TASK_ARG[1],
             (tskIDLE_PRIORITY + 1),
             NULL );
     xTaskCreate( TaskRecv,
             "TaskRecv",
             configMINIMAL_STACK_SIZE + 3*1024,
-            NULL,
+            &TASK_ARG[2],
             (tskIDLE_PRIORITY + 1),
             NULL );
 
