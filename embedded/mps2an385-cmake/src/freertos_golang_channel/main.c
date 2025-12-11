@@ -22,8 +22,16 @@ void setup() {
 
 // ==============================================
 
+// A golang like unbuffer-channel
+// Recvice is block operation(obivious)
+// Send is also a block operation(not obivious, unbuffer prop)
+//
+// so we could do a commuication and synchronization in single operation
+// which ease how to write a cocurrent program.
 typedef struct {
     QueueHandle_t queue;
+    SemaphoreHandle_t send_mutex;
+    SemaphoreHandle_t recv_mutex;
 } Channel;
 
 // Initialize channel
@@ -31,8 +39,16 @@ Channel* channel_create(void) {
     Channel* ch = pvPortMalloc(sizeof(Channel));
     if (ch == NULL) return NULL;
 
-    ch->queue = xQueueCreate(1, sizeof(void*));
+    size_t free_heap_before = xPortGetFreeHeapSize();
 
+    ch->queue = xQueueCreate(1, sizeof(void*));
+    ch->send_mutex = xSemaphoreCreateMutex();
+    ch->recv_mutex = xSemaphoreCreateMutex();
+    // xSemaphoreGive(ch->send_mutex);
+    // xSemaphoreGive(ch->recv_mutex);
+
+    size_t free_heap_after = xPortGetFreeHeapSize();
+    printf("Free Heap: %d bytes\n", free_heap_before - free_heap_after);
     return ch;
 }
 
@@ -42,18 +58,36 @@ const int HEADER = 0xFFAE;
 BaseType_t channel_send(Channel* ch, void* data, TickType_t timeout) {
     if (ch == NULL) return pdFALSE;
 
-    xQueueSend(ch->queue, &HEADER, portMAX_DELAY);
-    return xQueueSend(ch->queue, &data, timeout);
+    if (xSemaphoreTake(ch->send_mutex, timeout) != pdTRUE) {
+        return pdFALSE;
+    }
+    BaseType_t result;
+    {
+        xQueueSend(ch->queue, &HEADER, portMAX_DELAY);
+        result = xQueueSend(ch->queue, &data, timeout);
+        xSemaphoreGive(ch->send_mutex);
+    }
+    xSemaphoreGive(ch->send_mutex);
+    return result;
+
 }
 
 // Receive data (blocks until sender sends)
 BaseType_t channel_recv(Channel* ch, void** data_ptr, TickType_t timeout) {
     if (ch == NULL || data_ptr == NULL) return pdFALSE;
 
-    int header;
-    xQueueReceive(ch->queue, &header , portMAX_DELAY);
-    // assert(header == HEADER);
-    return xQueueReceive(ch->queue, data_ptr, timeout);
+    if (xSemaphoreTake(ch->recv_mutex, timeout) != pdTRUE) {
+        return pdFALSE;
+    }
+    BaseType_t result;
+    {
+        int header;
+        xQueueReceive(ch->queue, &header , portMAX_DELAY);
+        assert(header == HEADER);
+        result = xQueueReceive(ch->queue, data_ptr, timeout);
+    }
+    xSemaphoreGive(ch->recv_mutex);
+    return result;
 }
 
 // Destroy channel
@@ -101,6 +135,30 @@ void TaskSend(void *arg) {
     }
 }
 
+int TASK_PRIO[][ARRAY_SIZE(TASK_ARG)] = {
+     // 1. all equal
+    {1, 1, 1},
+
+     // 2. one is lowwer
+    {0, 1, 1},
+    {1, 0, 1},
+    {1, 1, 0},
+
+    // 3. one is higger
+    {2, 1, 1},
+    {1, 2, 1},
+    {1, 1, 2},
+
+    // 4. all different
+    // [list(x) for x in itertools.permutations((1, 2, 3))]
+    {1, 2, 3},
+    {1, 3, 2},
+    {2, 1, 3},
+    {2, 3, 1},
+    {3, 1, 2},
+    {3, 2, 1},
+};
+
 void TaskRecv(void *arg) {
     int delay = *(int*)arg;
     int id = ARRAY_INDEX(arg, TASK_ARG);
@@ -128,26 +186,31 @@ void TaskMain() {
     ch = channel_create();
     end = channel_create();
 
+    int prio_group_index = 0;
     while(1) {
+        int *prio_group = TASK_PRIO[prio_group_index];
+
+        printf("Start !! == %d\n", prio_group_index);
+
         vTaskDelay(10);
         xTaskCreate( TaskSend,
                 "TaskSend0",
                 configMINIMAL_STACK_SIZE + 3*1024,
                 &TASK_ARG[0],
-                (tskIDLE_PRIORITY + 1),
+                prio_group[0] + tskIDLE_PRIORITY + 1,
                 NULL );
 
         xTaskCreate( TaskSend,
                 "TaskSend1",
                 configMINIMAL_STACK_SIZE + 3*1024,
                 &TASK_ARG[1],
-                (tskIDLE_PRIORITY + 1),
+                prio_group[1] + tskIDLE_PRIORITY + 1,
                 NULL );
         xTaskCreate( TaskRecv,
                 "TaskRecv",
                 configMINIMAL_STACK_SIZE + 3*1024,
                 &TASK_ARG[2],
-                (tskIDLE_PRIORITY + 1),
+                prio_group[2] + tskIDLE_PRIORITY + 1,
                 NULL );
 
 
@@ -156,7 +219,9 @@ void TaskMain() {
             channel_recv(end, &data[i], portMAX_DELAY);
             printf("End %d, data -- %d\n",i, data[i]);
         }
-        printf("End !!\n");
+        printf("End !! == %d\n", prio_group_index);
+
+        prio_group_index = (prio_group_index + 1) % ARRAY_SIZE(TASK_PRIO);
     }
     while(1);
 
