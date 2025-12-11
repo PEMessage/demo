@@ -19,7 +19,15 @@ void setup() {
     stdout_init();
     NVIC_Init();
 }
+// ==============================================
 
+void assert_unique(int arr[], int size) {
+    for (int i = 0; i < size - 1; i++) {
+        for (int j = i + 1; j < size; j++) {
+            assert(arr[i] != arr[j]);
+        }
+    }
+}
 // ==============================================
 
 // A golang like unbuffer-channel
@@ -69,11 +77,48 @@ BaseType_t channel_send(Channel* ch, void* data, TickType_t timeout) {
         return pdFALSE;
     }
     BaseType_t result;
-    {
-        xQueueSend(ch->queue, &HEADER, portMAX_DELAY);
-        result = xQueueSend(ch->queue, &data, timeout);
-        xSemaphoreGive(ch->send_mutex);
+
+    // Since, we got send mutex, not body are sending something.
+    // it should be empty queue
+    result = xQueueSend(ch->queue, &HEADER, portMAX_DELAY);
+    if (result != pdPASS) {
+        // But actually if we put 0, here, will get a assert. why?
+        // TODO: decrease it to zero without error
+        assert(0);
+        goto EXIT;
     }
+
+    while(1) {
+        result = xQueueSend(ch->queue, &data, timeout);
+        if (result == pdTRUE) {
+            break;
+        }
+
+
+        // Now we should take out header we just send, it should not fail in most case,
+        // since not body actually get queue
+        if (xSemaphoreTake(ch->recv_mutex, 0) != pdTRUE) {
+            // if we do fail, which mean some one just come in when we exit
+            // so Resume QueueSend, data should be sent real quick
+            printf("What a coincidence!!\n");
+            timeout = portMAX_DELAY;
+            continue;
+        }
+
+        int header;
+        if (xQueueReceive(ch->queue, &header, 0) != pdTRUE) {
+            // No idea if we could get here, unless RTOS has bug,
+            // that somebody stole our header,
+            // without get mutex
+            xSemaphoreGive(ch->recv_mutex);
+            assert(0);
+        }
+
+        // take header out complete, now safe to exit
+        assert(header == HEADER);
+        break;
+    }
+EXIT:
     xSemaphoreGive(ch->send_mutex);
     return result;
 
@@ -87,23 +132,28 @@ BaseType_t channel_recv(Channel* ch, void** data_ptr, TickType_t timeout) {
         return pdFALSE;
     }
     BaseType_t result;
-    {
-        int header;
-        xQueueReceive(ch->queue, &header , portMAX_DELAY);
-        assert(header == HEADER);
-        result = xQueueReceive(ch->queue, data_ptr, timeout);
+    int header;
+    result = xQueueReceive(ch->queue, &header , timeout);
+    if (result != pdTRUE) {
+        goto EXIT;
     }
+    assert(header == HEADER);
+
+    // some one put a header in, we expect real data will be fill very soon
+    // and we couldn't handle that if data didn't come, so delay forever
+    result = xQueueReceive(ch->queue, data_ptr, portMAX_DELAY);
+EXIT:
     xSemaphoreGive(ch->recv_mutex);
     return result;
 }
 
 // Destroy channel
 void channel_destroy(Channel* ch) {
-    // if (ch) {
-    //     vSemaphoreDelete(ch->data_ready);
-    //     vSemaphoreDelete(ch->data_taken);
-    //     vPortFree(ch);
-    // }
+    if (!ch) {return;}
+    vSemaphoreDelete(ch->recv_mutex);
+    vSemaphoreDelete(ch->send_mutex);
+    vQueueDelete(ch->queue);
+    vPortFree(ch);
 }
 
 // ==============================================
@@ -113,34 +163,19 @@ Channel *end;
 #define ARRAY_INDEX(ptr, array) ((size_t)((void *)(ptr) - (void *)(array)) / sizeof((array)[0]))
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
+// Type var[ROW][COL]
+#define ARRAY_2D_ROW_INDEX(ptr, array) \
+    ((size_t)((void *)(ptr) - (void *)(array)) / (sizeof((array)[0])))
+
+#define ARRAY_2D_COL_INDEX(ptr, array) \
+    (((size_t)((void *)(ptr) - (void *)(array)) % (sizeof((array)[0]))) / sizeof((array)[0][0]))
+
 int TASK_ARG[] = {
     300, // TaskSend0
     301, // TaskSend1
     500, // TaskRecv
 };
 
-void TaskSend(void *arg) {
-    int delay = *(int*)arg;
-    int id = ARRAY_INDEX(arg, TASK_ARG);
-
-    while(1) {
-        vTaskDelay(pdMS_TO_TICKS(delay));
-
-        printf("%d: Send Start\n", id);
-        channel_send(ch, (void *)id, portMAX_DELAY);
-        printf("%d: Send End\n", id);
-
-        channel_send(end, (void *)id, portMAX_DELAY);
-        printf("%d: Send Final\n", id);
-
-        // if task have high prio,
-        // `while(1)` or `while(1) { portYIELD(); }`
-        // will cause any task lowwer then it unable to schedule
-        // we should `vTaskDelete(NULL)` this or `while(1) { vTaskDelay(SOMETIME); }`
-        vTaskDelete(NULL);
-
-    }
-}
 
 int TASK_PRIO[][ARRAY_SIZE(TASK_ARG)] = {
      // 1. all equal
@@ -166,21 +201,49 @@ int TASK_PRIO[][ARRAY_SIZE(TASK_ARG)] = {
     {3, 2, 1},
 };
 
-void TaskRecv(void *arg) {
-    int delay = *(int*)arg;
-    int id = ARRAY_INDEX(arg, TASK_ARG);
+void TaskSend(void *arg) {
+    int* para = (int*)arg;
+    int id = ARRAY_2D_COL_INDEX(para, TASK_PRIO);
+    int delay = *para * 100;
+    printf("delay %d, id %d\n", delay, id);
 
+    while(1) {
+        vTaskDelay(pdMS_TO_TICKS(delay));
+
+        printf("%d: Send Start\n", id);
+        channel_send(ch, (void *)id, portMAX_DELAY);
+        printf("%d: Send End\n", id);
+
+        channel_send(end, (void *)id, portMAX_DELAY);
+        printf("%d: Send Final\n", id);
+
+        // if task have high prio,
+        // `while(1)` or `while(1) { portYIELD(); }`
+        // will cause any task lowwer then it unable to schedule
+        // we should `vTaskDelete(NULL)` this or `while(1) { vTaskDelay(SOMETIME); }`
+        vTaskDelete(NULL);
+
+    }
+}
+
+void TaskRecv(void *arg) {
+    int* para = (int*)arg;
+    int id = ARRAY_2D_COL_INDEX(para, TASK_PRIO);
+    int delay = *para * 100;
+    printf("delay %d, id %d\n", delay, id);
+
+    int data[2] = {0};
     while(1) {
         vTaskDelay(pdMS_TO_TICKS(delay));
 
         for (int i = 0; i < 2 ; i ++) {
             printf("%d: Recv Start %d\n", id, i);
-            void *data;
-            channel_recv(ch, &data, portMAX_DELAY);
+            channel_recv(ch, &data[i], portMAX_DELAY);
 
-            int recv = (int)data;
+            int recv = data[i];
             printf("%d: Recv End %d -- %d\n", id, i, recv);
         }
+        assert_unique(data, ARRAY_SIZE(data));
 
         channel_send(end, (void *)id, portMAX_DELAY);
         printf("%d: Recv Final\n", id);
@@ -197,26 +260,26 @@ void TaskMain() {
     while(1) {
         int *prio_group = TASK_PRIO[prio_group_index];
 
-        printf("Start !! == %d\n", prio_group_index);
+        printf("Start !! ====================== %d\n", prio_group_index);
 
-        vTaskDelay(10);
+        vTaskDelay(2); // TODO: decrease it to zero without error
         xTaskCreate( TaskSend,
                 "TaskSend0",
                 configMINIMAL_STACK_SIZE + 3*1024,
-                &TASK_ARG[0],
+                &prio_group[0],
                 prio_group[0] + tskIDLE_PRIORITY + 1,
                 NULL );
 
         xTaskCreate( TaskSend,
                 "TaskSend1",
                 configMINIMAL_STACK_SIZE + 3*1024,
-                &TASK_ARG[1],
+                &prio_group[1],
                 prio_group[1] + tskIDLE_PRIORITY + 1,
                 NULL );
         xTaskCreate( TaskRecv,
                 "TaskRecv",
                 configMINIMAL_STACK_SIZE + 3*1024,
-                &TASK_ARG[2],
+                &prio_group[2],
                 prio_group[2] + tskIDLE_PRIORITY + 1,
                 NULL );
 
@@ -226,6 +289,7 @@ void TaskMain() {
             channel_recv(end, &data[i], portMAX_DELAY);
             printf("End %d, data -- %d\n",i, data[i]);
         }
+        assert_unique(data, ARRAY_SIZE(data));
         printf("End !! == %d\n", prio_group_index);
 
         prio_group_index = (prio_group_index + 1) % ARRAY_SIZE(TASK_PRIO);
