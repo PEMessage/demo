@@ -42,10 +42,17 @@ Channel* channel_create(void) {
     size_t free_heap_before = xPortGetFreeHeapSize();
 
     ch->queue = xQueueCreate(1, sizeof(void*));
-    ch->send_mutex = xSemaphoreCreateMutex();
-    ch->recv_mutex = xSemaphoreCreateMutex();
-    // xSemaphoreGive(ch->send_mutex);
-    // xSemaphoreGive(ch->recv_mutex);
+    // NOTE: using mutex will cause ASSERT trigger
+    // ASSERT! Line 6755, file FreeRTOS-Kernel/code/tasks.c
+    // ch->send_mutex = xSemaphoreCreateMutex();
+    // ch->recv_mutex = xSemaphoreCreateMutex();
+
+    // But using xSemaphoreBinary will not
+    // TODO: why?
+    ch->send_mutex = xSemaphoreCreateBinary();
+    ch->recv_mutex = xSemaphoreCreateBinary();
+    xSemaphoreGive(ch->send_mutex);
+    xSemaphoreGive(ch->recv_mutex);
 
     size_t free_heap_after = xPortGetFreeHeapSize();
     printf("Free Heap: %d bytes\n", free_heap_before - free_heap_after);
