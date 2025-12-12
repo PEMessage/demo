@@ -79,8 +79,29 @@ BaseType_t channel_send(Channel* ch, void* data, TickType_t timeout) {
     }
     BaseType_t result;
 
-    // Since, we got send mutex, not body are sending something.
-    // it should be empty queue
+    // In following model, we should set timeout to 0:
+    // Lock(send)
+    //     send_header
+    //     send_waiting ...
+    //     recv_header
+    //     do_send
+    //     do_recv
+    // Unlock(send)
+    //
+    //
+    // But actually we would meet case like this
+    // Lock(send)
+    //     send_header
+    //     send_waiting ...
+    //     recv_header
+    //     do_send
+    // Unlock(send)
+    // Lock(send)
+    //     send_header ***
+    //     do_recv     ***
+    //     ...
+    // Which mean we might unlock, when last recv not complete.
+    // So some of time is need for this(may be 2tick should be enogh)
     result = xQueueSend(ch->queue, &HEADER, portMAX_DELAY);
     if (result != pdPASS) {
         // But actually if we put 0, here, will get a assert. why?
