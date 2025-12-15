@@ -49,20 +49,21 @@ typedef struct {
 
 char *chop_once(char *s, const char *delim, char **saveptr)
 {
-    // without these line. split empty will fail
+    // without this line. split("", ...) will do a chop
     if (s && *s == '\0') return NULL;
 
     // same as musl
+    // See: https://github.com/kraj/musl/blob/ff441c9ddfefbb94e5881ddd5112b24a944dc36c/src/string/strtok_r.c#L5
     if (!s && !(s = *saveptr)) return NULL;
 
     // Find end of current token: first char in delim, or end of string
     char *token_end = s + strcspn(s, delim);
 
-    // Set up next start
+    // if find end of str, this time is still valid, next call will return NULL
     if (*token_end == '\0') {
         *saveptr = NULL; // set saveptr to NULL mark as end;
     } else {
-        *token_end = '\0';     // terminate current token
+        *token_end = '\0';     // chop s
         *saveptr = token_end + 1;
     }
     return s;
