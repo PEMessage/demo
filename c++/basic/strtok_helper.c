@@ -8,7 +8,7 @@
 #define NOB_ASSERT assert
 #define NOB_REALLOC realloc
 #define NOB_FREE free
-#define NOB_DA_INIT_CAP 16
+#define NOB_DA_INIT_CAP 4
 
 #ifdef __cplusplus
 #define NOB_DECLTYPE_CAST(T) (decltype(T))
@@ -57,15 +57,16 @@ tokens_t tokenize(const char* str, const char* delim) {
     if (!str || !delim) return splits;
 
     char* str_copy = strdup(str);
-    assert(str_copy);
+    if (!str_copy) return splits;  // safer than assert in production
 
-    char* token = strtok(str_copy, delim);
-    while(token) {
-        nob_da_append(&splits, strdup(token));  // Duplicate the token
-        token = strtok(NULL, delim);
+    char* saveptr;
+    char* token = strtok_r(str_copy, delim, &saveptr);
+    while (token) {
+        nob_da_append(&splits, strdup(token));
+        token = strtok_r(NULL, delim, &saveptr);
     }
 
-    free(str_copy);  // Free the temporary buffer
+    free(str_copy);
     return splits;
 }
 
