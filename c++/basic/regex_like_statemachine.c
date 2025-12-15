@@ -8,6 +8,12 @@
 bool is_huid(const char *s)
 {
     // similiar to '{0-9}[8]-{0-9}[6]'
+    //
+    // it just work for null delim,
+    // if meet '\0', it just work, 'isdigit' will be false
+    // we pack 2 action into *s++
+    //  1. advance string
+    //  2. return current one
     for (size_t i = 0; i < 8; ++i) if (!isdigit(*s++)) return false;
     if (*s++ != '-') return false;
     for (size_t i = 0; i < 6; ++i) if (!isdigit(*s++)) return false;
@@ -22,5 +28,6 @@ int main()
     HUID_TEST_CASE("HelloWorld");
     HUID_TEST_CASE("20251011-061535");
     HUID_TEST_CASE("20251a11-061535");
+    HUID_TEST_CASE("");
     return 0;
 }
