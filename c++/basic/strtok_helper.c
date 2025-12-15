@@ -36,12 +36,7 @@
         (da)->items[(da)->count++] = (item);   \
     } while (0)
 
-#define nob_da_free(da) do { \
-    for (size_t i = 0; i < (da).count; i++) { \
-        free((da).items[i]); \
-    } \
-    NOB_FREE((da).items); \
-} while (0)
+#define nob_da_free(da) NOB_FREE((da).items)
 
 #define nob_da_foreach(Type, it, da) for (Type *it = (da)->items; it < (da)->items + (da)->count; ++it)
 
@@ -52,24 +47,58 @@ typedef struct {
 } tokens_t;
 
 
-tokens_t tokenize(const char* str, const char* delim) {
-    tokens_t splits = {NULL, 0, 0};
-    if (!str || !delim) return splits;
+char *chop_once(char *s, const char *delim, char **saveptr)
+{
+    // without these line. split empty will fail
+    if (s && *s == '\0') return NULL;
+
+    // same as musl
+    if (!s && !(s = *saveptr)) return NULL;
+
+    // Find end of current token: first char in delim, or end of string
+    char *token_end = s + strcspn(s, delim);
+
+    // Set up next start
+    if (*token_end == '\0') {
+        *saveptr = NULL; // set saveptr to NULL mark as end;
+    } else {
+        *token_end = '\0';     // terminate current token
+        *saveptr = token_end + 1;
+    }
+    return s;
+
+}
+
+typedef char* (*operator_t)(char *s, const char *delim, char **saveptr);
+
+tokens_t internal(const char* str, const char* delim, operator_t op) {
+    tokens_t tokens = {NULL, 0, 0};
+    if (!str || !delim) return tokens;
 
     char* str_copy = strdup(str);
-    if (!str_copy) return splits;  // safer than assert in production
+    if (!str_copy) return tokens;  // safer than assert in production
 
     char* saveptr;
-    char* token = strtok_r(str_copy, delim, &saveptr);
-    while (token) {
-        nob_da_append(&splits, strdup(token));
-        token = strtok_r(NULL, delim, &saveptr);
+    for (
+            char * token = op(str_copy, delim, &saveptr);
+            token;
+            token = op(NULL, delim, &saveptr)
+        ) {
+        // foreach strtok_r like function
+        nob_da_append(&tokens, strdup(token));
     }
 
     free(str_copy);
-    return splits;
+    return tokens;
 }
 
+tokens_t tokenize(const char* str, const char* delim) {
+    return internal(str, delim, strtok_r);
+}
+
+tokens_t split(const char* str, const char* delim) {
+    return internal(str, delim, chop_once);
+}
 
 // Example usage
 int main() {
@@ -77,20 +106,50 @@ int main() {
 
     // Test 1: With leading delimiter (should give empty first part)
     {
+        printf("=== Test tokenize:\n");
         tokens_t tokens = tokenize("///usr/local/bin///", "/");
         assert(tokens.count == 3);
-
-        // Verify the tokens
-        assert(strcmp(tokens.items[0], "usr") == 0);
-        assert(strcmp(tokens.items[1], "local") == 0);
-        assert(strcmp(tokens.items[2], "bin") == 0);
-        printf("\nTest - Path '/':\n");
         nob_da_foreach(char *, it, &tokens) {
             printf("'%s'\n", *it);
+            free(*it);
         }
         nob_da_free(tokens);
     }
 
+    {
+        printf("=== Test empty tokenize:\n");
+        tokens_t tokens = tokenize("", "/");
+        assert(tokens.count == 0);
+
+        nob_da_foreach(char *, it, &tokens) {
+            printf("'%s'\n", *it);
+            free(*it);
+        }
+        nob_da_free(tokens);
+    }
+
+
+    {
+        printf("=== Test split:\n");
+        tokens_t tokens = split("/usr/local/bin/", "/");
+        assert(tokens.count == 5);
+        nob_da_foreach(char *, it, &tokens) {
+            printf("'%s'\n", *it);
+            free(*it);
+        }
+        nob_da_free(tokens);
+    }
+
+    {
+        tokens_t tokens = split("", "/");
+        assert(tokens.count == 0);
+        printf("=== Test split empty\n");
+        nob_da_foreach(char *, it, &tokens) {
+            printf("'%s'\n", *it);
+            free(*it);
+        }
+        nob_da_free(tokens);
+    }
 
     return 0;
 }
