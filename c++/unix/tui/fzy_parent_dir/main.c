@@ -113,26 +113,115 @@ int detect(char *seq, void *userdata) {
 
 typedef struct {
     tty_t *tty;
-    int code;
+    char *filepath;          // The complete file path
+    char **parts;           // Array of path components
+    int num_parts;          // Number of path components
+    int highlight_idx;      // Index of currently highlighted part (0 to num_parts-1)
 
     bool do_exit :1;
     bool do_print :1;
 } tui_state_t;
 
-void tui_init(tui_state_t *state) {
+// Function to split a path into components
+char** split_path(const char* path, int* num_parts) {
+    if (!path || !num_parts) return NULL;
+
+    // Make a copy to work with
+    char* path_copy = strdup(path);
+    if (!path_copy) return NULL;
+
+    // Count the number of components
+    int count = 0;
+    char* token = strtok(path_copy, "/");
+    while (token) {
+        count++;
+        token = strtok(NULL, "/");
+    }
+
+    free(path_copy);
+
+    // Allocate array for parts
+    char** parts = malloc(count * sizeof(char*));
+    if (!parts) return NULL;
+
+    // Split again and store
+    path_copy = strdup(path);
+    if (!path_copy) {
+        free(parts);
+        return NULL;
+    }
+
+    int i = 0;
+    token = strtok(path_copy, "/");
+    while (token && i < count) {
+        parts[i] = strdup(token);
+        if (!parts[i]) {
+            // Cleanup on failure
+            for (int j = 0; j < i; j++) free(parts[j]);
+            free(parts);
+            free(path_copy);
+            return NULL;
+        }
+        i++;
+        token = strtok(NULL, "/");
+    }
+
+    free(path_copy);
+    *num_parts = count;
+    return parts;
+}
+
+// Function to free path components
+void free_path_parts(char** parts, int num_parts) {
+    if (!parts) return;
+    for (int i = 0; i < num_parts; i++) {
+        free(parts[i]);
+    }
+    free(parts);
+}
+
+void tui_init(tui_state_t *state, const char* filepath) {
     state->tty = malloc(sizeof(tty_t));
     tty_init(state->tty, "/dev/tty");
+
+    // Store filepath
+    state->filepath = strdup(filepath);
+
+    // Split path into components
+    state->parts = split_path(filepath, &state->num_parts);
+
+    // Start with last component highlighted (like fzy_inputfwk)
+    state->highlight_idx = state->num_parts - 1;
 }
 
 void draw(tui_state_t *state) {
     tty_t *tty = state->tty;
 
     tty_setcol(tty, 0);
-    tty_printf(tty, "Hello World %d", state->code);
     tty_clearline(tty);
-    tty_printf(tty, "\n");
 
-    tty_moveup(tty, 1); // this is key
+    // Build the path display with highlighting
+    for (int i = 0; i < state->num_parts; i++) {
+        if (i > 0) {
+            tty_setnormal(tty);
+            tty_printf(tty, "/");
+        }
+
+        if (i == state->highlight_idx) {
+            // Highlight this component
+            tty_setinvert(tty);
+            tty_printf(tty, "%s", state->parts[i]);
+            tty_setnormal(tty);
+        } else {
+            // Normal display
+            tty_printf(tty, "%s", state->parts[i]);
+        }
+    }
+
+    // Add cursor indicator
+    tty_setcol(tty, 0);
+
+    // tty_moveup(tty, 1); // Move back to first line
     tty_flush(tty);
 }
 
@@ -154,7 +243,6 @@ void handle_input(tui_state_t *state) {
         end = 0;
         return;
     }
-
 }
 
 void onExit(const struct keymap_ *keymap, void *userdata) {
@@ -167,9 +255,25 @@ void onEnter(const struct keymap_ *keymap, void *userdata) {
     state->do_exit = 1;
     state->do_print = 1;
 }
+
 void onArrow(const struct keymap_ *keymap, void *userdata) {
     tui_state_t *state = (tui_state_t *)userdata;
-    state->code = ARRAY_INDEX(keymap, keymaps);
+
+    // Check which arrow key was pressed
+    const char* seq = keymap->seq;
+
+    if (strcmp(seq, LEFT_ARROW) == 0 || strcmp(seq, ALT_LEFT_ARROW) == 0) {
+        // Move highlight left
+        if (state->highlight_idx > 0) {
+            state->highlight_idx--;
+        }
+    } else if (strcmp(seq, RIGHT_ARROW) == 0 || strcmp(seq, ALT_RIGHT_ARROW) == 0) {
+        // Move highlight right
+        if (state->highlight_idx < state->num_parts - 1) {
+            state->highlight_idx++;
+        }
+    }
+    // Up/Down arrows don't do anything for this demo
 }
 
 int tui_run(tui_state_t *state) {
@@ -188,20 +292,40 @@ int tui_run(tui_state_t *state) {
 }
 
 void tui_cleanup(tui_state_t *state) {
+    tty_setcol(state->tty, 0);
+    tty_clearline(state->tty);
+    tty_flush(state->tty);
     tty_reset(state->tty);
     free(state->tty);
 }
 
-int main(void) {
+int main(int argc, char *argv[]) {
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <filepath>\n", argv[0]);
+        return 1;
+    }
+
     tui_state_t state;
     memset(&state, 0, sizeof(state));
 
-    tui_init(&state);
+    tui_init(&state, argv[1]);
     int exit_code = tui_run(&state);
-    if (state.do_print) {
-        printf("Hello World %d\n", state.code);
-    }
+
     tui_cleanup(&state);
+
+    if (state.do_print) {
+        // Print path up to (but not including) the highlighted component
+        printf("/");  // Start with root
+        for (int i = 0; i <= state.highlight_idx; i++) {
+            printf("%s", state.parts[i]);
+            if (i < state.highlight_idx) {
+                printf("/");
+            }
+        }
+        printf("\n");
+    }
+    free(state.filepath);
+    free_path_parts(state.parts, state.num_parts);
 
     return exit_code;
 }
