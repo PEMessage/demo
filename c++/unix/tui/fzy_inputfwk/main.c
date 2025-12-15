@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <stdint.h>
+#include <stdbool.h>
 #include "tty.h"
 #include "config.h"
 
@@ -10,10 +12,21 @@
 #define ARRAY_INDEX(ptr, array) ((size_t)((void *)(ptr) - (void *)(array)) / sizeof((array)[0]))
 // ====================================
 // Key sequence definitions
+#define CTRL_C "\x03"
+
 #define UP_ARROW "\x1b[A"
 #define DOWN_ARROW "\x1b[B"
 #define RIGHT_ARROW "\x1b[C"
 #define LEFT_ARROW "\x1b[D"
+
+// ALT+arrow keys
+// ALT modifier = 3
+#define ALT_UP_ARROW "\x1b[1;3A"
+#define ALT_DOWN_ARROW "\x1b[1;3B"
+#define ALT_RIGHT_ARROW "\x1b[1;3C"
+#define ALT_LEFT_ARROW "\x1b[1;3D"
+
+
 #define HOME_KEY "\x1b[H"
 #define END_KEY "\x1b[F"
 #define DELETE_KEY "\x1b[3~"
@@ -23,7 +36,6 @@
 #define ENTER_KEY "\r"
 #define BACKSPACE_KEY "\x7f"
 #define TAB_KEY "\t"
-#define CTRL_C "\x03"
 
 struct keymap_;
 
@@ -37,46 +49,24 @@ typedef struct keymap_ {
 
 
 void onExit(const keymap_t* keymap, void* userdata);
+void onEnter(const keymap_t* keymap, void* userdata);
 void onArrow(const struct keymap_ *keymap, void *userdata);
 
 const keymap_t keymaps[] = {
     {"q", onExit},
     {"Q", onExit},
     {CTRL_C ,onExit},
+    {ENTER_KEY ,onEnter},
+
     {UP_ARROW ,onArrow},
     {DOWN_ARROW ,onArrow},
     {RIGHT_ARROW ,onArrow},
     {LEFT_ARROW ,onArrow},
-    {HOME_KEY ,NULL},
-    {END_KEY ,NULL},
-    {DELETE_KEY ,NULL},
-    {PAGE_UP ,NULL},
-    {PAGE_DOWN ,NULL},
-    {ESCAPE_KEY ,NULL},
-    {ENTER_KEY ,NULL},
-    {BACKSPACE_KEY ,NULL},
-    {TAB_KEY ,NULL},
-};
 
-
-const char* key_sequences[] = {
-    "q",
-    "Q",
-    CTRL_C,
-    UP_ARROW,
-    DOWN_ARROW,
-    RIGHT_ARROW,
-    LEFT_ARROW,
-    HOME_KEY,
-    END_KEY,
-    DELETE_KEY,
-    PAGE_UP,
-    PAGE_DOWN,
-    ESCAPE_KEY,
-    ENTER_KEY,
-    BACKSPACE_KEY,
-    TAB_KEY,
-    NULL  // Sentinel to mark end
+    {ALT_UP_ARROW ,onArrow},
+    {ALT_DOWN_ARROW ,onArrow},
+    {ALT_RIGHT_ARROW ,onArrow},
+    {ALT_LEFT_ARROW ,onArrow},
 };
 
 
@@ -124,7 +114,9 @@ int detect(char *seq, void *userdata) {
 typedef struct {
     tty_t *tty;
     int code;
-    int exit;
+
+    bool do_exit :1;
+    bool do_print :1;
 } tui_state_t;
 
 void tui_init(tui_state_t *state) {
@@ -167,9 +159,14 @@ void handle_input(tui_state_t *state) {
 
 void onExit(const struct keymap_ *keymap, void *userdata) {
     tui_state_t *state = (tui_state_t *)userdata;
-    state->exit = 1;
+    state->do_exit = 1;
 }
 
+void onEnter(const struct keymap_ *keymap, void *userdata) {
+    tui_state_t *state = (tui_state_t *)userdata;
+    state->do_exit = 1;
+    state->do_print = 1;
+}
 void onArrow(const struct keymap_ *keymap, void *userdata) {
     tui_state_t *state = (tui_state_t *)userdata;
     state->code = ARRAY_INDEX(keymap, keymaps);
@@ -182,7 +179,7 @@ int tui_run(tui_state_t *state) {
         tty_getwinsz(tty);
         draw(state);
         handle_input(state);
-        if (state->exit) {
+        if (state->do_exit) {
             break;
         }
     }
@@ -201,6 +198,9 @@ int main(void) {
 
     tui_init(&state);
     int exit_code = tui_run(&state);
+    if (state.do_print) {
+        printf("Hello World %d\n", state.code);
+    }
     tui_cleanup(&state);
 
     return exit_code;
