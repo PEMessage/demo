@@ -17,5 +17,10 @@ if [ ! -f "config.h" ] ; then
     wget "https://raw.githubusercontent.com/jhawthorn/fzy/$version/src/config.def.h" -O config.h
 fi
 
-gcc main.c fzy/tty.c -Ifzy -o fzy_parent_dir
+gcc \
+    -static -Os \
+    -flto \
+    -ffunction-sections -fdata-sections \
+    -Wl,--strip-all,--gc-sections \
+    main.c fzy/tty.c -Ifzy -o fzy_parent_dir
 ./fzy_parent_dir "$@"
