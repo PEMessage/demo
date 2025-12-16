@@ -8,10 +8,105 @@
 #include "config.h"
 
 
+// nob.h enpower
+// ==============================================
+#define NOB_ASSERT assert
+#define NOB_REALLOC realloc
+#define NOB_FREE free
+#define NOB_DA_INIT_CAP 4
+
+#ifdef __cplusplus
+#define NOB_DECLTYPE_CAST(T) (decltype(T))
+#else
+#define NOB_DECLTYPE_CAST(T)
+#endif // __cplusplus
+
+#define nob_da_reserve(da, expected_capacity)                                              \
+    do {                                                                                   \
+        if ((expected_capacity) > (da)->capacity) {                                        \
+            if ((da)->capacity == 0) {                                                     \
+                (da)->capacity = NOB_DA_INIT_CAP;                                          \
+            }                                                                              \
+            while ((expected_capacity) > (da)->capacity) {                                 \
+                (da)->capacity *= 2;                                                       \
+            }                                                                              \
+            (da)->items = NOB_DECLTYPE_CAST((da)->items)NOB_REALLOC((da)->items, (da)->capacity * sizeof(*(da)->items)); \
+            NOB_ASSERT((da)->items != NULL && "Buy more RAM lol");                         \
+        }                                                                                  \
+    } while (0)
+
+#define nob_da_append(da, item)                \
+    do {                                       \
+        nob_da_reserve((da), (da)->count + 1); \
+        (da)->items[(da)->count++] = (item);   \
+    } while (0)
+
+#define nob_da_free(da) NOB_FREE((da).items)
+
+#define nob_da_foreach(Type, it, da) for (Type *it = (da)->items; it < (da)->items + (da)->count; ++it)
+
+// Split
+// ====================================
+typedef struct {
+    char **items;
+    size_t count;
+    size_t capacity;
+} tokens_t;
+
+
+char *chop_once(char *s, const char *delim, char **saveptr)
+{
+    // without this line. split("", ...) will do a chop
+    if (s && *s == '\0') return NULL;
+
+    // same as musl
+    // See: https://github.com/kraj/musl/blob/ff441c9ddfefbb94e5881ddd5112b24a944dc36c/src/string/strtok_r.c#L5
+    if (!s && !(s = *saveptr)) return NULL;
+
+    // Find end of current token: first char in delim, or end of string
+    char *token_end = s + strcspn(s, delim);
+
+    // if find end of str, this time is still valid, next call will return NULL
+    if (*token_end == '\0') {
+        *saveptr = NULL; // set saveptr to NULL mark as end;
+    } else {
+        *token_end = '\0';     // chop s
+        *saveptr = token_end + 1;
+    }
+    return s;
+
+}
+
+tokens_t split(const char* str, const char* delim) {
+    tokens_t tokens = {NULL, 0, 0};
+    if (!str || !delim) return tokens;
+
+    char* str_copy = strdup(str);
+    if (!str_copy) return tokens;  // safer than assert in production
+
+    char* saveptr;
+    for (
+            char * token = chop_once(str_copy, delim, &saveptr);
+            token;
+            token = chop_once(NULL, delim, &saveptr)
+        ) {
+        // foreach strtok_r like function
+        nob_da_append(&tokens, strdup(token));
+    }
+
+    free(str_copy);
+    return tokens;
+}
+
+
+// Helper macro or function
+// ====================================
+
 #define ARRAY_SIZE(a) (sizeof((a)) / sizeof((a[0])))
 #define ARRAY_INDEX(ptr, array) ((size_t)((void *)(ptr) - (void *)(array)) / sizeof((array)[0]))
-// ====================================
+
 // Key sequence definitions
+// ====================================
 #define CTRL_C "\x03"
 
 #define UP_ARROW "\x1b[A"
@@ -50,23 +145,23 @@ typedef struct keymap_ {
 
 void onExit(const keymap_t* keymap, void* userdata);
 void onEnter(const keymap_t* keymap, void* userdata);
-void onArrow(const struct keymap_ *keymap, void *userdata);
-
+void onLeftArrow(const struct keymap_ *keymap, void *userdata);
+void onRightArrow(const struct keymap_ *keymap, void *userdata);
 const keymap_t keymaps[] = {
     {"q", onExit},
     {"Q", onExit},
     {CTRL_C ,onExit},
     {ENTER_KEY ,onEnter},
 
-    {UP_ARROW ,onArrow},
-    {DOWN_ARROW ,onArrow},
-    {RIGHT_ARROW ,onArrow},
-    {LEFT_ARROW ,onArrow},
+    {UP_ARROW ,onRightArrow},
+    {DOWN_ARROW ,onLeftArrow},
+    {RIGHT_ARROW ,onRightArrow},
+    {LEFT_ARROW ,onLeftArrow},
 
-    {ALT_UP_ARROW ,onArrow},
-    {ALT_DOWN_ARROW ,onArrow},
-    {ALT_RIGHT_ARROW ,onArrow},
-    {ALT_LEFT_ARROW ,onArrow},
+    {ALT_UP_ARROW ,onRightArrow},
+    {ALT_DOWN_ARROW ,onLeftArrow},
+    {ALT_RIGHT_ARROW ,onRightArrow},
+    {ALT_LEFT_ARROW ,onLeftArrow},
 };
 
 
@@ -112,86 +207,32 @@ int detect(char *seq, void *userdata) {
 // ====================================
 
 typedef struct {
+    // tty
     tty_t *tty;
-    char *filepath;          // The complete file path
-    char **parts;           // Array of path components
-    int num_parts;          // Number of path components
+
+    // path
+    tokens_t parts;
     int highlight_idx;      // Index of currently highlighted part (0 to num_parts-1)
 
+    // options
     bool do_exit :1;
     bool do_print :1;
+
+    uint8_t exit_code;
+
 } tui_state_t;
 
-// Function to split a path into components
-char** split_path(const char* path, int* num_parts) {
-    if (!path || !num_parts) return NULL;
 
-    // Make a copy to work with
-    char* path_copy = strdup(path);
-    if (!path_copy) return NULL;
 
-    // Count the number of components
-    int count = 0;
-    char* token = strtok(path_copy, "/");
-    while (token) {
-        count++;
-        token = strtok(NULL, "/");
-    }
-
-    free(path_copy);
-
-    // Allocate array for parts
-    char** parts = malloc(count * sizeof(char*));
-    if (!parts) return NULL;
-
-    // Split again and store
-    path_copy = strdup(path);
-    if (!path_copy) {
-        free(parts);
-        return NULL;
-    }
-
-    int i = 0;
-    token = strtok(path_copy, "/");
-    while (token && i < count) {
-        parts[i] = strdup(token);
-        if (!parts[i]) {
-            // Cleanup on failure
-            for (int j = 0; j < i; j++) free(parts[j]);
-            free(parts);
-            free(path_copy);
-            return NULL;
-        }
-        i++;
-        token = strtok(NULL, "/");
-    }
-
-    free(path_copy);
-    *num_parts = count;
-    return parts;
-}
-
-// Function to free path components
-void free_path_parts(char** parts, int num_parts) {
-    if (!parts) return;
-    for (int i = 0; i < num_parts; i++) {
-        free(parts[i]);
-    }
-    free(parts);
-}
-
-void tui_init(tui_state_t *state, const char* filepath) {
+void tui_ttyinit(tui_state_t *state) {
     state->tty = malloc(sizeof(tty_t));
     tty_init(state->tty, "/dev/tty");
+}
 
-    // Store filepath
-    state->filepath = strdup(filepath);
-
-    // Split path into components
-    state->parts = split_path(filepath, &state->num_parts);
-
-    // Start with last component highlighted (like fzy_inputfwk)
-    state->highlight_idx = state->num_parts - 1;
+void tui_pathinit(tui_state_t *state, const char* filepath) {
+    state->parts = split(filepath, "/");
+    // default set to last one;
+    state->highlight_idx = state->parts.count - 1;
 }
 
 void draw(tui_state_t *state) {
@@ -201,20 +242,23 @@ void draw(tui_state_t *state) {
     tty_clearline(tty);
 
     // Build the path display with highlighting
-    for (int i = 0; i < state->num_parts; i++) {
-        if (i > 0) {
-            tty_setnormal(tty);
-            tty_printf(tty, "/");
+    for (int i = 0; i < state->parts.count; i++) {
+
+        char *delim;
+        if (i != state->parts.count - 1) {
+            delim = "/";
+        } else {
+            delim = "";
         }
 
         if (i == state->highlight_idx) {
             // Highlight this component
             tty_setinvert(tty);
-            tty_printf(tty, "%s", state->parts[i]);
+            tty_printf(tty, "%s%s", state->parts.items[i], delim);
             tty_setnormal(tty);
         } else {
             // Normal display
-            tty_printf(tty, "%s", state->parts[i]);
+            tty_printf(tty, "%s%s", state->parts.items[i], delim);
         }
     }
 
@@ -248,32 +292,28 @@ void handle_input(tui_state_t *state) {
 void onExit(const struct keymap_ *keymap, void *userdata) {
     tui_state_t *state = (tui_state_t *)userdata;
     state->do_exit = 1;
+    state->exit_code = 1;
 }
 
 void onEnter(const struct keymap_ *keymap, void *userdata) {
     tui_state_t *state = (tui_state_t *)userdata;
     state->do_exit = 1;
+    state->exit_code = 0;
     state->do_print = 1;
 }
 
-void onArrow(const struct keymap_ *keymap, void *userdata) {
+void onLeftArrow(const struct keymap_ *keymap, void *userdata) {
     tui_state_t *state = (tui_state_t *)userdata;
-
-    // Check which arrow key was pressed
-    const char* seq = keymap->seq;
-
-    if (strcmp(seq, LEFT_ARROW) == 0 || strcmp(seq, ALT_LEFT_ARROW) == 0) {
-        // Move highlight left
-        if (state->highlight_idx > 0) {
-            state->highlight_idx--;
-        }
-    } else if (strcmp(seq, RIGHT_ARROW) == 0 || strcmp(seq, ALT_RIGHT_ARROW) == 0) {
-        // Move highlight right
-        if (state->highlight_idx < state->num_parts - 1) {
-            state->highlight_idx++;
-        }
+    if (state->highlight_idx > 0) {
+        state->highlight_idx--;
     }
-    // Up/Down arrows don't do anything for this demo
+}
+
+void onRightArrow(const struct keymap_ *keymap, void *userdata) {
+    tui_state_t *state = (tui_state_t *)userdata;
+    if (state->highlight_idx < state->parts.count - 1) {
+        state->highlight_idx++;
+    }
 }
 
 int tui_run(tui_state_t *state) {
@@ -288,15 +328,31 @@ int tui_run(tui_state_t *state) {
         }
     }
 
-    return 0;
+    return state->exit_code;
 }
 
-void tui_cleanup(tui_state_t *state) {
+void tui_ttycleanup(tui_state_t *state) {
     tty_setcol(state->tty, 0);
     tty_clearline(state->tty);
     tty_flush(state->tty);
     tty_reset(state->tty);
     free(state->tty);
+}
+
+void tui_pathcleanup(tui_state_t *state) {
+    if (state->do_print) {
+        for (int i = 0; i <= state->highlight_idx; i++) {
+            printf("%s", state->parts.items[i]);
+            if (i < state->highlight_idx) {
+                printf("/");
+            }
+        }
+        printf("\n");
+    }
+    nob_da_foreach(char *, it, &state->parts) {
+        free(*it);
+    }
+    nob_da_free(state->parts);
 }
 
 int main(int argc, char *argv[]) {
@@ -308,24 +364,13 @@ int main(int argc, char *argv[]) {
     tui_state_t state;
     memset(&state, 0, sizeof(state));
 
-    tui_init(&state, argv[1]);
+    tui_pathinit(&state, argv[1]);
+    tui_ttyinit(&state);
+
     int exit_code = tui_run(&state);
+    tui_ttycleanup(&state);
+    tui_pathcleanup(&state);
 
-    tui_cleanup(&state);
-
-    if (state.do_print) {
-        // Print path up to (but not including) the highlighted component
-        printf("/");  // Start with root
-        for (int i = 0; i <= state.highlight_idx; i++) {
-            printf("%s", state.parts[i]);
-            if (i < state.highlight_idx) {
-                printf("/");
-            }
-        }
-        printf("\n");
-    }
-    free(state.filepath);
-    free_path_parts(state.parts, state.num_parts);
 
     return exit_code;
 }
