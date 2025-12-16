@@ -245,6 +245,11 @@ void tui_pathinit(tui_state_t *state, const char* filepath) {
     state->parts = split(filepath, "/");
     // default set to last one;
     state->highlight_idx = state->parts.count - 1;
+
+    // move one left at init, which much useful for `parent_dir_tui`
+    if (state->highlight_idx > 0) {
+        state->highlight_idx--;
+    }
 }
 
 void draw(tui_state_t *state) {
