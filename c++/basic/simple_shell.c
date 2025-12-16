@@ -129,12 +129,14 @@ int SS_MAIN() {
         char *token;
         int token_count = 0;
 
-        token = strtok_r(input, " ", &saveptr);
-        while (token != NULL && token_count < MAX_TOKENS - 1) {
+        for (
+                token = strtok_r(input, " ", &saveptr);
+                token && token_count < MAX_TOKENS - 1;
+                token = strtok_r(NULL, " ", &saveptr)
+            ) {
             tokens[token_count++] = token;
-            token = strtok_r(NULL, " ", &saveptr);
         }
-        tokens[token_count] = NULL;  // Null-terminate the token array
+        tokens[token_count] = '\0';  // Null-terminate the token array
 
         if (token_count == 0) continue;  // Shouldn't happen due to earlier check
                                          // Update: without this, pure space input will cause error
