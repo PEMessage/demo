@@ -9,6 +9,15 @@
 #include "config.h"
 
 
+// hiden api, copy from tty.c
+// ==============================================
+static void tty_hide_cursor(tty_t *tty) {
+	tty_printf(tty, "%c%c%c%i%c", 0x1b, '[', '?', 25, 'l');
+}
+
+static void tty_show_cursor(tty_t *tty) {
+	tty_printf(tty, "%c%c%c%i%c", 0x1b, '[', '?', 25, 'h');
+}
 // nob.h enpower
 // ==============================================
 #define NOB_ASSERT assert
@@ -159,6 +168,11 @@ const keymap_t keymaps[] = {
     {RIGHT_ARROW ,onRightArrow},
     {LEFT_ARROW ,onLeftArrow},
 
+    {"k" ,onRightArrow},
+    {"j" ,onLeftArrow},
+    {"l" ,onRightArrow},
+    {"h" ,onLeftArrow},
+
     {ALT_UP_ARROW ,onRightArrow},
     {ALT_DOWN_ARROW ,onLeftArrow},
     {ALT_RIGHT_ARROW ,onRightArrow},
@@ -224,6 +238,7 @@ typedef struct {
 void tui_ttyinit(tui_state_t *state) {
     state->tty = (tty_t *)malloc(sizeof(tty_t));
     tty_init(state->tty, "/dev/tty");
+    tty_hide_cursor(state->tty);
 }
 
 void tui_pathinit(tui_state_t *state, const char* filepath) {
@@ -242,21 +257,28 @@ void draw(tui_state_t *state) {
     for (size_t i = 0; i < state->parts.count; i++) {
 
         const char *delim;
+        const char *content;
         if (i != state->parts.count - 1) {
             delim = "/";
         } else {
             delim = "";
         }
 
+        if (i == state->highlight_idx && strcmp(state->parts.items[i], "") == 0) {
+            content = "<-";
+        } else {
+            content = state->parts.items[i];
+        }
+
         if (i == state->highlight_idx) {
             // Highlight this component
             tty_setinvert(tty);
-            tty_printf(tty, "%s%s", state->parts.items[i], delim);
+            tty_printf(tty, "%s", content);
             tty_setnormal(tty);
         } else {
-            // Normal display
-            tty_printf(tty, "%s%s", state->parts.items[i], delim);
+            tty_printf(tty, "%s", content);
         }
+        tty_printf(tty, "%s", delim);
     }
 
     // Add cursor indicator
@@ -329,6 +351,7 @@ int tui_run(tui_state_t *state) {
 }
 
 void tui_ttycleanup(tui_state_t *state) {
+    tty_show_cursor(state->tty);
     tty_setcol(state->tty, 0);
     tty_clearline(state->tty);
     tty_flush(state->tty);
@@ -340,7 +363,7 @@ void tui_pathcleanup(tui_state_t *state) {
     if (state->do_print) {
         for (size_t i = 0; i <= state->highlight_idx; i++) {
             printf("%s", state->parts.items[i]);
-            if (i < state->highlight_idx) {
+            if (i != state->highlight_idx) {
                 printf("/");
             }
         }
