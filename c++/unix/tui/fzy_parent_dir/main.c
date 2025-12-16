@@ -1,3 +1,4 @@
+// q-gcc: fzy/tty.c -Ifzy --
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -137,7 +138,7 @@ struct keymap_;
 typedef void (*keymap_action)(const struct keymap_* keymap, void* userdata);
 
 typedef struct keymap_ {
-    char *seq;
+    const char *seq;
     keymap_action action;
 } keymap_t;
 
@@ -170,12 +171,8 @@ int detect(char *seq, void *userdata) {
         return 0;  // Empty sequence has chance to match
     }
 
-    int has_chance = 0;
-    int full_match = 0;
-    const char* matched_seq = NULL;
-
     // Check each known sequence
-    int i = 0;
+    size_t i = 0;
     for (i = 0; i < ARRAY_SIZE(keymaps); i++) {
         const char* key_seq = keymaps[i].seq;
         int seq_len = strlen(seq);
@@ -212,7 +209,7 @@ typedef struct {
 
     // path
     tokens_t parts;
-    int highlight_idx;      // Index of currently highlighted part (0 to num_parts-1)
+    size_t highlight_idx;      // Index of currently highlighted part (0 to num_parts-1)
 
     // options
     bool do_exit :1;
@@ -225,7 +222,7 @@ typedef struct {
 
 
 void tui_ttyinit(tui_state_t *state) {
-    state->tty = malloc(sizeof(tty_t));
+    state->tty = (tty_t *)malloc(sizeof(tty_t));
     tty_init(state->tty, "/dev/tty");
 }
 
@@ -242,9 +239,9 @@ void draw(tui_state_t *state) {
     tty_clearline(tty);
 
     // Build the path display with highlighting
-    for (int i = 0; i < state->parts.count; i++) {
+    for (size_t i = 0; i < state->parts.count; i++) {
 
-        char *delim;
+        const char *delim;
         if (i != state->parts.count - 1) {
             delim = "/";
         } else {
@@ -341,7 +338,7 @@ void tui_ttycleanup(tui_state_t *state) {
 
 void tui_pathcleanup(tui_state_t *state) {
     if (state->do_print) {
-        for (int i = 0; i <= state->highlight_idx; i++) {
+        for (size_t i = 0; i <= state->highlight_idx; i++) {
             printf("%s", state->parts.items[i]);
             if (i < state->highlight_idx) {
                 printf("/");
