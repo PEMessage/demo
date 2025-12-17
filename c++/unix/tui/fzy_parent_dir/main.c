@@ -295,22 +295,26 @@ void draw(tui_state_t *state) {
 
 char keys[8] = {0};
 int end = 0;
-void handle_input(tui_state_t *state) {
+// return 0 if any event detect, else return 1
+int handle_input(tui_state_t *state) {
     tty_t *tty = state->tty;
 
-    int ret = tty_input_ready(tty, KEYTIMEOUT, 1);
+    int ret = tty_input_ready(tty, end == 0 ? -1 : KEYTIMEOUT, 1);
     if (!ret) {
         end = 0;
-        return;
+        return 1;
     }
     keys[end++] = tty_getchar(tty);
     keys[end] = '\0';
 
     ret = detect(keys, state);
-    if(ret) {
-        end = 0;
-        return;
+    if(!ret) {
+        return 1;
     }
+
+    end = 0;
+    return 0;
+
 }
 
 void onExit(const struct keymap_ *keymap, void *userdata) {
@@ -343,12 +347,14 @@ void onRightArrow(const struct keymap_ *keymap, void *userdata) {
 int tui_run(tui_state_t *state) {
     tty_t *tty = state->tty;
 
-    while(1) {
+    for (
+            int skip_draw = 0;
+            !state->do_exit;
+            skip_draw = handle_input(state)
+        ) {
         tty_getwinsz(tty);
-        draw(state);
-        handle_input(state);
-        if (state->do_exit) {
-            break;
+        if(!skip_draw) {
+            draw(state);
         }
     }
 
