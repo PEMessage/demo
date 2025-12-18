@@ -241,15 +241,13 @@ void tui_ttyinit(tui_state_t *state) {
     tty_hide_cursor(state->tty);
 }
 
-void tui_pathinit(tui_state_t *state, const char* filepath) {
+void tui_pathinit(tui_state_t *state, const char* filepath, long initial_idx) {
     state->parts = split(filepath, "/");
-    // default set to last one;
-    state->highlight_idx = state->parts.count - 1;
+    assert(state->parts.count > 0);
 
-    // move one left at init, which much useful for `parent_dir_tui`
-    if (state->highlight_idx > 0) {
-        state->highlight_idx--;
-    }
+    // default set to last one;
+    #define POS_MOD(i, n) (((i) % (n) + (n)) % (n))
+    state->highlight_idx = POS_MOD(initial_idx, state->parts.count);
 }
 
 void draw(tui_state_t *state) {
@@ -387,15 +385,28 @@ void tui_pathcleanup(tui_state_t *state) {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc < 2) {
-        fprintf(stderr, "Usage: %s <filepath>\n", argv[0]);
-        return 1;
+    if (argc < 2 || strlen(argv[1]) == 0) {
+        fprintf(stderr, "Usage: %s <filepath> [initial_idx]\n", argv[0]);
+        exit(1);
+    }
+
+    const char* filepath = argv[1];
+
+    // If argv[2] exist and is a number,
+    long initial_idx = -2;
+    if (argc > 2) {
+        char *endptr;
+        long maybe_idx = strtol(argv[2], &endptr, 10);
+        // check all char are consume, which mean parse success
+        if (strlen(argv[2]) == (size_t)(endptr - argv[2])) {
+            initial_idx = maybe_idx;
+        }
     }
 
     tui_state_t state;
     memset(&state, 0, sizeof(state));
 
-    tui_pathinit(&state, argv[1]);
+    tui_pathinit(&state, filepath, initial_idx);
     tui_ttyinit(&state);
 
     int exit_code = tui_run(&state);
