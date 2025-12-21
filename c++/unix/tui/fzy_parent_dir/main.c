@@ -246,7 +246,13 @@ void tui_pathinit(tui_state_t *state, const char* filepath, long initial_idx) {
     assert(state->parts.count > 0);
 
     #define POS_MOD(i, n) ((((i) % (n) + (n)) % (n)))
-    state->highlight_idx = POS_MOD(initial_idx, (int)(state->parts.count));
+    if (initial_idx >= (int)state->parts.count) {
+        state->highlight_idx = state->parts.count - 1;
+    } else if (initial_idx < 0) {
+        state->highlight_idx = POS_MOD(initial_idx, (int)(state->parts.count));
+    } else {
+        state->highlight_idx = initial_idx;
+    }
 }
 
 void draw(tui_state_t *state) {
