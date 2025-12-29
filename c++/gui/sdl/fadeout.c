@@ -1,3 +1,4 @@
+// q-gcc: `pkg-config --cflags --libs sdl2` --
 #include <SDL2/SDL.h>
 #include <stdint.h>
 #include <stdbool.h>
