@@ -11,7 +11,7 @@
 
 int main()
 {
-    // glfw: initialize and configure
+    // 1. glfw: initialize and configure
     // ------------------------------
     assert(glfwInit());
     // set opengl version 3.3
@@ -23,6 +23,9 @@ int main()
     // glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 
 
+    // 2. glfw: window creation
+    //    opengl: let window become current opengl context
+    /// -------------------------------------------
     GLFWwindow* window = glfwCreateWindow(800, 600, "LearnOpenGL", NULL, NULL);
     if (window == NULL)
     {
@@ -31,9 +34,51 @@ int main()
         return -1;
     }
     assert(window);
+    // NOTICE: opengl API must be called after this line
     glfwMakeContextCurrent(window);
+    std::cout << "version: " << (const char*)glGetString(GL_VERSION) << std::endl; // simplest opengl api
 
 
-    std::cout << "version: " << (const char*)glGetString(GL_VERSION) << std::endl;
-    getchar();
+    // 3. Set callback winsize change: If windows size change `glViewport` reset it
+    /// -------------------------------------------
+    void framebuffer_size_callback(GLFWwindow* window, int width, int height);
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+
+
+    // 4. render loop
+    // -----------
+    while(!glfwWindowShouldClose(window))
+    {
+        // input
+        void processInput(GLFWwindow *window);
+        processInput(window);
+
+        // 5. put you render cmd here
+        {
+            glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+
+        // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
+        // -------------------------------------------------------------------------------
+        glfwSwapBuffers(window);
+        glfwPollEvents();
+    }
+
+    glfwTerminate(); // ASAN will compliant, let it go
+    return 0;
 }
+
+
+// On ESC Pressed
+void processInput(GLFWwindow *window)
+{
+    if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+        glfwSetWindowShouldClose(window, true);
+}
+
+
+void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
+    glViewport(0, 0, width, height);
+}
+
