@@ -1,8 +1,9 @@
 
 
 fun section(url : String) {
+    println()
     println("Section: ${url}")
-    println("========================================================")
+    println("------------------")
 }
 
 
@@ -15,17 +16,18 @@ fun hello_world() {
 
         // aren't any types declared
         val a = 123 // readonly
-        var b = 2 // Mutable
+        var b: Int // Mutable
         b = 3
 
         // String templates
-        println("val a is $a")
+        println("val a is $a, b is $b")
         // evaluate a piece of code in a template expression
 
         // println("var b + 1 is ${b + 1}") // NOTE: this not work for ubuntu22.04 kotlinc-jvm 1.3-SNAPSHOT
     }
 }
 
+@Suppress("UNUSED_VARIABLE")
 fun basic_types() {
     section(object {}.javaClass.enclosingMethod?.name ?: "unknow")
     if (true) {
@@ -77,6 +79,7 @@ fun list_collections() {
 
         // read-only view of a mutable list
         // shadow copy
+        @Suppress("UNUSED_VARIABLE")
         val shapesLocked: List<String> = shapes
     }
 }
