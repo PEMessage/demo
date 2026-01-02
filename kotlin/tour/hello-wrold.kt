@@ -54,6 +54,8 @@ fun main(args : Array<String>) {
     section("kotlin-tour-collections")
     if(true) {
         // Read only list
+        // java : List<String> shapes = new ArrayList<>(Arrays.asList("triangle", "square", "circle"));
+        // java9: List<String> shapes = new ArrayList<>(      List.of("triangle", "square", "circle"));
         val readOnlyShapes = listOf("triangle", "square", "circle")
         println(readOnlyShapes)
         // [triangle, square, circle]
