@@ -59,7 +59,7 @@ fun list_collections() {
     if(true) {
         // Read only list
         // java : List<String> shapes = new ArrayList<>(Arrays.asList("triangle", "square", "circle"));
-        // java9: List<String> shapes = new ArrayList<>(      List.of("triangle", "square", "circle"));
+        // java9: List<String> shapes =                       List.of("triangle", "square", "circle"));
         val readOnlyShapes = listOf("triangle", "square", "circle")
         println(readOnlyShapes)
         // [triangle, square, circle]
@@ -76,6 +76,11 @@ fun list_collections() {
             + ", check 'square' in shapes ${"square" in shapes}" // 'in' operator
         )
 
+        shapes.add("pentagon") // add to end
+        println(shapes)
+
+        shapes.remove("pentagon")
+        println(shapes)
 
         // read-only view of a mutable list
         // shadow copy
@@ -88,6 +93,7 @@ fun list_collections() {
 fun set_collections() {
     section(object {}.javaClass.enclosingMethod?.name ?: "unknow")
     if (true) {
+        // java9: Set<String> readOnlyFruit = Set.of("apple", "banana", "cherry");
         val readOnlyFruit = setOf("apple", "banana", "cherry", "cherry")
         println(readOnlyFruit)
         // [apple, banana, cherry]
@@ -96,8 +102,10 @@ fun set_collections() {
         fruit.add("dragonfruit")
         println(fruit)
 
-        fruit.add("dragonfruit")
+        fruit.remove("dragonfruit")
         println(fruit)
+
+        print("\"apple\" in fruit is ${"apple" in fruit}")
     }
 }
 
