@@ -1,39 +1,39 @@
 
 
 fun section(url : String) {
-    println("========================================================")
-    println(url)
+    println("Section: ${url}")
     println("========================================================")
 }
 
-fun main(args : Array<String>) {
 
-    section("kotlin-tour-hello-world")
+fun hello_world() {
+    section(object {}.javaClass.enclosingMethod?.name ?: "unknow")
+
     if (true) {
         println("Hello, world!")
 
-        
+
         // aren't any types declared
-        val a = 123 // readonly 
+        val a = 123 // readonly
         var b = 2 // Mutable
         b = 3
 
-        // String templates 
-        println("val a is $a") 
+        // String templates
+        println("val a is $a")
         // evaluate a piece of code in a template expression
-        
+
         // println("var b + 1 is ${b + 1}") // NOTE: this not work for ubuntu22.04 kotlinc-jvm 1.3-SNAPSHOT
     }
+}
 
-    section("kotlin-tour-basic-types")
+fun basic_types() {
+    section(object {}.javaClass.enclosingMethod?.name ?: "unknow")
     if (true) {
         // variable declared without initialization
-        val d: Int = 3
+        // val d: Int
         // triggers an error
         // println(d)
         // variable 'd' must be initialized
-    }
-    if (true) {
 
         // val a: UInt = 1000 // !! not able to UInt
         val a: Int = 1000
@@ -48,10 +48,12 @@ fun main(args : Array<String>) {
 
 
         println("just assgin, not print anything ...")
-        
     }
+}
 
-    section("kotlin-tour-collections")
+
+fun list_collections() {
+    section(object {}.javaClass.enclosingMethod?.name ?: "unknow")
     if(true) {
         // Read only list
         // java : List<String> shapes = new ArrayList<>(Arrays.asList("triangle", "square", "circle"));
@@ -64,11 +66,42 @@ fun main(args : Array<String>) {
         val shapes: MutableList<String> = mutableListOf("triangle", "square", "circle")
         println(shapes)
         // [triangle, square, circle]
-        
+
+        println(
+            "count is ${shapes.count()}"
+            + ", first is ${shapes.first()}"
+            + ", last is ${shapes.last()}"
+            + ", check 'square' in shapes ${"square" in shapes}" // 'in' operator
+        )
+
 
         // read-only view of a mutable list
         // shadow copy
         val shapesLocked: List<String> = shapes
     }
+}
 
+
+fun set_collections() {
+    section(object {}.javaClass.enclosingMethod?.name ?: "unknow")
+    if (true) {
+        val readOnlyFruit = setOf("apple", "banana", "cherry", "cherry")
+        println(readOnlyFruit)
+        // [apple, banana, cherry]
+
+        val fruit: MutableSet<String> = mutableSetOf("apple", "banana", "cherry", "cherry")
+        fruit.add("dragonfruit")
+        println(fruit)
+
+        fruit.add("dragonfruit")
+        println(fruit)
+    }
+}
+
+fun main(args : Array<String>) {
+
+    hello_world()
+    basic_types()
+    list_collections()
+    set_collections()
 }
