@@ -54,10 +54,8 @@ int main()
         processInput(window);
 
         // 5. put you render cmd here
-        {
-            glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT);
-        }
+        void render();
+        render();
 
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
         // -------------------------------------------------------------------------------
@@ -67,6 +65,20 @@ int main()
 
     glfwTerminate(); // ASAN will compliant, let it go
     return 0;
+}
+
+
+void render() {
+    // 在每个新的渲染迭代开始的时候我们总是希望清屏，否则我们仍能看见上一次迭代的渲染结果
+    // if not set, will use BLACK
+    glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+    // glClear: take a `buffer bit` as arguement
+    //          optional arg: GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT, GL_STENCIL_BUFFER_BIT
+    // every bit represent a PIXEL buffer
+    // ColorBuffer[width][height] = { {Pixel(R,G,B,A), Pixel(R,G,B,A), ...}
+    // DepthBuffer[width][height] = { z, z, ... }                           深度值（通常0.0-1.0的浮点数）
+    // StencilBuffer[width][height] = { stencil, stencil, ... }
+    glClear(GL_COLOR_BUFFER_BIT);
 }
 
 
