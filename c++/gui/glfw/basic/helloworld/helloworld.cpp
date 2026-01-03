@@ -1,4 +1,4 @@
-// q-gcc: `pkg-config glfw3 gl --cflags --libs` --
+// q-gcc: `pkg-config glfw3 gl --cflags --libs` -std=c++2b --
 //
 // Thanks to: https://discourse.glfw.org/t/compiling-a-glfw-demo-file-without-glad/1682/2
 // we don't use GLAD at linux
