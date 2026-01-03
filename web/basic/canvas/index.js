@@ -58,15 +58,22 @@ function line(p1, p2) {
 }
 
 
-function rotate_xz({x, y, z} , angle) {
+function rotate([x, y], angle) {
     const c = Math.cos(angle)
     const s = Math.sin(angle)
     // [1 , 0] - rotate(angle) -> [cos , sin]
     // [0 , 1] - rotate(angle) -> [-sin, cos]
+    return [
+        x * c + y * -s,
+        x * s + y * c
+    ]
+}
+function rotate_xz({x, y, z} , angle) {
+    let [xn, zn] = rotate([x, z], angle)
     return {
-    x: x * c + z * -s,
-    y: y,
-    z: x * s + z * c
+        x: xn,
+        y: y,
+        z: zn
     }
 }
 
@@ -80,16 +87,18 @@ function transfer_z({x, y, z}, dz) {
 }
 
 vs = [
-    {x: 0.25, y: 0.25, z: 0.25},
-    {x: 0.25, y: -0.25, z: 0.25},
+    {x: 0.25,  y: 0.25,  z: 0.25},
+    {x: 0.25,  y: -0.25, z: 0.25},
     {x: -0.25, y: -0.25, z: 0.25},
-    {x: -0.25, y: 0.25, z: 0.25},
+    {x: -0.25, y: 0.25,  z: 0.25},
 
-    {x: 0.25, y: 0.25, z: -0.25},
-    {x: 0.25, y: -0.25, z: -0.25},
+    {x: 0.25,  y: 0.25,  z: -0.25},
+    {x: 0.25,  y: -0.25, z: -0.25},
     {x: -0.25, y: -0.25, z: -0.25},
-    {x: -0.25, y: 0.25, z: -0.25},
+    {x: -0.25, y: 0.25,  z: -0.25},
 ]
+
+
 
 loops = [
     [0, 1, 2, 3],
