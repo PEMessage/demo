@@ -47,6 +47,20 @@ function project({x, y, z}) {
     }
 }
 
+
+function rotate_xz({x, y, z} , angle) {
+    const c = Math.cos(angle)
+    const s = Math.sin(angle)
+    // [1 , 0] - rotate(angle) -> [cos , sin]
+    // [0 , 1] - rotate(angle) -> [-sin, cos]
+    return {
+    x: x * c + z * -s,
+    y: y,
+    z: x * s + z * c
+    }
+}
+
+
 function transfer_z({x, y, z}, dz) {
     return {
         x,
@@ -55,7 +69,6 @@ function transfer_z({x, y, z}, dz) {
     }
 }
 
-dz = 1
 vs = [
     {x: 0.25, y: 0.25, z: 0.25},
     {x: 0.25, y: -0.25, z: 0.25},
@@ -69,16 +82,21 @@ vs = [
 ]
 
 
-time = 0
 const FPS = 60
+
+z = 1
+angle = 0
 function frame() {
 
     const dt = 1 / FPS
-    dz += dt
+    // z += dt
+    angle += 2 * Math.PI * dt
 
     clear()
     for (const v of vs) {
-        point(screen(project(transfer_z(v, dz))))
+        point(screen(project(
+            transfer_z(rotate_xz(v, angle), z)
+        )))
     }
 
 
