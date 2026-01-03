@@ -77,6 +77,15 @@ function rotate_xz({x, y, z} , angle) {
     }
 }
 
+function rotate_xy({x, y, z} , angle) {
+    let [xn, yn] = rotate([x, y], angle)
+    return {
+        x: xn,
+        y: yn,
+        z: z
+    }
+}
+
 
 function transfer_z({x, y, z}, dz) {
     return {
@@ -138,10 +147,16 @@ function frame() {
 
             line(
                screen(project(
-                   transfer_z(rotate_xz(va, angle), z)
+                   transfer_z(
+                       rotate_xy(rotate_xz(va, angle), angle),
+                       z
+                   )
                )),
                screen(project(
-                   transfer_z(rotate_xz(vb, angle), z)
+                   transfer_z(
+                       rotate_xy(rotate_xz(vb, angle), angle),
+                       z
+                   )
                ))
             )
         }
