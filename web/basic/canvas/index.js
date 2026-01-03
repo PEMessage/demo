@@ -40,7 +40,48 @@ function screen(p) {
     }
 }
 
-clear()
-point(screen({x: 1, y: 0}))
-point(screen({x: 0, y: 1}))
+function project({x, y, z}) {
+    return {
+        x: x/z,
+        y: y/z,
+    }
+}
 
+function transfer_z({x, y, z}, dz) {
+    return {
+        x,
+        y,
+        z: z + dz,
+    }
+}
+
+dz = 1
+vs = [
+    {x: 0.25, y: 0.25, z: 0.25},
+    {x: 0.25, y: -0.25, z: 0.25},
+    {x: -0.25, y: -0.25, z: 0.25},
+    {x: -0.25, y: 0.25, z: 0.25},
+
+    {x: 0.25, y: 0.25, z: -0.25},
+    {x: 0.25, y: -0.25, z: -0.25},
+    {x: -0.25, y: -0.25, z: -0.25},
+    {x: -0.25, y: 0.25, z: -0.25},
+]
+
+
+time = 0
+const FPS = 60
+function frame() {
+
+    const dt = 1 / FPS
+    dz += dt
+
+    clear()
+    for (const v of vs) {
+        point(screen(project(transfer_z(v, dz))))
+    }
+
+
+    setTimeout(frame, 1000 / FPS)
+}
+setTimeout(frame, 1000 / FPS)
