@@ -4,6 +4,7 @@
 
 // 【一个公式解密3D图形 | Tsoding】
 // https://www.bilibili.com/video/BV1TzBoBqEY6/
+// https://github.com/tsoding/formula/blob/main/index.js
 /** @type {HTMLCanvasElement} */
 const game = document.getElementById('game');
 
@@ -47,6 +48,15 @@ function project({x, y, z}) {
     }
 }
 
+function line(p1, p2) {
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = FOREGROUND
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.stroke();
+}
+
 
 function rotate_xz({x, y, z} , angle) {
     const c = Math.cos(angle)
@@ -81,24 +91,52 @@ vs = [
     {x: -0.25, y: 0.25, z: -0.25},
 ]
 
+loops = [
+    [0, 1, 2, 3],
+    [4, 5, 6, 7],
+    [0, 4],
+    [1, 5],
+    [2, 6],
+    [3, 7],
+]
+
 
 const FPS = 60
 
 z = 1
 angle = 0
+const freq = 4
 function frame() {
 
     const dt = 1 / FPS
     // z += dt
-    angle += 2 * Math.PI * dt
+    angle += (2 * Math.PI / freq) * dt
 
     clear()
-    for (const v of vs) {
-        point(screen(project(
-            transfer_z(rotate_xz(v, angle), z)
-        )))
-    }
+    // for (const v of vs) {
+    //     point(screen(project(
+    //         transfer_z(rotate_xz(v, angle), z)
+    //     )))
+    // }
 
+    for (loop of loops) {
+        for (let i = 0; i < loop.length; ++i) {
+            let va_index = loop[i]
+            let vb_index = loop[(i + 1) % loop.length]
+
+            va = vs[va_index]
+            vb = vs[vb_index]
+
+            line(
+               screen(project(
+                   transfer_z(rotate_xz(va, angle), z)
+               )),
+               screen(project(
+                   transfer_z(rotate_xz(vb, angle), z)
+               ))
+            )
+        }
+    }
 
     setTimeout(frame, 1000 / FPS)
 }
