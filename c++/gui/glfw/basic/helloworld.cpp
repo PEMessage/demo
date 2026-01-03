@@ -91,6 +91,20 @@ void processInput(GLFWwindow *window)
 
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
+    // Provide argument to 'fragment shader'(render color)
+    // which will do
+    //  From: Normalized Device Coordinates(NDC):
+    //  to:   Screen-space Coordinates:
+       // NDC Space                   Screen Space
+       // [-1, 1]×[-1, 1]             [0, width]×[0, height]
+       //
+       // (-1, 1) ─────── (1, 1)      (0, 0) ─────── (width, 0)
+       //    │               │           │               │
+       //    │     (0, 0)    │           │  (w/2, h/2)   │
+       //    │       •       │   --->    │      •        │
+       //    │               │           │               │
+       // (-1, -1) ────── (1, -1)    (0, height) ─── (width, height)
+       //
     glViewport(0, 0, width, height);
 }
 
