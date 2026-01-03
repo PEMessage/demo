@@ -3,8 +3,12 @@
 // Thanks to: https://discourse.glfw.org/t/compiling-a-glfw-demo-file-without-glad/1682/2
 // we don't use GLAD at linux
 
-#include <GL/gl.h>
-#include <GLFW/glfw3.h>
+// include order matter here
+#define GL_GLEXT_PROTOTYPES
+#include <GL/gl.h>      // 1
+#include <GL/glext.h>   // 2
+#include <GLFW/glfw3.h> // 3
+
 #include <iostream>
 #include <assert.h>
 
@@ -68,6 +72,13 @@ int main()
 }
 
 
+float vertices[] = {
+    -0.5f, -0.5f, 0.0f,
+     0.5f, -0.5f, 0.0f,
+     0.0f,  0.5f, 0.0f
+};
+
+
 void render() {
     // 在每个新的渲染迭代开始的时候我们总是希望清屏，否则我们仍能看见上一次迭代的渲染结果
     // if not set, will use BLACK
@@ -79,6 +90,18 @@ void render() {
     // DepthBuffer[width][height] = { z, z, ... }                           深度值（通常0.0-1.0的浮点数）
     // StencilBuffer[width][height] = { stencil, stencil, ... }
     glClear(GL_COLOR_BUFFER_BIT);
+
+    // 5.1 vector shaper
+    // -------------------
+
+    // vec -> vector shaper(store vec on GPU)
+    // now VBO is represent those vector on GPU
+    unsigned int VBO;
+    glGenBuffers(1, &VBO);
+
+    // 从这一刻起，我们使用的任何（在GL_ARRAY_BUFFER目标上的）缓冲调用都会用来配置当前绑定的缓冲(VBO)
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 }
 
 
