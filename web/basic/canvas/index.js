@@ -32,11 +32,15 @@ function point({x, y}) {
 // convert to screen position
 function screen(p) {
     return {
+        // [-1, 1] -> [0, 2] -> [0, 1] -> [0, game.width]
         x: (p.x + 1) / 2 * game.width,
-        y: (p.y + 1) / 2 * game.height
+        // [-1, 1] -> [0, 2] -> [0, 1] -> [0, game.height]
+        // need a extra filp to make it correct
+        y: (-p.y + 1) / 2 * game.height
     }
 }
 
 clear()
-point(screen({x: 0, y: 0}))
+point(screen({x: 1, y: 0}))
+point(screen({x: 0, y: 1}))
 
