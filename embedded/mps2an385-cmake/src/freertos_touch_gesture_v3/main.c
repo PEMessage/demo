@@ -139,6 +139,9 @@ typedef struct {
 
     Point start_point;
     Point end_point;
+
+    uint8_t is_long :1;
+    uint8_t is_gesture :1;
 } cr_common_t;
 
 typedef struct {
@@ -164,8 +167,6 @@ typedef struct {
     int count;
     TickType_t watchdog;
 
-    uint8_t is_long :1;
-    uint8_t is_gesture :1;
     uint8_t is_not_same :1;
 
     Point point;
@@ -369,6 +370,10 @@ void Co_Common(InputDevice *indev, Finger *f) {
         CR_AWAIT(cr_common, f->is_active && f->is_edge);
         cr_common->start_point = f->point;
         cr_common->end_point = f->point;
+
+        cr_common->is_long = 0;
+        cr_common->is_gesture = 0;
+
         // printf("[EV %d]: start x %d, y %d\n",
         //         ARRAY_INDEX(f, indev->fingers),
         //         cr_common->start_point.x, cr_common->start_point.y
@@ -403,6 +408,7 @@ void GestureReset(InputDevice *indev, Finger *f) {
 
 void Co_Gesture(InputDevice *indev, Finger *f) {
     cr_gesture_t * const cr_gesture = &f->cr_gesture;
+    cr_common_t * const common = &f->cr_common;
 
     CR_START(&f->cr_gesture);
     while(1) {
@@ -415,9 +421,10 @@ void Co_Gesture(InputDevice *indev, Finger *f) {
             // equal to `f->is_active || (!f->is_active && f->is_edge)`
             CR_AWAIT(cr_gesture, f->is_active || f->is_edge);
 
-            // This part handle signal: `___/\___` (up and down real quick)
+            // 1.
+            // The `f->is_edge` handle signal: `___/\___` (up and down real quick)
             // If could ensure that signal will not change that fast,
-            // something like `___/-\___`, we don't need this part
+            // something like `___/-\___`, we don't need to check f->is_edge
             if (f->is_edge) {
                 // NOTE: Cancel: execute flow but do not reset closure
                 CR_RESET(cr_gesture);
@@ -472,6 +479,8 @@ void Co_Gesture(InputDevice *indev, Finger *f) {
 // ----------------------------------------
 void Co_LongPress(InputDevice *indev, Finger *f) {
     cr_longpress_t * const cr_longpress = &f->cr_longpress;
+    cr_common_t * const common = &f->cr_common;
+
     CR_START(cr_longpress);
     while(1) {
 
@@ -482,6 +491,8 @@ void Co_LongPress(InputDevice *indev, Finger *f) {
         while(1) {
             CR_AWAIT(cr_longpress, f->is_active || f->is_edge);
 
+            // 1.
+            // avoid _/\_ like signal
             if (f->is_edge) {
                 CR_RESET(cr_longpress);
                 return;
@@ -508,17 +519,17 @@ void Co_LongPress(InputDevice *indev, Finger *f) {
 // 3.2 Call from detectProcess, Click
 // ----------------------------------------
 void NotifyClickLong(InputDevice *indev, Finger *f) {
-    f->cr_click.is_long = 1;
+    f->cr_common.is_long = 1;
 }
 
 void NotifyClickGesture(InputDevice *indev, Finger *f) {
-    f->cr_click.is_gesture = 1;
+    f->cr_common.is_gesture = 1;
 }
 
 void ClickReset(InputDevice *indev, Finger *f) {
     cr_click_t * const click = &f->cr_click;
     cr_common_t * const common = &f->cr_common;
-    const int is_special = (click->is_long || click->is_gesture || click->is_not_same);
+    const int is_special = (common->is_long || common->is_gesture || click->is_not_same);
     const int normal_count = click->count - is_special;
 
     assert(normal_count >= 0);
@@ -532,9 +543,9 @@ void ClickReset(InputDevice *indev, Finger *f) {
               );
     }
 
-    if (click->is_gesture) {
+    if (common->is_gesture) {
         // do nothing, do not handle event here
-    } else if (click->is_long) {
+    } else if (common->is_long) {
         printf("[EV %d]: LongClick, x %d, y%d\n",
                 ARRAY_INDEX(f, indev->fingers),
                 common->end_point.x, common->end_point.y
@@ -551,15 +562,14 @@ void ClickReset(InputDevice *indev, Finger *f) {
     }
 
     click->count = 0;
-    click->is_long = 0;
-    click->is_gesture = 0;
 }
 
 void Co_Click(InputDevice *indev, Finger *f) {
     cr_click_t * const cr_click = &f->cr_click;
-    cr_common_t * const cr_common = &f->cr_common;
+    cr_common_t * const common = &f->cr_common;
     CR_START(cr_click);
     while(1) {
+        // cr_click == 0(which is initial state), and on finger lift
         CR_AWAIT(cr_click, !f->is_active && f->is_edge && !indev->curr_slot_mask);
 
 
@@ -568,7 +578,9 @@ void Co_Click(InputDevice *indev, Finger *f) {
 
         cr_click->point = f->point;
         cr_click->is_not_same = 0;
-        const int is_special = (cr_click->is_long || cr_click->is_gesture || cr_click->is_not_same);
+        const int is_special = (common->is_long || common->is_gesture || cr_click->is_not_same);
+
+        // click number reach max, so clean it
         if (is_special || cr_click->count == indev->config.click_max) {
             ClickReset(indev, f);
             CR_RESET(cr_click);
@@ -580,33 +592,37 @@ void Co_Click(InputDevice *indev, Finger *f) {
 
         while(1) {
             CR_AWAIT(cr_click,
+                    // another last finger lift
                     (!f->is_active && f->is_edge && !indev->curr_slot_mask) ||
                     (indev->tick - cr_click->watchdog > indev->config.click_threshold)
                     )
 
 
+            // if is another click, we should base update cr_click info
             if (!f->is_active && f->is_edge && !indev->curr_slot_mask) {
 
                 cr_click->count++;
                 cr_click->watchdog = indev->tick;
 
-                if (!(LV_ABS(cr_common->end_point.x - cr_click->point.x) < indev->config.click_region_max &&
-                    LV_ABS(cr_common->end_point.y - cr_click->point.y) < indev->config.click_region_max))
+                if (!(LV_ABS(common->end_point.x - cr_click->point.x) < indev->config.click_region_max &&
+                    LV_ABS(common->end_point.y - cr_click->point.y) < indev->config.click_region_max))
                 {
                     cr_click->is_not_same = 1;
                 } else {
                     cr_click->is_not_same = 0;
-                    cr_click->point = cr_common->end_point;
+                    cr_click->point = common->end_point;
                 }
 
 
-                const int is_special = (cr_click->is_long || cr_click->is_gesture || cr_click->is_not_same);
+                const int is_special = (common->is_long || common->is_gesture || cr_click->is_not_same);
+                // not full, rewait next click
                 if (cr_click->count != indev->config.click_max && !is_special) {
                     CR_YIELD(cr_click);
                     continue;
                 }
             }
 
+            // if cr_click->count reach clickmax or watachdog bark ClickReset
             ClickReset(indev, f);
             CR_RESET(cr_click);
             return;
