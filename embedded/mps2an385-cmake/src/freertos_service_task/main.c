@@ -1,9 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 #include "CMSDK_CM3.h" // for SystemCoreClock
 #include "FreeRTOS.h"
+#include "portmacro.h"
 #include "task.h"
 #include "timers.h"
 #include "semphr.h"
@@ -35,16 +37,41 @@ const int PRIORTY = 10;
 struct Service {
     TaskHandle_t task;
     TimerHandle_t timer;
+    volatile bool terminate_request;  // Flag to request termination
+    SemaphoreHandle_t terminate_sem;  // Semaphore to signal deletion completion
 };
 
-void ServiceTask() {
+void ServiceTask(void* param) {
+    struct Service* s = (struct Service*)param;
+
     while(1) {
-        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        printf("%s: notify!\n", __func__);
+        // Wait for notification or termination request
+        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(portMAX_DELAY)); // Check periodically
+
+        // Check if termination was requested
+        if (s->terminate_request) {
+            printf("%s: Termination requested, cleaning up...\n", __func__);
+
+            // Stop the timer if it exists
+            if(s->timer) {
+                xTimerStop(s->timer, portMAX_DELAY);
+            }
+
+            // Signal that we're about to delete ourselves
+            xSemaphoreGive(s->terminate_sem);
+
+            // Delete ourselves
+            vTaskDelete(NULL);
+        }
+
+        // Normal processing
+        printf("%s: processing...\n", __func__);
         {
             xSemaphoreTake(resource_mutex, portMAX_DELAY);
-            for (int i = 0; i < 1000000; i ++) {
-                __NOP(); // some heavy work
+            for (int j = 0; j < 2000; j ++) {
+                for (int i = 0; i < 1000000; i ++) {
+                    __NOP(); // some heavy work
+                }
             }
             xSemaphoreGive(resource_mutex);
         }
@@ -55,24 +82,41 @@ void ServiceTask() {
 
 void ServiceTimerCallback(TimerHandle_t xTimer) {
     struct Service* s = (struct Service *)pvTimerGetTimerID(xTimer);
-    xTaskNotifyGive(s->task);
 
+    // Don't notify if termination was requested
+    if (!s->terminate_request) {
+        xTaskNotifyGive(s->task);
+    }
 }
 
 void ServiceDelete(struct Service* s) {
-    // delete timer
-    if(s->timer) {
-        xTimerDelete(s->timer, portMAX_DELAY);
-        s->timer = NULL;
-    }
+    if (!s) return;
 
-    // delete task
-    if(s->task) {
-        vTaskDelete(s->task);
+    // Request termination
+    s->terminate_request = true;
+
+    // Notify the task to wake it up
+    xTaskNotifyGive(s->task);
+
+    // Wait for the task to signal it's ready to be deleted
+    if (xSemaphoreTake(s->terminate_sem, pdMS_TO_TICKS(portMAX_DELAY)) == pdTRUE) {
+        printf("Service task is ready for deletion\n");
+
+        // Now it's safe to delete the timer
+        if(s->timer) {
+            xTimerDelete(s->timer, portMAX_DELAY);
+            s->timer = NULL;
+        }
+
+        // Task has already deleted itself, so we just need to clean up the handle
         s->task = NULL;
-    }
 
-    free(s);
+        // Clean up the semaphore
+        vSemaphoreDelete(s->terminate_sem);
+        s->terminate_sem = NULL;
+    } else {
+        printf("ERROR: Service task didn't respond to termination request\n");
+    }
 }
 
 #define PERIOD 100
@@ -85,8 +129,17 @@ struct Service* ServiceCreate() {
 
     // init
     memset(s, 0, sizeof(*s));
+    s->terminate_request = false;
 
-    // task
+    // Create termination semaphore
+    s->terminate_sem = xSemaphoreCreateBinary();
+    if (!s->terminate_sem) {
+        printf("[E]: semaphore create fail\n");
+        free(s);
+        return NULL;
+    }
+
+    // Create task
     if (xTaskCreate(ServiceTask,
                 "SrvTsk",
                 configMINIMAL_STACK_SIZE+256,
@@ -95,37 +148,40 @@ struct Service* ServiceCreate() {
                 &s->task
                 ) != pdTRUE) {
         printf("[E]: task create fail\n");
-        ServiceDelete(s);
+        vSemaphoreDelete(s->terminate_sem);
+        free(s);
         return NULL;
     }
 
-    // timer
+    // Create timer
     s->timer = xTimerCreate(
         "SrvTim",
         pdMS_TO_TICKS(PERIOD),
         pdTRUE,               // Auto-reload
-        s,                 // Timer ID
+        s,                    // Timer ID
         ServiceTimerCallback
     );
     if(!s->timer) {
         printf("[E]: timer create fail\n");
-        ServiceDelete(s);
+        // Request task termination and wait
+        s->terminate_request = true;
+        xTaskNotifyGive(s->task);
+        vTaskDelay(pdMS_TO_TICKS(10)); // Give task a chance to terminate
+        vSemaphoreDelete(s->terminate_sem);
+        free(s);
         return NULL;
     }
 
-    // enable timer at the end
+    // Enable timer
     xTimerStart(s->timer, portMAX_DELAY);
     return s;
 }
 
 void ServiceNotify(struct Service *s) {
-    if(!s) { return; }
+    if(!s || s->terminate_request) { return; }
 
     xTaskNotifyGive(s->task);
 }
-
-
-
 
 // ===========================================
 void MainTask() {
@@ -152,19 +208,24 @@ void MainTask() {
         }
 
         ServiceDelete(s);
+
+        // Free the service structure
+        free(s);
         s = NULL;
 
+        // Verify mutex is clean
         if (xSemaphoreTake(resource_mutex, 0) != pdTRUE) {
             printf("%s: resource_mutex not clean!!\n", __func__);
-            return; // return from task to cause kernel pannic
+            return; // return from task to cause kernel panic
         } else {
             xSemaphoreGive(resource_mutex);
         }
+
+        printf("%s: Service deleted successfully\n", __func__);
     }
 
     printf("%s: End\n", __func__);
     while(1);
-
 }
 
 int main() {
