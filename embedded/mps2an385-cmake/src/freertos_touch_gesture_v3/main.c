@@ -159,6 +159,8 @@ typedef struct {
     CR_FIELD;
 
     TickType_t timer;
+    uint32_t counter;
+
 } cr_longpress_t;
 
 typedef struct {
@@ -431,6 +433,13 @@ void Co_Gesture(InputDevice *indev, Finger *f) {
                 return;
             }
 
+            // 2.
+            // gesture and longpress are mutually exclusive
+            if (common->is_long) {
+                CR_RESET(cr_gesture);
+                return;
+            }
+
             Point diff = {
                 .x = f->point.x - cr_gesture->prev.x,
                 .y = f->point.y - cr_gesture->prev.y,
@@ -486,6 +495,7 @@ void Co_LongPress(InputDevice *indev, Finger *f) {
 
         CR_AWAIT(cr_longpress, f->is_active && f->is_edge);
         cr_longpress->timer = indev->tick;
+        cr_longpress->counter = 0;
         CR_YIELD(cr_longpress);
 
         while(1) {
@@ -498,18 +508,37 @@ void Co_LongPress(InputDevice *indev, Finger *f) {
                 return;
             }
 
+            // 2.
+            // gesture and longpress are mutually exclusive
+            if (common->is_gesture) {
+                CR_RESET(cr_longpress);
+                return;
+            }
+
             if (!(indev->tick - cr_longpress->timer > indev->config.longpress_threshold)) {
                 CR_YIELD(cr_longpress);
                 continue;
             }
 
-            printf("[EV %d]: LongPress\n",
+            printf("[EV %d]: LongPress initial\n",
                     ARRAY_INDEX(f, indev->fingers)
                   );
             void NotifyClickLong(InputDevice *indev, Finger *f);
             NotifyClickLong(indev, f);
 
-            CR_RESET(cr_longpress);
+            CR_YIELD(cr_longpress);
+            while(1) {
+                // finger lift
+                if (!f->is_active && f->is_edge) {
+                    CR_RESET(cr_longpress);
+                    return;
+                }
+
+                printf("TODO: under longpressed\n");
+
+                CR_YIELD(cr_longpress);
+            }
+
             return;
         }
     }
