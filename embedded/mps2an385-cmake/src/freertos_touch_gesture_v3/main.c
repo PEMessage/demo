@@ -207,6 +207,7 @@ typedef struct InputDeviceConfig {
 
     // Long press configuration
     TickType_t longpress_threshold;
+    TickType_t longpress_update_interval;
 
     // Click configuration
     uint8_t click_max;
@@ -244,6 +245,7 @@ struct InputDevice *DEV;
 #define DEFAULT_GESTURE_MIN_VELOCITY 3
 
 #define DEFAULT_LONGPRESS_THRESHOLD pdMS_TO_TICKS(500)
+#define DEFAULT_LONGPRESS_UPDATE_INTERVAL pdMS_TO_TICKS(100)
 
 #define DEFAULT_CLICK_MAX 3
 #define DEFAULT_CLICK_THRESHOLD pdMS_TO_TICKS(300)
@@ -260,6 +262,7 @@ const InputDeviceConfig DEFAULT_INPUTDEVICE_CONFIG = {
     .gesture_min_velocity = DEFAULT_GESTURE_MIN_VELOCITY,
 
     .longpress_threshold = DEFAULT_LONGPRESS_THRESHOLD,
+    .longpress_update_interval = DEFAULT_LONGPRESS_UPDATE_INTERVAL,
 
     .click_max = DEFAULT_CLICK_MAX,
     .click_threshold = DEFAULT_CLICK_THRESHOLD,
@@ -526,15 +529,23 @@ void Co_LongPress(InputDevice *indev, Finger *f) {
             void NotifyClickLong(InputDevice *indev, Finger *f);
             NotifyClickLong(indev, f);
 
+            // below `cr_longpress->timer` reuse as update_interval timer
+            cr_longpress->timer = indev->tick;
             CR_YIELD(cr_longpress);
             while(1) {
+                CR_AWAIT(cr_longpress,
+                        (!f->is_active && f->is_edge) ||
+                        (indev->tick - cr_longpress->timer > indev->config.longpress_update_interval)
+                        )
                 // finger lift
                 if (!f->is_active && f->is_edge) {
                     CR_RESET(cr_longpress);
                     return;
                 }
+                cr_longpress->timer = indev->tick;
+                cr_longpress->counter ++;
 
-                printf("TODO: under longpressed\n");
+                printf("[EV %d]: Under LongPress, count %d\n", ARRAY_INDEX(f, indev->fingers), cr_longpress->counter);
 
                 CR_YIELD(cr_longpress);
             }
