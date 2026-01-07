@@ -610,7 +610,7 @@ void Co_Click(InputDevice *indev, Finger *f) {
     CR_START(cr_click);
     while(1) {
         // cr_click == 0(which is initial state), and on finger lift
-        CR_AWAIT(cr_click, !f->is_active && f->is_edge && !indev->curr_slot_mask);
+        CR_AWAIT(cr_click, !f->is_active && f->is_edge /*&& !indev->curr_slot_mask*/);
 
 
         cr_click->count = 1;
@@ -633,13 +633,13 @@ void Co_Click(InputDevice *indev, Finger *f) {
         while(1) {
             CR_AWAIT(cr_click,
                     // another last finger lift
-                    (!f->is_active && f->is_edge && !indev->curr_slot_mask) ||
+                    (!f->is_active && f->is_edge /*&& !indev->curr_slot_mask*/) ||
                     (indev->tick - cr_click->watchdog > indev->config.click_threshold)
                     )
 
 
             // if is another click, we should base update cr_click info
-            if (!f->is_active && f->is_edge && !indev->curr_slot_mask) {
+            if (!f->is_active && f->is_edge /*&& !indev->curr_slot_mask*/) {
 
                 cr_click->count++;
                 cr_click->watchdog = indev->tick;
