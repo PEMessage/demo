@@ -23,8 +23,8 @@ target_link_libraries(${MODULE_NAME}
     freertos_hook
     misc
     m
-    lvgl_port
-    lvgl
+    # lvgl_port
+    # lvgl
 )
 
 # Include directories
