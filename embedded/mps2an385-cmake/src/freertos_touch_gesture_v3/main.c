@@ -555,9 +555,10 @@ void Co_LongPress(InputDevice *indev, Finger *f) {
             CR_YIELD(cr_longpress);
             while(1) {
                 CR_AWAIT(cr_longpress,
+                        (NotifySelect(indev, f), false) ||
                         (!f->is_active && f->is_edge) ||
                         (indev->tick - cr_longpress->timer > indev->config.longpress_update_interval)
-                        )
+                        );
                 // finger lift
                 if (!f->is_active && f->is_edge) {
                     CR_RESET(cr_longpress);
@@ -566,7 +567,7 @@ void Co_LongPress(InputDevice *indev, Finger *f) {
                 cr_longpress->timer = indev->tick;
                 cr_longpress->counter ++;
 
-                printf("[EV %d]: Under LongPress, count %d\n", ARRAY_INDEX(f, indev->fingers), cr_longpress->counter);
+                // printf("[EV %d]: Under LongPress, count %d\n", ARRAY_INDEX(f, indev->fingers), cr_longpress->counter);
 
                 CR_YIELD(cr_longpress);
             }
@@ -697,7 +698,7 @@ void Co_Click(InputDevice *indev, Finger *f) {
 void NotifySelect(InputDevice *indev, Finger *f) {
     cr_select_t * const select = &indev->cr_select;
     // already taken by other finger
-    if(select->current) { return; }
+    if(select->current && select->current->is_active) { return; }
     select->current = f;
 }
 
