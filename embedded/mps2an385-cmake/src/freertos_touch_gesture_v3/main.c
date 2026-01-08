@@ -207,6 +207,11 @@ typedef struct {
     uint32_t counter;
 } cr_select_t;
 
+typedef struct {
+    CR_FIELD;
+    TickType_t timer;
+} cr_select_and_confirm;
+
 // Configuration structure for runtime settings
 typedef struct InputDeviceConfig {
     // Gesture configuration
@@ -266,6 +271,8 @@ struct InputDevice *DEV;
 #define DEFAULT_MULTIGESTURE_THRESHOLD pdMS_TO_TICKS(200)
 
 #define DEFAULT_SELECT_UPDATE_INTERVAL pdMS_TO_TICKS(100)
+
+#define DEFAULT_SELECT_AND_CONFIRM_THRESHOLD pdMS_TO_TICKS(500)
 
 // ========================================
 // Input Framework Function
@@ -550,26 +557,30 @@ void Co_LongPress(InputDevice *indev, Finger *f) {
             void NotifySelect(InputDevice *indev, Finger *f);
             NotifySelect(indev, f);
 
+            /* uncomment for underLongPress event
             // below `cr_longpress->timer` reuse as update_interval timer
             cr_longpress->timer = indev->tick;
             CR_YIELD(cr_longpress);
+            */
             while(1) {
                 CR_AWAIT(cr_longpress,
-                        (NotifySelect(indev, f), false) ||
-                        (!f->is_active && f->is_edge) ||
-                        (indev->tick - cr_longpress->timer > indev->config.longpress_update_interval)
+                        (NotifySelect(indev, f), false)
+                        || (!f->is_active)
+                        // uncomment for UnderLongPress event
+                        /* || (indev->tick - cr_longpress->timer > indev->config.longpress_update_interval) */
                         );
                 // finger lift
-                if (!f->is_active && f->is_edge) {
+                if (!f->is_active) {
                     CR_RESET(cr_longpress);
                     return;
                 }
+                /* uncomment for underLongPress event
                 cr_longpress->timer = indev->tick;
                 cr_longpress->counter ++;
-
-                // printf("[EV %d]: Under LongPress, count %d\n", ARRAY_INDEX(f, indev->fingers), cr_longpress->counter);
+                printf("[EV %d]: Under LongPress, count %d\n", ARRAY_INDEX(f, indev->fingers), cr_longpress->counter);
 
                 CR_YIELD(cr_longpress);
+                */
             }
 
             return;
@@ -693,7 +704,7 @@ void Co_Click(InputDevice *indev, Finger *f) {
     CR_END(cr_click)
 }
 
-// 3.3 Call from detectProcess, Select
+// 3.3 Call from detectProcess, Select, similiar to underLongPress, but handle multifinger gracefully
 // ----------------------------------------
 void NotifySelect(InputDevice *indev, Finger *f) {
     cr_select_t * const select = &indev->cr_select;
@@ -708,6 +719,7 @@ void SelectReset(InputDevice *indev, Finger *f) {
     cr_select->counter = 0;
     cr_select->timer = 0;
 }
+
 void Co_Select(InputDevice *indev, Finger *f) {
     cr_select_t * const cr_select = &indev->cr_select;
     CR_START(cr_select);
@@ -723,6 +735,7 @@ void Co_Select(InputDevice *indev, Finger *f) {
                     (indev->tick - cr_select->timer > indev->config.longpress_update_interval)
                     );
             if (!cr_select->current->is_active) {
+                printf("[EV %d]: Done Select, count %d\n", ARRAY_INDEX(cr_select->current, indev->fingers), cr_select->counter);
                 SelectReset(indev, f);
                 CR_RESET(cr_select);
                 return;
