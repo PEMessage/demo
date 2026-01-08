@@ -199,6 +199,14 @@ typedef struct {
     Direction direction;
 } cr_multigesture_t;
 
+typedef struct {
+    CR_FIELD;
+
+    Finger *current;
+    TickType_t timer;
+    uint32_t counter;
+} cr_select_t;
+
 // Configuration structure for runtime settings
 typedef struct InputDeviceConfig {
     // Gesture configuration
@@ -218,6 +226,9 @@ typedef struct InputDeviceConfig {
     TickType_t multigesture_threshold;
     uint8_t multigesture_max;
 
+    // select configuration
+    TickType_t select_update_interval;
+
 } InputDeviceConfig;
 
 typedef struct InputDevice {
@@ -234,6 +245,7 @@ typedef struct InputDevice {
     Finger fingers[MAX_SUPPORT_SLOT];
 
     cr_multigesture_t cr_multigesture;
+    cr_select_t cr_select;
 } InputDevice;
 
 struct InputDevice *DEV;
@@ -253,6 +265,8 @@ struct InputDevice *DEV;
 
 #define DEFAULT_MULTIGESTURE_THRESHOLD pdMS_TO_TICKS(200)
 
+#define DEFAULT_SELECT_UPDATE_INTERVAL pdMS_TO_TICKS(100)
+
 // ========================================
 // Input Framework Function
 // ========================================
@@ -269,7 +283,9 @@ const InputDeviceConfig DEFAULT_INPUTDEVICE_CONFIG = {
     .click_region_max = DEFAULT_CLICK_REGION_MAX,
 
     .multigesture_threshold = DEFAULT_MULTIGESTURE_THRESHOLD,
-    .multigesture_max = MULTIGESTURE_MAX
+    .multigesture_max = MULTIGESTURE_MAX,
+
+    .select_update_interval = DEFAULT_SELECT_UPDATE_INTERVAL
 };
 
 
@@ -363,6 +379,9 @@ void detectProcess(InputDevice* indev) {
     }
     void Co_MultiGesture(InputDevice *indev, Finger *f);
     Co_MultiGesture(indev, NULL);
+
+    void Co_Select(InputDevice *indev, Finger *f);
+    Co_Select(indev, NULL);
 }
 
 // 3.0 Call from detectProcess, Common Relate
@@ -528,6 +547,8 @@ void Co_LongPress(InputDevice *indev, Finger *f) {
                   );
             void NotifyClickLong(InputDevice *indev, Finger *f);
             NotifyClickLong(indev, f);
+            void NotifySelect(InputDevice *indev, Finger *f);
+            NotifySelect(indev, f);
 
             // below `cr_longpress->timer` reuse as update_interval timer
             cr_longpress->timer = indev->tick;
@@ -670,6 +691,55 @@ void Co_Click(InputDevice *indev, Finger *f) {
     }
     CR_END(cr_click)
 }
+
+// 3.3 Call from detectProcess, Select
+// ----------------------------------------
+void NotifySelect(InputDevice *indev, Finger *f) {
+    cr_select_t * const select = &indev->cr_select;
+    // already taken by other finger
+    if(select->current) { return; }
+    select->current = f;
+}
+
+void SelectReset(InputDevice *indev, Finger *f) {
+    cr_select_t * const cr_select = &indev->cr_select;
+    cr_select->current = NULL;
+    cr_select->counter = 0;
+    cr_select->timer = 0;
+}
+void Co_Select(InputDevice *indev, Finger *f) {
+    cr_select_t * const cr_select = &indev->cr_select;
+    CR_START(cr_select);
+    while(1) {
+        CR_AWAIT(cr_select, cr_select->current);
+
+        cr_select->timer = indev->tick;
+        cr_select->counter = 0;
+
+        while(1) {
+            CR_AWAIT(cr_select,
+                    (!cr_select->current->is_active) ||
+                    (indev->tick - cr_select->timer > indev->config.longpress_update_interval)
+                    );
+            if (!cr_select->current->is_active) {
+                SelectReset(indev, f);
+                CR_RESET(cr_select);
+                return;
+            }
+            cr_select->timer = indev->tick;
+            cr_select->counter ++;
+
+            printf("[EV %d]: Under Select, count %d\n", ARRAY_INDEX(cr_select->current, indev->fingers), cr_select->counter);
+
+
+            CR_YIELD(cr_select);
+        }
+
+    }
+    CR_END(cr_select);
+}
+
+
 
 // 4.1 Call from detectProcess, MultiGesture
 // ----------------------------------------
