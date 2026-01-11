@@ -7,7 +7,7 @@
 
 int main(int argc, char *argv[])
 {
-    assert( SDL_Init( SDL_INIT_EVERYTHING ) > 0);
+    assert( SDL_Init( SDL_INIT_EVERYTHING ) >= 0);
 
 
     // 1. window
