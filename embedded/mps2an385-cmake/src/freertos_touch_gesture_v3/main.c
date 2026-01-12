@@ -169,7 +169,7 @@ typedef struct {
     int count;
     TickType_t watchdog;
 
-    uint8_t is_not_same :1;
+    uint8_t is_special :1;
 
     Point point;
 } cr_click_t;
@@ -602,39 +602,29 @@ void NotifyClickGesture(InputDevice *indev, Finger *f) {
 void ClickReset(InputDevice *indev, Finger *f) {
     cr_click_t * const click = &f->cr_click;
     cr_common_t * const common = &f->cr_common;
-    const int is_special = (common->is_long || common->is_gesture || click->is_not_same);
-    const int normal_count = click->count - is_special;
 
-    assert(normal_count >= 0);
-
-    if (normal_count != 0) {
+    if (click->count != 0) {
         printf("[EV %d]: [%c] Click %d, x %d, y %d\n",
                 ARRAY_INDEX(f, indev->fingers),
-                (normal_count == indev->config.click_max) ? 'M' : 'W',
-                normal_count,
+                (click->count == indev->config.click_max) ? 'M' : 'W',
+                click->count,
                 click->point.x, click->point.y
               );
+        click->count = 0;
     }
 
-    if (common->is_gesture) {
-        // do nothing, do not handle event here
-    } else if (common->is_long) {
-        printf("[EV %d]: LongClick, x %d, y%d\n",
-                ARRAY_INDEX(f, indev->fingers),
-                common->end_point.x, common->end_point.y
-              );
-    } else if (click->is_not_same) {
-        printf("[EV %d]: [%c] Click %d, x %d, y %d\n",
-                ARRAY_INDEX(f, indev->fingers),
-                'N',
-                1,
-                common->end_point.x, common->end_point.y
-              );
-    } else {
-        // do nothing
+    if (click->is_special) {
+        if (common->is_gesture) {
+            // do nothing, do not handle event here
+        } else if (common->is_long) {
+            printf("[EV %d]: LongClick, x %d, y%d\n",
+                    ARRAY_INDEX(f, indev->fingers),
+                    common->end_point.x, common->end_point.y
+                  );
+        }
+        click->is_special = 0;
     }
 
-    click->count = 0;
 }
 
 void Co_Click(InputDevice *indev, Finger *f) {
@@ -646,16 +636,17 @@ void Co_Click(InputDevice *indev, Finger *f) {
         CR_AWAIT(cr_click, !f->is_active && f->is_edge /*&& !indev->curr_slot_mask*/);
 
 
-        cr_click->count = 1;
-        cr_click->watchdog = indev->tick;
-
-        cr_click->point = f->point;
-        cr_click->is_not_same = 0;
-        const int is_special = (common->is_long || common->is_gesture || cr_click->is_not_same);
+        cr_click->is_special = common->is_long || common->is_gesture;
+        if (!cr_click->is_special) {
+            cr_click->count = 1;
+            cr_click->watchdog = indev->tick;
+            cr_click->point = f->point;
+        }
 
         // click number reach max, so clean it
-        if (is_special || cr_click->count == indev->config.click_max) {
+        if (cr_click->is_special || cr_click->count == indev->config.click_max) {
             ClickReset(indev, f);
+            assert(cr_click->count == 0);
             CR_RESET(cr_click);
             return;
         } else {
@@ -668,28 +659,31 @@ void Co_Click(InputDevice *indev, Finger *f) {
                     // another last finger lift
                     (!f->is_active && f->is_edge /*&& !indev->curr_slot_mask*/) ||
                     (indev->tick - cr_click->watchdog > indev->config.click_threshold)
-                    )
+                    );
+            bool is_not_same = false; // treat as same point
 
 
             // if is another click, we should base update cr_click info
             if (!f->is_active && f->is_edge /*&& !indev->curr_slot_mask*/) {
+                cr_click->is_special = common->is_long || common->is_gesture;
 
-                cr_click->count++;
-                cr_click->watchdog = indev->tick;
-
-                if (!(LV_ABS(common->end_point.x - cr_click->point.x) < indev->config.click_region_max &&
-                    LV_ABS(common->end_point.y - cr_click->point.y) < indev->config.click_region_max))
+                if (cr_click->is_special) {
+                    // do nothing
+                } else if (!(
+                            LV_ABS(common->end_point.x - cr_click->point.x) < indev->config.click_region_max &&
+                            LV_ABS(common->end_point.y - cr_click->point.y) < indev->config.click_region_max
+                            ))
                 {
-                    cr_click->is_not_same = 1;
+                    is_not_same = true;
                 } else {
-                    cr_click->is_not_same = 0;
-                    cr_click->point = common->end_point;
+                    cr_click->count++;
+                    cr_click->watchdog = indev->tick;
+                    cr_click->point = f->point;
                 }
 
 
-                const int is_special = (common->is_long || common->is_gesture || cr_click->is_not_same);
                 // not full, rewait next click
-                if (cr_click->count != indev->config.click_max && !is_special) {
+                if (!(cr_click->count == indev->config.click_max || cr_click->is_special || is_not_same)) {
                     CR_YIELD(cr_click);
                     continue;
                 }
@@ -697,8 +691,17 @@ void Co_Click(InputDevice *indev, Finger *f) {
 
             // if cr_click->count reach clickmax or watachdog bark ClickReset
             ClickReset(indev, f);
-            CR_RESET(cr_click);
-            return;
+
+            if (is_not_same) {
+                cr_click->count = 1;
+                cr_click->watchdog = indev->tick;
+                cr_click->point = f->point;
+                CR_YIELD(cr_click);
+                continue;
+            } else {
+                CR_RESET(cr_click);
+                return;
+            }
         }
     }
     CR_END(cr_click)
@@ -914,6 +917,9 @@ void InputDeviceScanCore(InputDevice* indev, ScanData *data) {
         data->touch_points[i].point.x = MPS2FB_TOUCH->points[i].x;
         data->touch_points[i].point.y = MPS2FB_TOUCH->points[i].y;
         data->touch_points[i].track_id = MPS2FB_TOUCH->points[i].track_id;
+        // if (i == 0) {
+        //     printf("x: %d, y %d\n", data->touch_points[i].point.x, data->touch_points[i].point.y);
+        // }
     }
 
     return ;
