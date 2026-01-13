@@ -1,5 +1,3 @@
-const wasmPath = "main.wasm"
-
 function make_environment(...envs) {
     return new Proxy(envs, {
         get(target, prop, receiver) {
@@ -22,20 +20,24 @@ function readString(memory, offset) {
     return new TextDecoder("utf-8").decode(bytes);
 }
 
-let w = null
+/**
+ * @param {string} path - The path to the WebAssembly (.wasm) file
+ */
+function runWasm(path) {
+    let w = null
 
-const libjs = {
-    "console_log": (strPtr) => {
-        // strPtr is the pointer to the string in WebAssembly memory
-        const str = readString(w.instance.exports.memory, strPtr);
-        console.log(str);
-    },
+    const libjs = {
+        "console_log": (strPtr) => {
+            // strPtr is the pointer to the string in WebAssembly memory
+            const str = readString(w.instance.exports.memory, strPtr);
+            console.log(str);
+        },
+    }
+
+    WebAssembly.instantiateStreaming(fetch(path), {
+        "env": make_environment(libjs)
+    }).then(wasm => {
+        w = wasm // attach w actual wasm handle, allow console_log to reference
+        wasm.instance.exports.main(0, 0)
+    })
 }
-
-
-WebAssembly.instantiateStreaming(fetch(wasmPath), {
-    "env": make_environment(libjs)
-}).then(wasm => {
-    w = wasm // attach to global handle, allow console_log to reference
-    wasm.instance.exports.main(0, 0)
-})
