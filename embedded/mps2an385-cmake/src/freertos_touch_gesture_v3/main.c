@@ -43,6 +43,7 @@ void setup() {
 #define LV_ABS(x) ((x) > 0 ? (x) : (-(x)))
 #define LV_MIN(a, b) ((a) < (b) ? (a) : (b))
 #define LV_MAX(a, b) ((a) > (b) ? (a) : (b))
+#define LV_CLAMP(min, val, max) (LV_MAX(min, (LV_MIN(val, max))))
 
 #define FOREACH_SETBITS(mask, _i) \
     for (unsigned int _i = 0, _temp_mask = (mask); \
@@ -925,7 +926,7 @@ void InputDeviceScanCore(InputDevice* indev, ScanData *data) {
         //     printf("x: %d, y %d\n", data->touch_points[i].point.x, data->touch_points[i].point.y);
         // }
         if (MPS2FB_TOUCH->points[i].pressed > 0)  {
-            #define RECT_SIZE 3
+            #define RECT_SIZE 8
             fill_rect(
                     MPS2FB_TOUCH->points[i].x - RECT_SIZE/2,
                     MPS2FB_TOUCH->points[i].y - RECT_SIZE/2,
@@ -965,7 +966,11 @@ void touch_task(void *pvParameters) {
             UBaseType_t high_water_mark = uxTaskGetStackHighWaterMark(NULL);
 
             // Print statistics
-            printf("Statistics: HighWaterMark %lu Byte, Rate %d\n", high_water_mark * sizeof(StackType_t), notify_count / (STATISTICS_PERIOD / 1000) );
+            printf(
+                    "Statistics: HighWaterMark %lu Byte, Rate %d\n",
+                    high_water_mark * sizeof(StackType_t),
+                    notify_count / (STATISTICS_PERIOD / 1000)
+                  );
 
             notify_count = 0;
             xLastWakeTime = xTaskGetTickCount();
@@ -1015,17 +1020,25 @@ void touch_timer_callback(TimerHandle_t xTimer) {
 // ========================================
 // Main Task
 // ========================================
-
+__attribute__((optimize("Ofast")))
 void fill_rect(int x, int y, int width, int height, uint32_t color) {
     volatile uint32_t *fb_ptr = FB_BASE_ADDRESS;
-    uint32_t yi, xi; // Use x_byte for iterating through bytes horizontally
 
-    for (yi = y; yi < y + height; ++yi) {
-        if (!(0 <= yi && yi < FB_HEIGHT)) { continue; }
+    // 使用宏进行边界裁剪
+    int start_x = LV_MAX(0, x);
+    int start_y = LV_MAX(0, y);
+    int end_x = LV_MIN(FB_WIDTH, x + width);
+    int end_y = LV_MIN(FB_HEIGHT, y + height);
 
-        for (xi = x; xi < x + width ; ++xi) {
-            if (!(0 <= xi && xi < FB_WIDTH)) { continue; }
-            fb_ptr[xi + yi * FB_WIDTH] = color;
+    if (start_x >= end_x || start_y >= end_y) return;
+
+    int actual_width = end_x - start_x;
+    int actual_height = end_y - start_y;
+
+    for (int yi = 0; yi < actual_height; ++yi) {
+        uint32_t *row = fb_ptr + (start_y + yi) * FB_WIDTH + start_x;
+        for (int xi = 0; xi < actual_width; ++xi) {
+            row[xi] = color;
         }
     }
 }
