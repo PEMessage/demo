@@ -1,9 +1,9 @@
 # Hello World Module
 cmake_minimum_required(VERSION 3.12)
-project(hello_world_i2c_send LANGUAGES C ASM)
+project(hello_world_ssd0303 LANGUAGES C ASM)
 
 # Set module name
-set(MODULE_NAME hello_world_i2c_send)
+set(MODULE_NAME hello_world_ssd0303)
 
 # Source files
 file(GLOB SRCS *.c)
