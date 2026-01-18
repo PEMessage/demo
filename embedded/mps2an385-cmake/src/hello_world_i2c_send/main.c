@@ -38,7 +38,7 @@ int main(void)
     tx_buffer[1] = 0xAA;  /* Data byte 1 */
     printf("Sending data to I2C device at address 0x%02X\n", I2C_DEVICE_ADDR);
 
-    status = I2Cdrv->MasterTransmit(I2C_DEVICE_ADDR, tx_buffer, 3, false);
+    status = I2Cdrv->MasterTransmit(I2C_DEVICE_ADDR, tx_buffer, 2, false);
     if (status != ARM_DRIVER_OK) {
         printf("I2C Master Transmit failed: %d\n", status);
         return -1;

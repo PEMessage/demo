@@ -108,14 +108,23 @@ $(1):
 		rm -rf compile_commands.json && \
 		ln -s $(PRIVATE_OUT)/compile_commands.json compile_commands.json
 
+# using `info qlist` to check `i2c-echo` address
+# See: qemu comment, i2c address to pass to qemu must be process by ADDR >> 1(E.g 0x50 >> 1 == 0x28)
+# Thanks to: https://github.com/dermotbradley/create-alpine-disk-image/blob/377934993bb1a102d22cca822177ddf9314a2211/Virtual/QEMU.md?plain=1#L121
+# 			 https://github.com/konosubakonoakua/ARM/blob/6ea89417534ae8ec5772f33ec2ebb59921c6fde4/qemu/readme.md?plain=1#L36
 run-$(1):
+	@echo '======================='
+	@echo 'telnet localhost 4445'
+	@echo '======================='
 	qemu-system-arm \
 		-machine mps2-an385 \
 		-device mps2-fb \
+		-device i2c-echo,address=0x28 \
 		-trace *i2c* \
 		-cpu cortex-m3 \
 		-kernel $(PRIVATE_BIN) \
-		-serial stdio
+		-serial stdio \
+		-monitor telnet:127.0.0.1:4445,server,nowait
 
 debug-$(1):
 	@echo '======================='
