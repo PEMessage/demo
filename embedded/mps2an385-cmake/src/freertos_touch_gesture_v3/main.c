@@ -41,6 +41,8 @@ void setup() {
 #define FILE_LINE __FILE__ ":" STRINGIFY(__LINE__)
 
 #define LV_ABS(x) ((x) > 0 ? (x) : (-(x)))
+#define LV_MIN(a, b) ((a) < (b) ? (a) : (b))
+#define LV_MAX(a, b) ((a) > (b) ? (a) : (b))
 
 #define FOREACH_SETBITS(mask, _i) \
     for (unsigned int _i = 0, _temp_mask = (mask); \
@@ -897,6 +899,7 @@ void Co_MultiGesture(InputDevice *indev, Finger *f) {
 // ========================================
 // Adapter
 // ========================================
+void fill_rect(int x, int y, int width, int height, uint32_t color);
 void InputDeviceScanCore(InputDevice* indev, ScanData *data) {
     ASSERT_CREATE_MASK(MAX_SUPPORT_SLOT - 1);
     static const uint32_t SUPPORT_MASK = CREATE_MASK(MAX_SUPPORT_SLOT - 1);
@@ -905,6 +908,7 @@ void InputDeviceScanCore(InputDevice* indev, ScanData *data) {
     // Mock 2/3 finger
     // data->slot_mask |= (data->slot_mask & 1) << 1;
     // data->slot_mask |= (data->slot_mask & 1) << 2;
+    fill_rect(0, 0, FB_WIDTH, FB_HEIGHT, 0xFFFFFFFF);
 
     for (int i = 0 ; i < MAX_SUPPORT_SLOT ; i ++) {
         // Mock 2/3 finger
@@ -920,6 +924,15 @@ void InputDeviceScanCore(InputDevice* indev, ScanData *data) {
         // if (i == 0) {
         //     printf("x: %d, y %d\n", data->touch_points[i].point.x, data->touch_points[i].point.y);
         // }
+        if (MPS2FB_TOUCH->points[i].pressed > 0)  {
+            #define RECT_SIZE 3
+            fill_rect(
+                    MPS2FB_TOUCH->points[i].x - RECT_SIZE/2,
+                    MPS2FB_TOUCH->points[i].y - RECT_SIZE/2,
+                    RECT_SIZE, RECT_SIZE,
+                    0xFFFF0000
+                    );
+        }
     }
 
     return ;
@@ -952,7 +965,7 @@ void touch_task(void *pvParameters) {
             UBaseType_t high_water_mark = uxTaskGetStackHighWaterMark(NULL);
 
             // Print statistics
-            printf("Statistics: HighWaterMark %lu Byte, Rate %d\n", high_water_mark * sizeof(StackType_t), notify_count / STATISTICS_PERIOD);
+            printf("Statistics: HighWaterMark %lu Byte, Rate %d\n", high_water_mark * sizeof(StackType_t), notify_count / (STATISTICS_PERIOD / 1000) );
 
             notify_count = 0;
             xLastWakeTime = xTaskGetTickCount();
@@ -1003,14 +1016,16 @@ void touch_timer_callback(TimerHandle_t xTimer) {
 // Main Task
 // ========================================
 
-void fill_framebuffer() {
+void fill_rect(int x, int y, int width, int height, uint32_t color) {
     volatile uint32_t *fb_ptr = FB_BASE_ADDRESS;
-    uint32_t y, x; // Use x_byte for iterating through bytes horizontally
+    uint32_t yi, xi; // Use x_byte for iterating through bytes horizontally
 
-    for (y = 0; y < FB_HEIGHT; ++y) {
+    for (yi = y; yi < y + height; ++yi) {
+        if (!(0 <= yi && yi < FB_HEIGHT)) { continue; }
 
-        for (x = 0; x < FB_WIDTH; ++x) {
-            fb_ptr[x + y * FB_WIDTH] = 0xFFFFFFFF;
+        for (xi = x; xi < x + width ; ++xi) {
+            if (!(0 <= xi && xi < FB_WIDTH)) { continue; }
+            fb_ptr[xi + yi * FB_WIDTH] = color;
         }
     }
 }
@@ -1019,7 +1034,6 @@ void MainTask() {
     // create indev
     DEV = InputDeviceCreate();
     InputDeviceEnable(DEV);
-    fill_framebuffer();
 
     // 1. Create touch processing task
     if (xTaskCreate(
