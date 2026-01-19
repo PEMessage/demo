@@ -275,7 +275,8 @@ struct InputDevice *DEV;
 
 #define DEFAULT_SELECT_UPDATE_INTERVAL pdMS_TO_TICKS(100)
 
-#define DEFAULT_SELECT_AND_CONFIRM_THRESHOLD pdMS_TO_TICKS(500)
+#define DEFAULT_SELECT_AND_CONFIRM_THRESHOLD pdMS_TO_TICKS(2000)
+
 
 // ========================================
 // Input Framework Function
@@ -392,6 +393,11 @@ void detectProcess(InputDevice* indev) {
 
     void Co_Select(InputDevice *indev, Finger *f);
     Co_Select(indev, NULL);
+
+    // allow provide global tick for user
+    void OnScan(InputDevice *indev);
+    OnScan(indev);
+
 }
 
 // 3.0 Call from detectProcess, Common Relate
@@ -602,6 +608,9 @@ void NotifyClickGesture(InputDevice *indev, Finger *f) {
     f->cr_common.is_gesture = 1;
 }
 
+
+void OnClick(InputDevice *indev, int count, int16_t x, int16_t y);
+
 void ClickReset(InputDevice *indev, Finger *f) {
     cr_click_t * const click = &f->cr_click;
     cr_common_t * const common = &f->cr_common;
@@ -613,6 +622,7 @@ void ClickReset(InputDevice *indev, Finger *f) {
                 click->count,
                 click->point.x, click->point.y
               );
+        OnClick(index, click->count, click->point.x, click->point.y);
         click->count = 0;
     }
 
@@ -726,6 +736,8 @@ void SelectReset(InputDevice *indev, Finger *f) {
     cr_select->timer = 0;
 }
 
+void OnSelect(InputDevice *indev, int count, int16_t x, int16_t y);
+
 void Co_Select(InputDevice *indev, Finger *f) {
     cr_select_t * const cr_select = &indev->cr_select;
     CR_START(cr_select);
@@ -742,6 +754,12 @@ void Co_Select(InputDevice *indev, Finger *f) {
                     );
             if (!cr_select->current->is_active) {
                 printf("[EV %d]: Done Select, count %d\n", ARRAY_INDEX(cr_select->current, indev->fingers), cr_select->counter);
+                OnSelect(
+                        indev,
+                        cr_select->counter,
+                        cr_select->current->point.x,
+                        cr_select->current->point.y
+                        );
                 SelectReset(indev, f);
                 CR_RESET(cr_select);
                 return;
@@ -750,6 +768,12 @@ void Co_Select(InputDevice *indev, Finger *f) {
             cr_select->counter ++;
 
             printf("[EV %d]: Under Select, count %d\n", ARRAY_INDEX(cr_select->current, indev->fingers), cr_select->counter);
+            OnSelect(
+                    indev,
+                    cr_select->counter,
+                    cr_select->current->point.x,
+                    cr_select->current->point.y
+                    );
 
 
             CR_YIELD(cr_select);
@@ -895,6 +919,127 @@ void Co_MultiGesture(InputDevice *indev, Finger *f) {
     CR_END(cr_mg)
 
 }
+
+// ========================================
+// User example Select and confirm
+// ========================================
+
+typedef enum event_source {
+    ONSCAN,
+    ONSELECT,
+    ONCLICK,
+} event_source_t;
+
+typedef struct event {
+    event_source_t source;
+    union {
+        struct {} scan;
+        struct { int count; int16_t x; int16_t y; int16_t zoneid } select;
+        struct { int count; int16_t x; int16_t y; } click;
+    } as;
+} event_t;
+
+typedef struct cr_select_confirm {
+    CR_FIELD;
+    event_t event;
+
+    int16_t zone_id;
+    int zone_counter;
+    TickType_t reset_timer;
+
+} cr_select_confirm_t;
+
+void Co_Select_Confirm(InputDevice *indev, cr_select_confirm_t* ctx);
+
+cr_select_confirm_t g_ctx = {0};
+
+void OnScan(InputDevice *indev) {
+    g_ctx.event.source = ONSCAN;
+
+    // g_ctx.event.as.scan = ?? ;
+    Co_Select_Confirm(indev, &g_ctx);
+
+
+}
+
+int getZoneId(int16_t x, int16_t y) {
+    return    (x / (FB_WIDTH / 3))
+            + (y / (FB_HEIGHT / 3)) * 3;
+}
+
+void OnSelect(InputDevice *indev, int count, int16_t x, int16_t y) {
+    g_ctx.event.source = ONSELECT;
+    g_ctx.event.as.select =  (typeof(g_ctx.event.as.select)){ count, x, y, getZoneId(x, y) };
+
+    Co_Select_Confirm(indev, &g_ctx);
+}
+
+void OnClick(InputDevice *indev, int count, int16_t x, int16_t y) {
+    g_ctx.event.source = ONCLICK;
+    g_ctx.event.as.click =  (typeof(g_ctx.event.as.click)){ count, x, y };
+
+    Co_Select_Confirm(indev, &g_ctx);
+}
+
+
+
+void Co_Select_Confirm(InputDevice *indev, cr_select_confirm_t* ctx) {
+
+    CR_START(ctx);
+    while(1) {
+        CR_AWAIT(ctx, ctx->event.source == ONSELECT);
+        ctx->zone_id = ctx->event.as.select.zoneid;
+        ctx->zone_counter = ctx->event.as.select.count;
+        ctx->reset_timer = indev->tick;
+        printf("[User]: code is %d\n", ctx->zone_id);
+
+        CR_YIELD(ctx);
+
+        while(1) {
+            CR_AWAIT(ctx,
+                    (ctx->event.source == ONSELECT)
+                    || (ctx->event.source == ONCLICK && ctx->event.as.click.count == 2)
+                    || (indev->tick - ctx->reset_timer > DEFAULT_SELECT_AND_CONFIRM_THRESHOLD)
+                    );
+
+            if (ctx->event.source == ONSELECT) {
+                ctx->reset_timer = indev->tick;
+
+                if (ctx->zone_id == ctx->event.as.select.zoneid) {
+                    ctx->zone_counter = ctx->event.as.select.count;
+                    CR_YIELD(ctx);
+                    continue;
+                } else if(ctx->zone_counter > ctx->event.as.select.count) {
+                    CR_RESET(ctx);
+                    return;
+                } else if( ctx->event.as.select.count - ctx->zone_counter > 3) {
+                    ctx->zone_id = ctx->event.as.select.zoneid;
+                    printf("[User]: code is %d\n", ctx->zone_id);
+                    ctx->zone_counter = ctx->event.as.select.count;
+                    CR_YIELD(ctx);
+                    continue;
+                } else {
+                    CR_YIELD(ctx);
+                    continue;
+                }
+
+            } else if (ctx->event.source == ONCLICK && ctx->event.as.click.count == 2) {
+                printf("[User]: emit code is %d\n", ctx->zone_id);
+                CR_RESET(ctx);
+                return;
+            } else {
+                CR_RESET(ctx);
+                return;
+            }
+        }
+
+
+        CR_RESET(ctx);
+        return;
+    }
+    CR_END(ctx);
+}
+
 
 
 // ========================================
