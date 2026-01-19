@@ -1028,12 +1028,12 @@ void Co_Select_Confirm(InputDevice *indev, cr_select_confirm_t* ctx) {
         CR_YIELD(ctx);
 
         CR_AWAIT(ctx,
-                (ctx->event.source == ONCLICK && ctx->event.as.select.count == 2)
+                (ctx->event.source == ONCLICK && ctx->event.as.click.count == 2)
                 || ctx->event.source == ONSELECT
                 || indev->tick - ctx->timer > DEFAULT_SELECT_AND_CONFIRM_THRESHOLD
                 );
 
-        if (ctx->event.source == ONCLICK && ctx->event.as.select.count == 2) {
+        if (ctx->event.source == ONCLICK && ctx->event.as.click.count == 2) {
             printf("[EV]: Confirm code %d\n", ctx->zoneid);
             CR_RESET(ctx);
             return;
