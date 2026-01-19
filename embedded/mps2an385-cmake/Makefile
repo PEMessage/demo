@@ -126,6 +126,8 @@ run-$(1):
 		-serial stdio \
 		-monitor telnet:127.0.0.1:4445,server,nowait
 
+		# -device ssd0303,address=0x1e
+
 debug-$(1):
 	@echo '======================='
 	@echo 'gdb-multiarch -x "target remote :1234" $(PRIVATE_ELF)'
