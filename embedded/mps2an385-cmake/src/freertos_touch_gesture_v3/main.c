@@ -275,6 +275,7 @@ struct InputDevice *DEV;
 
 #define DEFAULT_SELECT_UPDATE_INTERVAL pdMS_TO_TICKS(100)
 
+#define DEFAULT_SELECT_AND_CONFIRM_UPDATE_INTERVAL pdMS_TO_TICKS(500)
 #define DEFAULT_SELECT_AND_CONFIRM_THRESHOLD pdMS_TO_TICKS(2000)
 
 
@@ -756,7 +757,7 @@ void Co_Select(InputDevice *indev, Finger *f) {
                 printf("[EV %d]: Done Select, count %d\n", ARRAY_INDEX(cr_select->current, indev->fingers), cr_select->counter);
                 OnSelect(
                         indev,
-                        cr_select->counter,
+                        -1, // special -1 as done select signal
                         cr_select->current->point.x,
                         cr_select->current->point.y
                         );
@@ -767,7 +768,7 @@ void Co_Select(InputDevice *indev, Finger *f) {
             cr_select->timer = indev->tick;
             cr_select->counter ++;
 
-            printf("[EV %d]: Under Select, count %d\n", ARRAY_INDEX(cr_select->current, indev->fingers), cr_select->counter);
+            // printf("[EV %d]: Under Select, count %d\n", ARRAY_INDEX(cr_select->current, indev->fingers), cr_select->counter);
             OnSelect(
                     indev,
                     cr_select->counter,
@@ -920,10 +921,22 @@ void Co_MultiGesture(InputDevice *indev, Finger *f) {
 
 }
 
+#define VOID_CALLBACK 0
+#define SELECT_AND_CONFIRM_CALLBACK 1
+#define CALLBACK_TYPE SELECT_AND_CONFIRM_CALLBACK
+// ========================================
+// Default callback implement
+// ========================================
+#if defined(CALLBACK_TYPE) && CALLBACK_TYPE == VOID_CALLBACK
+void __attribute__((weak)) OnSelect(InputDevice *indev, int count, int16_t x, int16_t y) { }
+void __attribute__((weak)) OnClick(InputDevice *indev, int count, int16_t x, int16_t y) { }
+void __attribute__((weak)) OnScan(InputDevice *indev) { }
+#endif // #if defined(CALLBACK_TYPE) && CALLBACK_TYPE == VOID_CALLBACK
+
 // ========================================
 // User example Select and confirm
 // ========================================
-
+#if defined(CALLBACK_TYPE) && CALLBACK_TYPE == SELECT_AND_CONFIRM_CALLBACK
 typedef enum event_source {
     ONSCAN,
     ONSELECT,
@@ -943,9 +956,8 @@ typedef struct cr_select_confirm {
     CR_FIELD;
     event_t event;
 
-    int16_t zone_id;
-    int zone_counter;
-    TickType_t reset_timer;
+    int16_t zoneid;
+    TickType_t timer;
 
 } cr_select_confirm_t;
 
@@ -955,11 +967,9 @@ cr_select_confirm_t g_ctx = {0};
 
 void OnScan(InputDevice *indev) {
     g_ctx.event.source = ONSCAN;
-
     // g_ctx.event.as.scan = ?? ;
+
     Co_Select_Confirm(indev, &g_ctx);
-
-
 }
 
 int getZoneId(int16_t x, int16_t y) {
@@ -969,14 +979,14 @@ int getZoneId(int16_t x, int16_t y) {
 
 void OnSelect(InputDevice *indev, int count, int16_t x, int16_t y) {
     g_ctx.event.source = ONSELECT;
-    g_ctx.event.as.select =  (typeof(g_ctx.event.as.select)){ count, x, y, getZoneId(x, y) };
+    g_ctx.event.as.select = (typeof(g_ctx.event.as.select)){ count, x, y, getZoneId(x, y) };
 
     Co_Select_Confirm(indev, &g_ctx);
 }
 
 void OnClick(InputDevice *indev, int count, int16_t x, int16_t y) {
     g_ctx.event.source = ONCLICK;
-    g_ctx.event.as.click =  (typeof(g_ctx.event.as.click)){ count, x, y };
+    g_ctx.event.as.click = (typeof(g_ctx.event.as.click)){ count, x, y };
 
     Co_Select_Confirm(indev, &g_ctx);
 }
@@ -988,59 +998,53 @@ void Co_Select_Confirm(InputDevice *indev, cr_select_confirm_t* ctx) {
     CR_START(ctx);
     while(1) {
         CR_AWAIT(ctx, ctx->event.source == ONSELECT);
-        ctx->zone_id = ctx->event.as.select.zoneid;
-        ctx->zone_counter = ctx->event.as.select.count;
-        ctx->reset_timer = indev->tick;
-        printf("[User]: code is %d\n", ctx->zone_id);
+        assert(ctx->event.as.select.count == 1);
+        ctx->zoneid = ctx->event.as.select.zoneid;
+        ctx->timer = indev->tick;
+        printf("[EV]: Select code %d\n", ctx->zoneid);
 
         CR_YIELD(ctx);
 
         while(1) {
-            CR_AWAIT(ctx,
-                    (ctx->event.source == ONSELECT)
-                    || (ctx->event.source == ONCLICK && ctx->event.as.click.count == 2)
-                    || (indev->tick - ctx->reset_timer > DEFAULT_SELECT_AND_CONFIRM_THRESHOLD)
-                    );
+            CR_AWAIT(ctx, ctx->event.source == ONSELECT);
 
-            if (ctx->event.source == ONSELECT) {
-                ctx->reset_timer = indev->tick;
-
-                if (ctx->zone_id == ctx->event.as.select.zoneid) {
-                    ctx->zone_counter = ctx->event.as.select.count;
-                    CR_YIELD(ctx);
-                    continue;
-                } else if(ctx->zone_counter > ctx->event.as.select.count) {
-                    CR_RESET(ctx);
-                    return;
-                } else if( ctx->event.as.select.count - ctx->zone_counter > 3) {
-                    ctx->zone_id = ctx->event.as.select.zoneid;
-                    printf("[User]: code is %d\n", ctx->zone_id);
-                    ctx->zone_counter = ctx->event.as.select.count;
-                    CR_YIELD(ctx);
-                    continue;
-                } else {
-                    CR_YIELD(ctx);
-                    continue;
-                }
-
-            } else if (ctx->event.source == ONCLICK && ctx->event.as.click.count == 2) {
-                printf("[User]: emit code is %d\n", ctx->zone_id);
-                CR_RESET(ctx);
-                return;
-            } else {
-                CR_RESET(ctx);
-                return;
+            if (ctx->event.as.select.count == -1) {
+                break;
             }
+
+            if (ctx->event.as.select.zoneid == ctx->zoneid) {
+                ctx->timer = indev->tick;
+            } else if (indev->tick - ctx->timer > DEFAULT_SELECT_AND_CONFIRM_UPDATE_INTERVAL) {
+                ctx->timer = indev->tick;
+                ctx->zoneid = ctx->event.as.select.zoneid;
+                printf("[EV]: Re-Select code %d\n", ctx->zoneid);
+            } else {
+                // do nothing
+            }
+            CR_YIELD(ctx);
         }
 
+        ctx->timer = indev->tick;
+        CR_YIELD(ctx);
+
+        CR_AWAIT(ctx,
+                (ctx->event.source == ONCLICK && ctx->event.as.select.count == 2)
+                || ctx->event.source == ONSELECT
+                || indev->tick - ctx->timer > DEFAULT_SELECT_AND_CONFIRM_THRESHOLD
+                );
+
+        if (ctx->event.source == ONCLICK && ctx->event.as.select.count == 2) {
+            printf("[EV]: Confirm code %d\n", ctx->zoneid);
+            CR_RESET(ctx);
+            return;
+        }
 
         CR_RESET(ctx);
-        return;
+        continue;
     }
     CR_END(ctx);
 }
-
-
+#endif // #if defined(CALLBACK_TYPE) && CALLBACK_TYPE == SELECT_AND_CONFIRM_CALLBACK
 
 // ========================================
 // Adapter
