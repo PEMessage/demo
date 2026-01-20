@@ -8,8 +8,8 @@ let wasi = new WASI(args, env, [
     ConsoleStdout.lineBuffered(msg => console.warn(`[WASI stderr] ${msg}`)),
 ]);
 
-let wasm = await WebAssembly.compileStreaming(fetch("build/main.wasm"));
-let inst = await WebAssembly.instantiate(wasm, {
+let inst = (await WebAssembly.instantiateStreaming(fetch("build/main.wasm"), {
     "wasi_snapshot_preview1": wasi.wasiImport,
-});
+})).instance;
 wasi.start(inst);
+
