@@ -1,1 +1,3 @@
 *.wasm
+.vite
+

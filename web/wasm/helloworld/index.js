@@ -11,8 +11,7 @@ function make_environment(...envs) {
     });
 }
 
-
-function readString(memory, offset) {
+function read_string(memory, offset) {
     const mem = new Uint8Array(memory.buffer);
     let end = offset;
     while (mem[end] !== 0) end++;
@@ -20,7 +19,7 @@ function readString(memory, offset) {
     return new TextDecoder("utf-8").decode(bytes);
 }
 
-function writeString(memory, offset, str) {
+function write_string(memory, offset, str) {
     const mem = new Uint8Array(memory.buffer);
     const bytes = new TextEncoder("utf-8").encode(str);
     mem.set(bytes, offset);
@@ -28,56 +27,64 @@ function writeString(memory, offset, str) {
     return bytes.length + 1;
 }
 
+function write_u32(memory, offset, value) {
+    const mem = new Uint32Array(memory.buffer, offset, 1);
+    mem[0] = value;
+    return 4;
+}
 
-function setup_argc_argv(memory, jsruntimePtr, args) {
+
+function setup_crt(memory, offset, args) {
     const argc = args.length;
-    const argvPtrs = [];
-    let currentOffset = jsruntimePtr;
+    let current = offset;
 
-    // Write each argument string to memory
+    // 1. write argv[x] * argc
+    const argv_ptrs = [];
     for (const arg of args) {
-        const bytesWritten = writeString(memory, currentOffset, arg);
-        argvPtrs.push(currentOffset);
-        currentOffset += bytesWritten;
+        argv_ptrs.push(current);
+
+        const bytes_written = write_string(memory, current, arg);
+        current += bytes_written;
     }
 
-    // Create argv array
+    // 2. write argv itself
     // Align currentOffset to nearest multiple of 4
-    const argvArrayOffset = (currentOffset + 3) & ~3;
-    const argvArray = new Uint32Array(memory.buffer, argvArrayOffset, argc + 1);
-
-    for (let i = 0; i < argc; i++) {
-        argvArray[i] = argvPtrs[i];
+    current = (current + 3) & ~3;
+    const argv = current // save start pointer
+    for (const arg of argv_ptrs) {
+        const bytes_written = write_u32(memory, current, arg);
+        current += bytes_written;
     }
-    argvArray[argc] = 0; // NULL terminator
 
-    return { argc, argvArrayOffset };
+    return {argc, argv};
 }
 
 /**
  * @param {string} path - The path to the WebAssembly (.wasm) file
  */
-function runWasm(path) {
-    let wasmInstance = null
+async function runWasm(path) {
+    let inst = null
 
     const libjs = {
         "console_log": (strPtr) => {
-            const str = readString(wasmInstance.exports.memory, strPtr);
+            const str = read_string(inst.exports.memory, strPtr);
             console.log(str);
         },
     };
 
-    WebAssembly.instantiateStreaming(fetch(path), {
+    inst = (await WebAssembly.instantiateStreaming(fetch(path), {
         "env": make_environment(libjs)
-    }).then(wasm => {
-        wasmInstance = wasm.instance;
-        const memory = wasmInstance.exports.memory;
-        const jsruntimePtr = wasmInstance.exports.jsruntime;
+    })).instance
 
-        const args = [path, "arg1", "arg2", "arg3"];
-        const { argc, argvArrayOffset } = setup_argc_argv(memory, jsruntimePtr, args);
+    const memory = inst.exports.memory;
+    const jsruntime_ptr = inst.exports.jsruntime;
 
-        // Call main function
-        const result = wasmInstance.exports.main(argc, argvArrayOffset);
-    });
+    const args = [path, "arg1", "arg2", "arg3"];
+    const {argc, argv} = setup_crt(memory, jsruntime_ptr, args);
+
+    const result = inst.exports.main(argc, argv);
+    return result;
 }
+
+
+export { runWasm }

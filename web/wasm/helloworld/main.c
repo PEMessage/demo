@@ -2,8 +2,6 @@ extern void console_log(const char* str);
 
 #define UNUSED(x) (void)(x)
 #define KEEP __attribute__((used, retain))
-
-
 #define EXPORT(name) __attribute__((export_name(name)))
 
 // TODO: move this part to js
