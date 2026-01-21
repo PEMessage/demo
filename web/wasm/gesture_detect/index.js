@@ -40,6 +40,8 @@ function getCanvasCoordinates(x, y) {
         y: y - rect.top
     };
 }
+// 3. helper function
+// =================================
 
 function isInCanvas(x, y) {
     return x >= 0 && x <= screen.width &&
@@ -69,6 +71,9 @@ let pointer = {
     pressed: false
 }
 
+
+// 4. setup event
+// =================================
 function setupMouseEvent(callback) {
 
     // Add event listeners for mouse events
@@ -125,6 +130,8 @@ function createEventPollCtx() {
     return pollonce
 }
 
+// 5. main
+// =================================
 let pollonce = createEventPollCtx()
 
 setupMouseEvent(pollonce)
