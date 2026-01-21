@@ -23,6 +23,7 @@ wasi.start(inst);
 const BACKGROUND = "#101010"
 const FOREGROUND = "#50FF50"
 const POINT_SIZE = 15
+const PPS = 3
 
 const screen = document.getElementById('screen');
 screen.width = 800
@@ -98,5 +99,33 @@ function setupMouseEvent(callback) {
     });
 }
 
+function setupPeriodEvent(callback) {
+    const executeAndReset = () => {
+        callback();
+        setTimeout(executeAndReset, 1000 / PPS);
+    };
+    setTimeout(executeAndReset, 1000 / PPS);
+}
 
-setupMouseEvent(redrawCanvas)
+function createEventPollCtx() {
+    let p = {
+        x: 0,
+        y: 0,
+        pressed: false
+    }
+    let pollonce = function(point) {
+        if (point != null)  {
+            p = point
+        }
+        inst.exports.pollonce(p.x, p.y, p.pressed, Date.now())
+        redrawCanvas(p)
+
+    }
+
+    return pollonce
+}
+
+let pollonce = createEventPollCtx()
+
+setupMouseEvent(pollonce)
+setupPeriodEvent(pollonce)
