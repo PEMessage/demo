@@ -1,4 +1,4 @@
-import { WASI, File, OpenFile, ConsoleStdout, PreopenDirectory } from "https://unpkg.com/@bjorn3/browser_wasi_shim@0.4.2/dist/index.js";
+import { WASI, File, OpenFile, ConsoleStdout, PreopenDirectory } from "@bjorn3/browser_wasi_shim";
 
 let args = ["bin", "arg1", "arg2"];
 let env = ["FOO=bar"];
