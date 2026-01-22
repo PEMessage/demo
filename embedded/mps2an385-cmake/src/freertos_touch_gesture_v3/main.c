@@ -82,6 +82,11 @@ typedef struct {
 #define CR_AWAIT(ctx, cond) \
     while(!(cond)) { CR_YIELD(ctx); }
 
+/* in most case, a while(1) { ... break ... } is a better way to use goto */
+#define CR_DECLARE_TAG(name) static const int cr_internal_tag_##name = __LINE__
+#define CR_TAG(name) do { case cr_internal_tag_##name:; } while(0)
+#define CR_GOTO(ctx, name) do { (ctx)->pc = cr_internal_tag_##name; return; } while(0)
+
 
 // ========================================
 // Input Framework Struct
@@ -276,7 +281,7 @@ struct InputDevice *DEV;
 #define DEFAULT_SELECT_UPDATE_INTERVAL pdMS_TO_TICKS(100)
 
 #define DEFAULT_SELECT_AND_CONFIRM_UPDATE_INTERVAL pdMS_TO_TICKS(500)
-#define DEFAULT_SELECT_AND_CONFIRM_THRESHOLD pdMS_TO_TICKS(2000)
+#define DEFAULT_SELECT_AND_CONFIRM_THRESHOLD pdMS_TO_TICKS(5000)
 
 
 // ========================================
