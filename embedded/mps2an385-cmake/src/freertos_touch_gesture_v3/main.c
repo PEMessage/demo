@@ -148,8 +148,10 @@ typedef struct {
     Point start_point;
     Point end_point;
 
-    uint8_t is_long :1;
-    uint8_t is_gesture :1;
+    // check is_??? == 1 if we want is_??? conflict with other flag(old behavior)
+    uint8_t flag_count;
+    uint8_t is_long;
+    uint8_t is_gesture;
 } cr_common_t;
 
 typedef struct {
@@ -417,6 +419,7 @@ void Co_Common(InputDevice *indev, Finger *f) {
         cr_common->start_point = f->point;
         cr_common->end_point = f->point;
 
+        cr_common->flag_count = 0;
         cr_common->is_long = 0;
         cr_common->is_gesture = 0;
 
@@ -479,10 +482,10 @@ void Co_Gesture(InputDevice *indev, Finger *f) {
 
             // 2.
             // gesture and longpress are mutually exclusive
-            if (common->is_long) {
-                CR_RESET(cr_gesture);
-                return;
-            }
+            // if (common->is_long) {
+            //     CR_RESET(cr_gesture);
+            //     return;
+            // }
 
             Point diff = {
                 .x = f->point.x - cr_gesture->prev.x,
@@ -512,10 +515,10 @@ void Co_Gesture(InputDevice *indev, Finger *f) {
                 //         ARRAY_INDEX(f, indev->fingers),
                 //         cr_gesture->direction
                 //       );
+                void NotifyCommonGesture(InputDevice *indev, Finger *f);
+                NotifyCommonGesture(indev, f);
                 void SendToMultiGesture(InputDevice *indev, Finger *f);
                 SendToMultiGesture(indev, f);
-                void NotifyClickGesture(InputDevice *indev, Finger *f);
-                NotifyClickGesture(indev, f);
                 CR_RESET(cr_gesture);
                 return;
             }
@@ -554,10 +557,10 @@ void Co_LongPress(InputDevice *indev, Finger *f) {
 
             // 2.
             // gesture and longpress are mutually exclusive
-            if (common->is_gesture) {
-                CR_RESET(cr_longpress);
-                return;
-            }
+            // if (common->is_gesture) {
+            //     CR_RESET(cr_longpress);
+            //     return;
+            // }
 
             if (!(indev->tick - cr_longpress->timer > indev->config.longpress_threshold)) {
                 CR_YIELD(cr_longpress);
@@ -567,8 +570,8 @@ void Co_LongPress(InputDevice *indev, Finger *f) {
             printf("[EV %d]: LongPress initial\n",
                     ARRAY_INDEX(f, indev->fingers)
                   );
-            void NotifyClickLong(InputDevice *indev, Finger *f);
-            NotifyClickLong(indev, f);
+            void NotifyCommonLong(InputDevice *indev, Finger *f);
+            NotifyCommonLong(indev, f);
             void NotifySelect(InputDevice *indev, Finger *f);
             NotifySelect(indev, f);
 
@@ -606,12 +609,16 @@ void Co_LongPress(InputDevice *indev, Finger *f) {
 
 // 3.2 Call from detectProcess, Click
 // ----------------------------------------
-void NotifyClickLong(InputDevice *indev, Finger *f) {
-    f->cr_common.is_long = 1;
+void NotifyCommonLong(InputDevice *indev, Finger *f) {
+    if(f->cr_common.is_long != 0 ) { return; }
+    f->cr_common.flag_count ++;
+    f->cr_common.is_long =  f->cr_common.flag_count;
 }
 
-void NotifyClickGesture(InputDevice *indev, Finger *f) {
-    f->cr_common.is_gesture = 1;
+void NotifyCommonGesture(InputDevice *indev, Finger *f) {
+    if(f->cr_common.is_gesture != 0 ) { return; }
+    f->cr_common.flag_count ++;
+    f->cr_common.is_gesture =  f->cr_common.flag_count;
 }
 
 
@@ -730,9 +737,22 @@ void Co_Click(InputDevice *indev, Finger *f) {
 // ----------------------------------------
 void NotifySelect(InputDevice *indev, Finger *f) {
     cr_select_t * const select = &indev->cr_select;
+    cr_common_t * const common = &f->cr_common;
     // already taken by other finger
     if(select->current && select->current->is_active) { return; }
-    select->current = f;
+
+    if (common->is_long == 1) {
+        select->current = f;
+        return ;
+    }
+
+    // if we trigger other flag, make sure that only one finger exist on screen
+    // thus we could trigger select
+    if (indev->curr_slot_mask == (1 << ARRAY_INDEX(f, indev->fingers))){
+        select->current = f;
+        return ;
+    }
+
 }
 
 void SelectReset(InputDevice *indev, Finger *f) {
@@ -756,7 +776,7 @@ void Co_Select(InputDevice *indev, Finger *f) {
         while(1) {
             CR_AWAIT(cr_select,
                     (!cr_select->current->is_active) ||
-                    (indev->tick - cr_select->timer > indev->config.longpress_update_interval)
+                    (indev->tick - cr_select->timer > indev->config.select_update_interval)
                     );
             if (!cr_select->current->is_active) {
                 printf("[EV %d]: Done Select, count %d\n", ARRAY_INDEX(cr_select->current, indev->fingers), cr_select->counter);
@@ -900,6 +920,10 @@ void MultiGestureReset(InputDevice *indev, Finger *finger) {
 }
 
 void SendToMultiGesture(InputDevice *indev, Finger *f) {
+    cr_common_t * const common = &f->cr_common;
+    // when we trigger other flag, don't treat as gesture
+    if (common->is_gesture != 1) { return; }
+
     cr_multigesture_t * const mg = &indev->cr_multigesture;
     mg->watchdog = indev->tick;
     mg->fifo_mask |= 1 << ARRAY_INDEX(f, indev->fingers);
