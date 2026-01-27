@@ -26,26 +26,32 @@ architectures=(
     "riscv64-linux-musl qemu-riscv64"
 )
 
+build_dir="build"
+mkdir -p "$build_dir"
+
+cflags=("-Os" "-g")
+
 for entry in "${architectures[@]}"; do
     target=$(echo "$entry" | cut -d' ' -f1)
     qemu=$(echo "$entry" | cut -d' ' -f2)
-    binary="main_${target%%-*}.out"
+    arch_name="${target%%-*}"
+    binary="$build_dir/main_${arch_name}.out"
+    disasm_file="$build_dir/main_${arch_name}.asm"
 
     echo "=== $target ==="
 
     # Compile
-    if zig cc -target "$target" main.c -o "$binary" ; then
+    if zig cc -target "$target" main.c -o "$binary" "${cflags[@]}" ; then
+        echo "Trying llvm-objdump ..."
+        if command -v llvm-objdump > /dev/null; then
+            llvm-objdump -S "$binary" > "$disasm_file" 2>/dev/null || true
+        fi
+
+
         # Run with QEMU if available
         if command -v "$qemu" >/dev/null 2>&1; then
             "$qemu" "./$binary" 2>/dev/null
-        else
-            echo "QEMU not found: $qemu"
         fi
-    else
-        echo "Compilation failed"
     fi
     echo ""
 done
-
-# Cleanup
-rm -f main_*.out 2>/dev/null
