@@ -9,30 +9,43 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
 
-def repeat_append_singlebyte_padding(data: bytes = b'', padder: bytes = b'\x00', block_size: int = 16) -> bytes:
-    if len(padder) != 1:
+
+
+# If you set (begin_padder == repeat_padder == 0x10), you get PKCS7
+# If you set (begin_padder : 0x80, repeat_padder : 0x00), you get ISO
+# If you set (begin_padder : '', repeat_padder : 0x00), you get fill_to block_size
+def gen_padding(
+    data: bytes = b'',
+    begin_padder: bytes = b'',
+    repeat_padder: bytes = b'\x00',
+    block_size: int = 16
+) -> bytes:
+    if len(repeat_padder) != 1:
         raise ValueError("Padder must be a single byte")
+
+    data = data + begin_padder
 
     data_len = len(data)
     remainder = data_len % block_size
-
-    if remainder == 0:
-        return data + (padder * block_size)
-    else:
-        padding_len = block_size - remainder
-        return data + (padder * padding_len)
+    padding_len = block_size - remainder
+    return data + (repeat_padder * padding_len)
 
 def gen_pkcs7_like_padding(padder):
     def func(data):
-        return repeat_append_singlebyte_padding(data, padder)
+        return gen_padding(
+            data,
+            begin_padder=padder,
+            repeat_padder=padder
+        )
     return func
 
 def gen_iso_like_padding(begin_padder, repeat_padder):
-
-    # ISO/IEC 9797-1（消息认证码MAC的计算标准）
-    # Eg: 数据 + 80 + 00 00 00 ...
     def func(data):
-        return repeat_append_singlebyte_padding(data + begin_padder, repeat_padder)
+        return gen_padding(
+            data,
+            begin_padder=begin_padder,
+            repeat_padder=repeat_padder
+        )
     return func
 
 
@@ -70,8 +83,6 @@ def main() -> None:
     print(f"SM4 MAC: {sm4mac(key, data).hex()}")
     print("==============")
     print(f"SM4 PKCS MAC: {sm4mac(key, data, padding_methoh=pkcs7_padding).hex()}")
-    print("==============")
-    print(f"SM4 ISO MAC: {sm4mac(key, data, padding_methoh=pkcs7_padding).hex()}")
 
     for i in [
         0x00,
