@@ -27,7 +27,7 @@ def gen_padding(
 
     data_len = len(data)
     remainder = data_len % block_size
-    padding_len = block_size - remainder
+    padding_len = (block_size - remainder) % block_size
     return data + (repeat_padder * padding_len)
 
 def gen_pkcs7_like_padding(padder):
@@ -47,6 +47,16 @@ def gen_iso_like_padding(begin_padder, repeat_padder):
             repeat_padder=repeat_padder
         )
     return func
+
+def gen_fill(padder):
+    def func(data):
+        return gen_padding(
+            data,
+            begin_padder=b'',
+            repeat_padder=padder
+        )
+    return func
+
 
 
 def pkcs7_padding(data: bytes) -> bytes:
@@ -99,6 +109,8 @@ def main() -> None:
         repeat_padder = int.to_bytes(repeat_padder)
         print("==============")
         print(f"SM4 ISO Padder MAC: {sm4mac(key, data, padding_methoh=gen_iso_like_padding(begin_padder, repeat_padder)).hex()}")
+
+    sm4ecb(key, data)
 
 
 
