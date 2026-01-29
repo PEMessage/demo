@@ -30,7 +30,7 @@ def gen_padding(
     padding_len = (block_size - remainder) % block_size
     return data + (repeat_padder * padding_len)
 
-def gen_pkcs7_like_padding(padder):
+def gen_unconditional_padding(padder):
     def func(data):
         return gen_padding(
             data,
@@ -80,27 +80,52 @@ def sm4mac(key: bytes, data: bytes, iv: bytes = b'\x00' * 16, padding_methoh = d
     encrypted_data = encryptor.update(padded_data) + encryptor.finalize()
     return encrypted_data[-16:]
 
-def main() -> None:
-    print("Hello from sm4mac.py!")
+def xor_by_blocks(data: bytes, block_size: int) -> bytes:
+    if len(data) % block_size != 0:
+        raise ValueError(f"len(data) must be modable by block_size: {block_size}")
 
+    result = bytearray(block_size)
+    num_blocks = len(data) // block_size
+
+    for i in range(num_blocks):
+        block_start = i * block_size
+        block_end = block_start + block_size
+        block = data[block_start:block_end]
+
+        for j in range(block_size):
+            result[j] ^= block[j]
+
+    return bytes(result)
+
+
+
+
+def main() -> None:
     key = bytes.fromhex('11' * 16)  # 16-byte key
     data = bytes.fromhex('0000000000000000111111111111111122222222222222223333333333333333')
-    print("============================")
+    print("----------------------------")
     print(f"Key: {key.hex()}")
     print(f"Data: {data.hex()}")
+    print("----------------------------")
 
-    print("==============")
-    print(f"SM4 MAC: {sm4mac(key, data).hex()}")
     print("==============")
     print(f"SM4 PKCS MAC: {sm4mac(key, data, padding_methoh=pkcs7_padding).hex()}")
 
     for i in [
-        0x00,
-        0x10, # same as PKCS7
+        0x00
     ]:
         padder = int.to_bytes(i)
         print("==============")
-        print(f"SM4 Padder {padder.hex()} MAC: {sm4mac(key, data, padding_methoh=gen_pkcs7_like_padding(padder)).hex()}")
+        print(f"SM4 dummy fill {padder.hex()} MAC: {sm4mac(key, data, padding_methoh=gen_fill(padder)).hex()}")
+
+
+    for i in [
+        0x00,
+        0x10,
+    ]:
+        padder = int.to_bytes(i)
+        print("==============")
+        print(f"SM4 Uncondition Padder {padder.hex()} MAC: {sm4mac(key, data, padding_methoh=gen_unconditional_padding(padder)).hex()}")
 
     for begin_padder, repeat_padder in [
         (0x80, 0x00) # ISO/IEC 9797-1 padding
@@ -109,8 +134,6 @@ def main() -> None:
         repeat_padder = int.to_bytes(repeat_padder)
         print("==============")
         print(f"SM4 ISO Padder MAC: {sm4mac(key, data, padding_methoh=gen_iso_like_padding(begin_padder, repeat_padder)).hex()}")
-
-    sm4ecb(key, data)
 
 
 
