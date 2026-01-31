@@ -100,9 +100,7 @@ def xor_by_blocks(data: bytes, block_size: int) -> bytes:
 
 
 
-def main() -> None:
-    key = bytes.fromhex('11' * 16)  # 16-byte key
-    data = bytes.fromhex('0000000000000000111111111111111122222222222222223333333333333333')
+def main(key, data) -> None:
     print("----------------------------")
     print(f"Key: {key.hex()}")
     print(f"Data: {data.hex()}")
@@ -138,4 +136,24 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    keys = [
+        bytes.fromhex('11' * 16),
+        bytes.fromhex('01' * 16),
+        ('1' * 16).encode()
+    ]
+    datas = [
+        bytes.fromhex('0000000000000000111111111111111122222222222222223333333333333333'),
+        bytes.fromhex('22' * 16),
+        bytes.fromhex('22' * 8),
+        bytes.fromhex('22' * 4),
+        bytes.fromhex('02' * 16),
+        bytes.fromhex('02' * 8),
+        bytes.fromhex('02' * 4),
+        ('2' * 16).encode(),
+        ('2' * 8).encode(),
+        ('2' * 4).encode(),
+    ]
+
+    for key in keys:
+        for data in datas:
+            main(key, data)
