@@ -98,6 +98,23 @@ def xor_by_blocks(data: bytes, block_size: int) -> bytes:
     return bytes(result)
 
 
+def sm4mac_ums(key: bytes, data: bytes, padding_methoh):
+    data = gen_fill(b'\x00')(data)
+    first_xor = xor_by_blocks(data, 16)
+
+    left = first_xor[0:8]
+    left_literal = first_xor[0:8].hex().upper()
+
+    # print(left_literal.encode().hex())
+    block = sm4mac(key, left_literal.encode(), padding_methoh=padding_methoh)
+    # block = sm4mac(key, left, padding_methoh=padding_methoh)
+    print(f"first mac result: {block.hex()}")
+
+    right = first_xor[0:8].hex().upper().encode()
+    right = xor_by_blocks(block + right, 16)
+
+    res = sm4mac(key, right, padding_methoh=padding_methoh)
+    print(f"final mac result: {res.hex()}")
 
 
 def main(key, data) -> None:
@@ -133,15 +150,43 @@ def main(key, data) -> None:
         print("==============")
         print(f"SM4 ISO Padder MAC: {sm4mac(key, data, padding_methoh=gen_iso_like_padding(begin_padder, repeat_padder)).hex()}")
 
+    for method, name in [
+        (gen_fill(b'\x00'), "fill_zero"),
+        (pkcs7_padding, "pkcs7_padding"),
+        (gen_iso_like_padding(b'\x80', b'\x00'), "iso_padding"),
+    ]:
+        print("==============")
+        print(f"SM4 UMS with {name}: ")
+        sm4mac_ums(key, data, method)
+
+    print()
+    print()
+    print()
 
 
 if __name__ == "__main__":
     keys = [
         bytes.fromhex('11' * 16),
         bytes.fromhex('01' * 16),
-        ('1' * 16).encode()
+        ('1' * 16).encode(),
+        bytes.fromhex('31' * 16),
+        bytes.fromhex('32' * 8 + '31' * 8),
+        bytes.fromhex('32' * 16),
+        bytes.fromhex('36' * 8 + '37' * 8),
+        bytes.fromhex('36' * 16),
+        bytes.fromhex('f92714e80e832edc655ea628cf62585f'),
+        bytes.fromhex('8940e9c20603d37b16b2ccb944da2ce9'),
+
+        # this come from: decrypto_sm4(data=8940e9c20603d37b16b2ccb944da2ce9, key=31313131313131313131313131313131)
+        # notice that: decrypto_2des_ecb(data=8940e9c20603d37b16b2ccb944da2ce9, key=31313131313131313131313131313131) == 36363636363636363737373737373737
+        bytes.fromhex('CBF2DEF0A7B7C3E96A8FA5FF2B2C4744'),
+
+        # this come from: decrypto_sm4(data=f92714e80e832edc655ea628cf62585f, key=31313131313131313131313131313131)
+        # notice that: decrypto_2des_ecb(data=f92714e80e832edc655ea628cf62585f, key=31313131313131313131313131313131) == 32323232323232323131313131313131
+        bytes.fromhex('3662E342FCA04839A93C914A4CE19D95')
     ]
     datas = [
+        '0000000000000000111111111111111122222222222222223333333333333333'.encode(),
         bytes.fromhex('0000000000000000111111111111111122222222222222223333333333333333'),
         bytes.fromhex('22' * 16),
         bytes.fromhex('22' * 8),
@@ -152,6 +197,20 @@ if __name__ == "__main__":
         ('2' * 16).encode(),
         ('2' * 8).encode(),
         ('2' * 4).encode(),
+        bytes.fromhex('31' * 16),
+        bytes.fromhex('32' * 8 + '31' * 8),
+        bytes.fromhex('32' * 8),
+        bytes.fromhex('36' * 8 + '37' * 8),
+        bytes.fromhex('36' * 8),
+        bytes.fromhex('f92714e80e832edc655ea628cf62585f'),
+        bytes.fromhex('8940e9c20603d37b16b2ccb944da2ce9'),
+        bytes.fromhex('CBF2DEF0A7B7C3E96A8FA5FF2B2C4744'),
+        bytes.fromhex('0' * 4),
+        bytes.fromhex('0' * 8),
+        bytes.fromhex('0' * 16),
+        ('0' * 16).encode(),
+        ('0' * 8).encode(),
+        ('0' * 4).encode(),
     ]
 
     for key in keys:
