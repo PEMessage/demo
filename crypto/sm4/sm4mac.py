@@ -10,8 +10,6 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
 
 
-
-# If you set (begin_padder == repeat_padder == 0x10), you get PKCS7
 # If you set (begin_padder : 0x80, repeat_padder : 0x00), you get ISO
 # If you set (begin_padder : '', repeat_padder : 0x00), you get fill_to block_size
 def gen_padding(

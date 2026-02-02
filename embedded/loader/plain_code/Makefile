@@ -13,7 +13,7 @@ OBJDUMP     := $(CROSS_COMPILE)objdump
 SIZE        := $(CROSS_COMPILE)size
 
 DEBUG_INFO_CFLAGS := -g -g3
-OPTIMIZE_CFLAGS := -Os
+OPTIMIZE_CFLAGS := -O0
 ASM_CFLAGS := -mcpu=cortex-m3 -mthumb
 
 # LDFLAGS := -r
