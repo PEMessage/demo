@@ -61,24 +61,32 @@ SRCS    := lib/CMSDK_CM3/Source/startup_CMSDK_CM3.c lib/CMSDK_CM3/Source/system_
 # Step 2, USART Driver / clib(nosys) / and retarget printf 
 # ====================================================
 # Thanks to: https://www.reddit.com/r/embedded/comments/o2kuqt/linking_freertos_for_gcc/
-# 	FreeRTOS needs a memcpy and memset implementation.
-# 	Either you need to get them from the standard library or you need to implement them yourself.
-# 	To use the standard library, you can use --specs=nano.spec or --specs=nosys.spec in LDFLAGS (and remove -nostdlib).
+#	FreeRTOS needs a memcpy and memset implementation.
+#	Either you need to get them from the standard library or you need to implement them yourself.
+#	To use the standard library, you can use --specs=nano.spec or --specs=nosys.spec in LDFLAGS (and remove -nostdlib).
 # Also See:
-# 	Retarget using nosys.specs
-# 	https://community.arm.com/support-forums/f/compilers-and-libraries-forum/44223/what-are-the-compile-option-differences-between---specs-nosys-specs-and---specs-rdimon-specs-in-arm-none-eabi-gcc
+#	Retarget using nosys.specs
+#	https://community.arm.com/support-forums/f/compilers-and-libraries-forum/44223/what-are-the-compile-option-differences-between---specs-nosys-specs-and---specs-rdimon-specs-in-arm-none-eabi-gcc
 # Must Read:
-# 	https://metebalci.com/blog/demystifying-arm-gnu-toolchain-specs-nano-and-nosys/
-# 	nano.specs 与其他所有规格文件的一个区别是，
-# 	nano.specs 除了更改链接选项外还会修改编译选项（而其他规格文件仅修改链接选项）。
-# 	另一个不同点是 nano.specs 会改变标准 C 库，而其他规格文件则与标准 C 库和系统的交互有关
-# 	并且你还可以选择其中一个其他规格文件（例如 nosys）或不使用（那么你的系统中必须以某种方式提供 syscalls）。
-# 	CFLAGS += -specs=nano.specs
-# 	CFLAGS  += -lnosys -lm
+#	https://metebalci.com/blog/demystifying-arm-gnu-toolchain-specs-nano-and-nosys/
+#	nano.specs 与其他所有规格文件的一个区别是，
+#	nano.specs 除了更改链接选项外还会修改编译选项（而其他规格文件仅修改链接选项）。
+#	另一个不同点是 nano.specs 会改变标准 C 库，而其他规格文件则与标准 C 库和系统的交互有关
+#	并且你还可以选择其中一个其他规格文件（例如 nosys）或不使用（那么你的系统中必须以某种方式提供 syscalls）。
+#	CFLAGS += -specs=nano.specs
+#	CFLAGS  += -lnosys -lm
 LDFLAGS += -specs=nosys.specs -lnosys
 SRCS    += lib/CMSDK_CM3/Source/USART_V2M-MPS2.c lib/CMSDK_CM3/Source/stdout_USART.c
 CFLAGS  += -Ilib/CMSDK_CM3/Include/
 CFLAGS  += -Ilib/CMSIS/Driver/Include
+
+# ====================================================
+# Applet loader specific configuration
+# ====================================================
+ifeq ($(MODULE_NAME),applet_loader)
+  CFLAGS += -Iapplet_lib
+  GEN_SRCS := src/applet_loader/applets_data.c
+endif
 
 # ====================================================
 # Step 3, User code
@@ -98,10 +106,26 @@ LSS     := $(OUT)/$(MODULE_NAME).lss
 # Default target
 all: $(TARGET) $(BIN) $(LSS)
 
-# Link the final executable
+# Build applets first for applet_loader
+ifeq ($(MODULE_NAME),applet_loader)
+# Build applets separately
+applets_build:
+	@chmod +x build_applets.sh && ./build_applets.sh
+
+src/applet_loader/applets_data.c: applets_build
+	@echo "Generating applet data..."
+	@echo "// Auto-generated applet data" > $@
+	@echo '#include <stdint.h>' >> $@
+	@echo '#include <stddef.h>' >> $@
+	@echo '' >> $@
+	@xxd -i build/applets/sample_applet.bin >> $@
+	@echo '' >> $@
+	@echo "const uint8_t* sample_applet_bin = (const uint8_t*)build_applets_sample_applet_bin;" >> $@
+
+endif
+
 $(TARGET): $(OBJS)
 	mkdir -p $$(dirname $@)
-	# $(LD) $(LDFLAGS) -o $@ $^
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
 
 # Generate binary file for flashing
@@ -125,6 +149,8 @@ $(OUT)/%.S.o: %.S
 # Clean build artifacts
 clean:
 	rm -f $(OBJS) $(TARGET) $(BIN)
+	rm -rf build/applets
+
 run: all
 	qemu-system-arm \
 		-machine mps2-an385 \
@@ -143,5 +169,4 @@ debug: all
 		-s -S
 
 
-
-.PHONY: all clean size run
+.PHONY: all clean size run applets_build

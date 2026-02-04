@@ -1,0 +1,30 @@
+/* Minimal applet linker script for mps2an385 */
+
+MEMORY
+{
+  ram (rwx) : ORIGIN = 0x20010000, LENGTH = 32K
+}
+
+SECTIONS
+{
+  .applet_header : {
+    KEEP(*(.applet_header))
+  } > ram
+  
+  .text : {
+    *(.text*)
+    *(.rodata*)
+  } > ram
+  
+  .data : {
+    *(.data*)
+  } > ram
+  
+  .bss : {
+    *(.bss*)
+    *(COMMON)
+  } > ram
+  
+  __bss_start = ADDR(.bss);
+  __bss_end = ADDR(.bss) + SIZEOF(.bss);
+}
