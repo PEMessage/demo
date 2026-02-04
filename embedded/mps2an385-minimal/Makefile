@@ -81,14 +81,6 @@ CFLAGS  += -Ilib/CMSDK_CM3/Include/
 CFLAGS  += -Ilib/CMSIS/Driver/Include
 
 # ====================================================
-# Applet loader specific configuration
-# ====================================================
-ifeq ($(MODULE_NAME),applet_loader)
-  CFLAGS += -Iapplet_lib
-  GEN_SRCS := src/applet_loader/applets_data.c
-endif
-
-# ====================================================
 # Step 3, User code
 # ====================================================
 ifeq ($(call file_exists,src/$(MODULE_NAME)/*.mk),false)
@@ -97,7 +89,6 @@ ifeq ($(call file_exists,src/$(MODULE_NAME)/*.mk),false)
 else
   $(call include_wildcard,src/$(MODULE_NAME)/*.mk)
 endif
-
 OBJS    := $(addprefix $(OUT)/, $(SRCS:.c=.o))
 TARGET  := $(OUT)/$(MODULE_NAME).elf
 BIN     := $(OUT)/$(MODULE_NAME).bin
@@ -105,24 +96,6 @@ LSS     := $(OUT)/$(MODULE_NAME).lss
 
 # Default target
 all: $(TARGET) $(BIN) $(LSS)
-
-# Build applets first for applet_loader
-ifeq ($(MODULE_NAME),applet_loader)
-# Build applets separately
-applets_build:
-	@chmod +x build_applets.sh && ./build_applets.sh
-
-src/applet_loader/applets_data.c: applets_build
-	@echo "Generating applet data..."
-	@echo "// Auto-generated applet data" > $@
-	@echo '#include <stdint.h>' >> $@
-	@echo '#include <stddef.h>' >> $@
-	@echo '' >> $@
-	@xxd -i build/applets/sample_applet.bin >> $@
-	@echo '' >> $@
-	@echo "const uint8_t* sample_applet_bin = (const uint8_t*)build_applets_sample_applet_bin;" >> $@
-
-endif
 
 $(TARGET): $(OBJS)
 	mkdir -p $$(dirname $@)
@@ -149,7 +122,6 @@ $(OUT)/%.S.o: %.S
 # Clean build artifacts
 clean:
 	rm -f $(OBJS) $(TARGET) $(BIN)
-	rm -rf build/applets
 
 run: all
 	qemu-system-arm \
@@ -168,5 +140,6 @@ debug: all
 		-nographic -serial stdio \
 		-s -S
 
+.SECONDARY:
 
-.PHONY: all clean size run applets_build
+.PHONY: all clean size run
