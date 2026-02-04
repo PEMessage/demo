@@ -18,6 +18,9 @@ typedef struct {
 #define APPLET_MAGIC 0x4150504C
 #define APPLET_VERSION 1
 
+// keep this value same as applets/applet_lib/applet.lds
+#define APPLET_LINK_ADDR 0x40000000
+
 #define APPLET_EXPORT_HEADER(name_str, entry_func) \
     __attribute__((section(".applet_header"), used)) \
     applet_header_t applet_header = { \

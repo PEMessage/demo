@@ -2,7 +2,8 @@
 
 MEMORY
 {
-  ram (rwx) : ORIGIN = 0x20010000, LENGTH = 32K
+  /* NOTICE: if you change this, all applet should be update(will not rebuild automatic) */
+  ram (rwx) : ORIGIN = 0x40000000, LENGTH = 32K
 }
 
 SECTIONS

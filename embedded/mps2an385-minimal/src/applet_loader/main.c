@@ -84,10 +84,9 @@ static int load_applet(const uint8_t* data, size_t size) {
     printf("Applet magic: 0x%08lX OK\n", (uint32_t)header->magic);
     printf("Applet version: %lu\n", (unsigned long)header->version);
     
-    // Relocate addresses: applet was linked at 0x20010000
-    const uint32_t link_base = 0x20010000;
+    const uint32_t link_base = APPLET_LINK_ADDR;
     uint32_t load_base = (uint32_t)applet_memory;
-    int32_t delta = load_base - link_base;
+    int64_t delta = (int64_t)load_base - (int64_t)link_base;
     
     printf("Link base: 0x%08lX\n", (unsigned long)link_base);
     printf("Load base: 0x%08lX\n", (unsigned long)load_base);
@@ -95,12 +94,12 @@ static int load_applet(const uint8_t* data, size_t size) {
     
     // Relocate entry point
     uint32_t entry_link = (uint32_t)header->entry;
-    uint32_t entry_load = entry_link + delta;
+    uint32_t entry_load = (int64_t)entry_link + (int64_t)delta;
     header->entry = (uint32_t (*)(const struct applet_api*, void*))entry_load;
     
     // Relocate name pointer
     uint32_t name_link = (uint32_t)header->name;
-    uint32_t name_load = name_link + delta;
+    uint32_t name_load = (int64_t)name_link + (int64_t)delta;
     header->name = (const char*)name_load;
     
     printf("Entry (link): 0x%08lX\n", (unsigned long)entry_link);
