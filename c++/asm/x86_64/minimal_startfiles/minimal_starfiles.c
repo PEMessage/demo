@@ -53,21 +53,32 @@ static void write_str(const char *s) {
     syscall(SYS_write, 1, (long)s, len);
 }
 
+static void exit(int status) {
+    syscall(SYS_exit, status, 0, 0);
+}
 
 
 int main_me(int argc, char **argv, int enc, char **env) {
     write_str("Hello from minimal startup!\n");
-    for (int i = 0; i < argc ; i++) {
-        write_str("\narg: ");
-        write_str(argv[i]);
-    }
+
+    write_str("-------\n");
 
     for (int i = 0; i < enc ; i++) {
-        write_str("\nenv: ");
+        write_str("env: ");
         write_str(env[i]);
+        write_str("\n");
     }
 
-    write_str("\nDone");
-    while(1); // without while loop, might be exit without print, is that normal?
-    return 0;
+    write_str("-------\n");
+
+    for (int i = 0; i < argc ; i++) {
+        write_str("arg: ");
+        write_str(argv[i]);
+        write_str("\n");
+    }
+
+    write_str("-------\n");
+
+    write_str("Done\n");
+    exit(0);
 }
