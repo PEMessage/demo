@@ -55,6 +55,10 @@ def gen_fill(padder):
         )
     return func
 
+def pkcs7_ours_padding(data):
+    padder = int.to_bytes(16 - len(data) % 16, length=1, byteorder='little')
+    return gen_padding(data, begin_padder=padder, repeat_padder=padder)
+
 
 
 def pkcs7_padding(data: bytes) -> bytes:
@@ -151,6 +155,7 @@ def main(key, data) -> None:
     for method, name in [
         (gen_fill(b'\x00'), "fill_zero"),
         (pkcs7_padding, "pkcs7_padding"),
+        (pkcs7_ours_padding, "pkcs7_ours_padding"),
         (gen_iso_like_padding(b'\x80', b'\x00'), "iso_padding"),
     ]:
         print("==============")
