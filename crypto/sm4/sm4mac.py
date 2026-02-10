@@ -59,6 +59,19 @@ def pkcs7_ours_padding(data):
     padder = int.to_bytes(16 - len(data) % 16, length=1, byteorder='little')
     return gen_padding(data, begin_padder=padder, repeat_padder=padder)
 
+def iso_9797_2011_method1_padding(data):
+    # 6.3.2 Padding Method 1
+    # The data string D to be input to the MAC algorithm shall be right-padded with as few (possibly none) '0' bits as necessary to obtain a data string whose length (in bits) is a positive integer multiple of n.
+    # NOTE 1 MAC algorithms using Padding Method 1 may be subject to trivial forgery attacks. See informative Annex C for further details.
+    # NOTE 2 If the data string is empty, Padding Method 1 specifies that it is right-padded with n '0' bits.
+    return gen_fill(b'\x00')(data)
+
+def iso_9797_2011_method2_padding(data):
+    # 6.3.3 Padding Method 2
+    # The data string D to be input to the MAC algorithm shall be right-padded with a single '1' bit.
+    # The resulting string shall then be right-padded with as few (possibly none) '0' bits as necessary to obtain a data string whose length (in bits) is a positive integer multiple of n.
+    # NOTE If the data string is empty, Padding Method 2 specifies that it is right-padded with a single '1' bit followed by n−1 '0' bits.
+    return gen_iso_like_padding(b'\x80', b'\x00')(data)
 
 
 def pkcs7_padding(data: bytes) -> bytes:
@@ -145,7 +158,7 @@ def main(key, data) -> None:
         print(f"SM4 Uncondition Padder {padder.hex()} MAC: {sm4mac(key, data, padding_methoh=gen_unconditional_padding(padder)).hex()}")
 
     for begin_padder, repeat_padder in [
-        (0x80, 0x00) # ISO/IEC 9797-1 padding
+        (0x80, 0x00) # ISO/IEC 9797-1 method2 padding
     ]:
         begin_padder = int.to_bytes(begin_padder)
         repeat_padder = int.to_bytes(repeat_padder)
