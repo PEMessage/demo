@@ -1,0 +1,12 @@
+[project]
+name = "torrent2magnet"
+version = "0.1.0"
+description = "Convert torrent files to magnet links"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "bencode.py>=4.0.0",
+]
+
+[project.scripts]
+torrent2magnet = "torrent2magnet.cli:main"
