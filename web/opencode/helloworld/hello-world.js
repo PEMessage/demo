@@ -1,0 +1,1 @@
+.opencode/plugins/hello-world.js
