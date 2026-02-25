@@ -1,0 +1,14 @@
+
+west := "uvx --with jsonschema --with pyelftools --with anytree west"
+
+run:
+    # this was found by ninja -C build -t browse
+    {{west}} build -b mps2/an385 demo/helloworld/ -t run_qemu
+build:
+    {{west}} build -b mps2/an385 demo/helloworld/
+
+
+tracecmake:
+    {{west}} build -b mps2/an385 demo/helloworld/ -- --trace
+
+
