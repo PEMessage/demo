@@ -1,0 +1,24 @@
+manifest:
+  self:
+    path: demo
+  remotes:
+    - name: zephyrproject-rtos
+      url-base: https://github.com/zephyrproject-rtos
+  projects:
+    - name: zephyr
+      remote: zephyrproject-rtos
+      revision: v4.3.0
+      # path: zephyr_rtos/zephyr
+      import:
+        path-prefix: zephyr_rtos
+        name-allowlist:
+          - cmsis
+          - cmsis_6
+          # - hal_stm32
+          # - picolibc
+          - cmsis_dsp
+          # - littlefs
+          # - mcuboot
+          # - lvgl
+          # - segger
+
