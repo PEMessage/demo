@@ -3,3 +3,4 @@
 .cache
 .aider.*
 build/
+__pycache__/
