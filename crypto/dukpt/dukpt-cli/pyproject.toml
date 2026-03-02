@@ -12,3 +12,6 @@ dependencies = [
 dev = [
     "ruff>=0.15.0",
 ]
+
+[project.scripts]
+dukpt-cli = "main:main"
