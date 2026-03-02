@@ -13,7 +13,7 @@ Example usage:
         working_key_type=KeyType.AES128,
         ksn=ksn,
     )
-    
+
     # From Initial Key (when you already have IK)
     ik = bytes.fromhex("CE9CE0C101D1138F97FB6CAD4DF045A7...")
     pin_key = derive_pin_encryption_key_from_ik(
@@ -99,30 +99,30 @@ def _create_derivation_data(
 ) -> list[bytes]:
     """
     Create derivation data blocks according to ANSI X9.24-3-2017.
-    
+
     Returns a list of 16-byte blocks, one for each block of derived key material.
     """
     num_blocks = (_key_length(key_type) + 127) // 128
     blocks = []
-    
+
     for block_counter in range(1, num_blocks + 1):
         data = bytearray(16)
-        
+
         # Byte 0: Version
         data[0] = 0x01
-        
+
         # Byte 1: Key Block Counter
         data[1] = block_counter
-        
+
         # Bytes 2-3: Key Usage Indicator
         data[2:4] = key_usage.value.to_bytes(2, "big")
-        
+
         # Bytes 4-5: Algorithm Indicator
         data[4:6] = _algorithm_indicator(key_type)
-        
+
         # Bytes 6-7: Length
         data[6:8] = _length_bytes(key_type)
-        
+
         # Bytes 8-15: depend on derivation purpose
         if is_initial_key:
             # For initial key: use full 64-bit Initial Key ID
@@ -131,30 +131,30 @@ def _create_derivation_data(
             # For working/derivation keys: use right 32 bits of IKID + 32-bit counter
             data[8:12] = initial_key_id[4:8]  # Right half of Initial Key ID (Derivation ID)
             data[12:16] = transaction_counter.to_bytes(4, "big")
-        
+
         blocks.append(bytes(data))
-    
+
     return blocks
 
 
 def derive_key(derivation_key: bytes, key_type: KeyType, derivation_data: list[bytes]) -> bytes:
     """
     Derive a key using AES-ECB in counter mode (NIST SP800-108).
-    
+
     Args:
         derivation_key: The key to derive from (AES-128, AES-192, or AES-256)
         key_type: The type of key to derive
         derivation_data: List of 16-byte derivation data blocks
-    
+
     Returns:
         The derived key (length depends on key_type)
     """
     cipher = AES.new(derivation_key, AES.MODE_ECB)
-    
+
     result = bytearray()
     for block in derivation_data:
         result.extend(cipher.encrypt(block))
-    
+
     # Return only the required number of bytes for the key type
     key_len_bytes = _key_length(key_type) // 8
     return bytes(result[:key_len_bytes])
@@ -163,12 +163,12 @@ def derive_key(derivation_key: bytes, key_type: KeyType, derivation_data: list[b
 def derive_initial_key(bdk: bytes, key_type: KeyType, initial_key_id: bytes) -> bytes:
     """
     Derive the Initial DUKPT Key from the Base Derivation Key.
-    
+
     Args:
         bdk: Base Derivation Key (AES-128, AES-192, or AES-256)
         key_type: Type of key being derived
         initial_key_id: 64-bit Initial Key ID (BDK ID || Derivation ID)
-    
+
     Returns:
         The Initial DUKPT Key
     """
@@ -192,10 +192,10 @@ def _derive_working_key_from_initial_key(
 ) -> bytes:
     """
     Derive a working key from the Initial DUKPT Key for a given transaction.
-    
+
     This is the core algorithm used after the Initial Key has been obtained
     (either derived from BDK or loaded directly).
-    
+
     Args:
         initial_key: The Initial DUKPT Key (already derived from BDK)
         derive_key_type: Type of the derivation key (same as Initial Key type)
@@ -203,7 +203,7 @@ def _derive_working_key_from_initial_key(
         working_key_type: Type of working key to derive
         initial_key_id: 64-bit Initial Key ID
         transaction_counter: 32-bit transaction counter
-    
+
     Returns:
         The derived working key
     """
@@ -211,7 +211,7 @@ def _derive_working_key_from_initial_key(
     mask = 0x80000000
     working_counter = 0
     derivation_key = initial_key
-    
+
     while mask > 0:
         if transaction_counter & mask:
             working_counter |= mask
@@ -224,7 +224,7 @@ def _derive_working_key_from_initial_key(
             )
             derivation_key = derive_key(derivation_key, derive_key_type, derivation_data)
         mask >>= 1
-    
+
     # Step 2: Derive the working key from the current derivation key
     derivation_data = _create_derivation_data(
         working_key_usage,
@@ -234,7 +234,7 @@ def _derive_working_key_from_initial_key(
         is_initial_key=False,
     )
     working_key = derive_key(derivation_key, working_key_type, derivation_data)
-    
+
     return working_key
 
 
@@ -248,9 +248,9 @@ def derive_working_key(
 ) -> bytes:
     """
     Derive a working key from the Base Derivation Key for a given transaction.
-    
+
     This follows the Host Security Module algorithm from the specification.
-    
+
     Args:
         bdk: Base Derivation Key
         derive_key_type: Type of the derivation key (usually same as BDK type)
@@ -258,13 +258,13 @@ def derive_working_key(
         working_key_type: Type of working key to derive
         initial_key_id: 64-bit Initial Key ID
         transaction_counter: 32-bit transaction counter
-    
+
     Returns:
         The derived working key
     """
     # Step 1: Derive the Initial Key from BDK
     initial_key = derive_initial_key(bdk, derive_key_type, initial_key_id)
-    
+
     # Step 2: Derive working key from Initial Key
     return _derive_working_key_from_initial_key(
         initial_key, derive_key_type, working_key_usage, working_key_type,
@@ -275,26 +275,26 @@ def derive_working_key(
 def parse_ksn(ksn: str | bytes) -> tuple[bytes, int]:
     """
     Parse a 96-bit KSN (Key Serial Number) into Initial Key ID and Transaction Counter.
-    
+
     KSN format:
     - Bytes 0-7: Initial Key ID (64 bits) = BDK ID (32 bits) + Derivation ID (32 bits)
     - Bytes 8-11: Transaction Counter (32 bits)
-    
+
     Args:
         ksn: 24 hex characters or 12 bytes
-    
+
     Returns:
         Tuple of (initial_key_id: 8 bytes, transaction_counter: int)
     """
     if isinstance(ksn, str):
         ksn = bytes.fromhex(ksn)
-    
+
     if len(ksn) != 12:
         raise ValueError(f"KSN must be 12 bytes (96 bits), got {len(ksn)}")
-    
+
     initial_key_id = ksn[:8]
     transaction_counter = int.from_bytes(ksn[8:12], "big")
-    
+
     return initial_key_id, transaction_counter
 
 
@@ -373,17 +373,17 @@ def derive_working_key_from_ik(
 ) -> bytes:
     """
     Derive a working key from the Initial DUKPT Key for a given KSN.
-    
+
     This is useful when you already have the Initial Key (e.g., from test vectors
     or device initialization) rather than starting from the BDK.
-    
+
     Args:
         initial_key: The Initial DUKPT Key
         derive_key_type: Type of the derivation key (same as Initial Key type)
         working_key_usage: Usage of the working key
         working_key_type: Type of working key to derive
         ksn: Key Serial Number (24 hex chars or 12 bytes)
-    
+
     Returns:
         The derived working key
     """
@@ -450,47 +450,61 @@ def derive_key_encryption_key_from_ik(
 # Test with ANSI X9.24-3-2017 test vectors
 # =============================================================================
 
-if __name__ == "__main__":
-    import json
-    
-    with open("test/data.json") as f:
-        test_data = json.load(f)
-    
+def _get_working_key_type(work_key_type_str: str) -> KeyType | None:
+    """Convert string key type to KeyType enum."""
+    type_map = {
+        "AES-256": KeyType.AES256,
+        "AES-192": KeyType.AES192,
+        "AES-128": KeyType.AES128,
+        "3TDEA": KeyType._3TDEA,
+        "2TDEA": KeyType._2TDEA,
+    }
+    return type_map.get(work_key_type_str)
+
+
+def _get_ik_key_type(ik_hex: str) -> KeyType:
+    """Determine IK key type from its length."""
+    ik_len = len(ik_hex) // 2
+    if ik_len == 32:
+        return KeyType.AES256
+    elif ik_len == 24:
+        return KeyType.AES192
+    elif ik_len == 16:
+        return KeyType.AES128
+    else:
+        raise ValueError(f"Unknown IK length: {ik_len} bytes")
+
+
+def _run_tests(test_data: list, derive_key_type: KeyType | None = None) -> bool:
+    """Run tests on a test data set."""
     all_passed = True
-    
+
     for test in test_data:
         work_key_type = test["WorK_Key_Type"]
         ik_hex = test["IK"]
         ksn = test["KSN"]
-        
-        # Determine key types
-        if work_key_type == "AES-256":
-            working_key_type = KeyType.AES256
-        elif work_key_type == "AES-192":
-            working_key_type = KeyType.AES192
-        elif work_key_type == "AES-128":
-            working_key_type = KeyType.AES128
-        elif work_key_type == "3TDEA":
-            working_key_type = KeyType._3TDEA
-        elif work_key_type == "2TDEA":
-            working_key_type = KeyType._2TDEA
-        else:
+
+        working_key_type = _get_working_key_type(work_key_type)
+        if working_key_type is None:
             continue
-        
+
         # Parse KSN
         initial_key_id, tc = parse_ksn(ksn)
-        
+
         # The IK in test data is already the Initial DUKPT Key
         ik = bytes.fromhex(ik_hex)
-        
-        print(f"\n=== Test: {work_key_type} ===")
+
+        # Determine derive_key_type from IK length if not specified
+        if derive_key_type is None:
+            test_derive_key_type = _get_ik_key_type(ik_hex)
+        else:
+            test_derive_key_type = derive_key_type
+
+        print(f"\n=== Test: {work_key_type} (IK: {test_derive_key_type.value}) ===")
         print(f"KSN: {ksn}")
         print(f"Initial Key ID: {initial_key_id.hex().upper()}")
         print(f"Transaction Counter: {tc:08X}")
-        
-        # The derive_key_type should match the IK type (AES-256 in test data)
-        derive_key_type = KeyType.AES256
-        
+
         # Test all key types from the test data
         test_keys = [
             ("PIN_Encryption_Key", KeyUsage.PIN_ENCRYPTION),
@@ -503,24 +517,55 @@ if __name__ == "__main__":
             ("Key_Encryption_Key", KeyUsage.KEY_ENCRYPTION),
             ("Key_Derivation_Key", KeyUsage.KEY_DERIVATION),
         ]
-        
+
         for test_key_name, key_usage in test_keys:
             derived_key = _derive_working_key_from_initial_key(
-                ik, derive_key_type, key_usage, working_key_type,
+                ik, test_derive_key_type, key_usage, working_key_type,
                 initial_key_id, tc
             )
             expected_key = bytes.fromhex(test[test_key_name])
-            
+
             match = derived_key == expected_key
             if not match:
                 all_passed = False
-            
+
             status = "PASS" if match else "FAIL"
             print(f"  {test_key_name}: {status}")
             if not match:
                 print(f"    Expected: {expected_key.hex().upper()}")
                 print(f"    Got:      {derived_key.hex().upper()}")
-    
+
+    return all_passed
+
+
+if __name__ == "__main__":
+    import json
+
+    all_passed = True
+
+    # Test 1: Original test data (AES-256 IK)
+    print("\n" + "=" * 50)
+    print("TEST SET 1: AES-256 Initial Key")
+    print("=" * 50)
+
+    with open("test/data.json") as f:
+        test_data = json.load(f)
+
+    if not _run_tests(test_data, KeyType.AES256):
+        all_passed = False
+
+    # Test 2: AES-128 IK test data
+    print("\n" + "=" * 50)
+    print("TEST SET 2: AES-128 Initial Key")
+    print("=" * 50)
+
+    with open("test/data_ik_aes128.json") as f:
+        test_data_ik128 = json.load(f)
+
+    if not _run_tests(test_data_ik128, KeyType.AES128):
+        all_passed = False
+
+    # Final summary
     print(f"\n{'='*50}")
     if all_passed:
         print("All tests passed!")
