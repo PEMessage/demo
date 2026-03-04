@@ -15,3 +15,6 @@ dev = [
 
 [project.scripts]
 dukpt-cli = "main:main"
+
+[tool.setuptools]
+py-modules = ["main"]
