@@ -1,0 +1,22 @@
+[project]
+name = "mac-cli"
+version = "0.1.0"
+description = "ISO/IEC 9797-1 MAC (Message Authentication Code) calculator"
+readme = "README.md"
+requires-python = ">=3.12"
+
+dependencies = [
+    "pycryptodome>=3.23.0",
+]
+
+[project.scripts]
+mac-cli = "main:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
