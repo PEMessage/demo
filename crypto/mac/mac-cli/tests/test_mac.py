@@ -158,6 +158,32 @@ class TestMACAlgorithm1:
         mac = mac_algorithm_1(data, key, "DES", 32, PaddingMethod.METHOD_1)
         assert mac.hex().upper() == "E45B3AD2"
 
+    def test_alg1_des_padding2_data2(self):
+        """Test MAC Algorithm 1 with DES, Padding Method 2, Data string 2.
+
+        From Annex B.2:
+        Data = "Now is the time for it"
+        Expected MAC = A924C721 (32 bits)
+        """
+        key = bytes.fromhex("0123456789ABCDEF")
+        data = b"Now is the time for it"
+
+        mac = mac_algorithm_1(data, key, "DES", 32, PaddingMethod.METHOD_2)
+        assert mac.hex().upper() == "A924C721"
+
+    def test_alg1_des_padding3_data2(self):
+        """Test MAC Algorithm 1 with DES, Padding Method 3, Data string 2.
+
+        From Annex B.2:
+        Data = "Now is the time for it"
+        Expected MAC = B1ECD6FC (32 bits)
+        """
+        key = bytes.fromhex("0123456789ABCDEF")
+        data = b"Now is the time for it"
+
+        mac = mac_algorithm_1(data, key, "DES", 32, PaddingMethod.METHOD_3)
+        assert mac.hex().upper() == "B1ECD6FC"
+
 
 class TestMACAlgorithm2:
     """Test MAC Algorithm 2 (EMAC) with DES test vectors."""
@@ -189,6 +215,59 @@ class TestMACAlgorithm2:
         mac = mac_algorithm_2(data, key, key_prime, "DES", 32, PaddingMethod.METHOD_2)
         assert mac.hex().upper() == "BE7C2AB7"
 
+    def test_alg2_des_padding3_data1(self):
+        """Test MAC Algorithm 2 with DES, Padding Method 3, Data string 1.
+
+        From Annex B.3:
+        Expected MAC = 8EFC8BC7 (32 bits)
+        """
+        key = bytes.fromhex("0123456789ABCDEF")
+        key_prime = bytes.fromhex("F1D3B597795B3D1F")
+        data = b"Now is the time for all "
+
+        mac = mac_algorithm_2(data, key, key_prime, "DES", 32, PaddingMethod.METHOD_3)
+        assert mac.hex().upper() == "8EFC8BC7"
+
+    def test_alg2_des_padding1_data2(self):
+        """Test MAC Algorithm 2 with DES, Padding Method 1, Data string 2.
+
+        From Annex B.3:
+        Data = "Now is the time for it"
+        Expected MAC = 215E9CE6 (32 bits)
+        """
+        key = bytes.fromhex("0123456789ABCDEF")
+        key_prime = bytes.fromhex("F1D3B597795B3D1F")
+        data = b"Now is the time for it"
+
+        mac = mac_algorithm_2(data, key, key_prime, "DES", 32, PaddingMethod.METHOD_1)
+        assert mac.hex().upper() == "215E9CE6"
+
+    def test_alg2_des_padding2_data2(self):
+        """Test MAC Algorithm 2 with DES, Padding Method 2, Data string 2.
+
+        From Annex B.3:
+        Expected MAC = 1736AC1A (32 bits)
+        """
+        key = bytes.fromhex("0123456789ABCDEF")
+        key_prime = bytes.fromhex("F1D3B597795B3D1F")
+        data = b"Now is the time for it"
+
+        mac = mac_algorithm_2(data, key, key_prime, "DES", 32, PaddingMethod.METHOD_2)
+        assert mac.hex().upper() == "1736AC1A"
+
+    def test_alg2_des_padding3_data2(self):
+        """Test MAC Algorithm 2 with DES, Padding Method 3, Data string 2.
+
+        From Annex B.3:
+        Expected MAC = 05382696 (32 bits)
+        """
+        key = bytes.fromhex("0123456789ABCDEF")
+        key_prime = bytes.fromhex("F1D3B597795B3D1F")
+        data = b"Now is the time for it"
+
+        mac = mac_algorithm_2(data, key, key_prime, "DES", 32, PaddingMethod.METHOD_3)
+        assert mac.hex().upper() == "05382696"
+
 
 class TestMACAlgorithm3:
     """Test MAC Algorithm 3 (Retail MAC) with DES test vectors."""
@@ -219,6 +298,59 @@ class TestMACAlgorithm3:
 
         mac = mac_algorithm_3(data, key, key_prime, "DES", 32, PaddingMethod.METHOD_2)
         assert mac.hex().upper() == "E9086230"
+
+    def test_alg3_des_padding3_data1(self):
+        """Test MAC Algorithm 3 with DES, Padding Method 3, Data string 1.
+
+        From Annex B.4:
+        Expected MAC = AB059463 (32 bits)
+        """
+        key = bytes.fromhex("0123456789ABCDEF")
+        key_prime = bytes.fromhex("FEDCBA9876543210")
+        data = b"Now is the time for all "
+
+        mac = mac_algorithm_3(data, key, key_prime, "DES", 32, PaddingMethod.METHOD_3)
+        assert mac.hex().upper() == "AB059463"
+
+    def test_alg3_des_padding1_data2(self):
+        """Test MAC Algorithm 3 with DES, Padding Method 1, Data string 2.
+
+        From Annex B.4:
+        Data = "Now is the time for it"
+        Expected MAC = 2E2B1428 (32 bits)
+        """
+        key = bytes.fromhex("0123456789ABCDEF")
+        key_prime = bytes.fromhex("FEDCBA9876543210")
+        data = b"Now is the time for it"
+
+        mac = mac_algorithm_3(data, key, key_prime, "DES", 32, PaddingMethod.METHOD_1)
+        assert mac.hex().upper() == "2E2B1428"
+
+    def test_alg3_des_padding2_data2(self):
+        """Test MAC Algorithm 3 with DES, Padding Method 2, Data string 2.
+
+        From Annex B.4:
+        Expected MAC = 5A692CE6 (32 bits)
+        """
+        key = bytes.fromhex("0123456789ABCDEF")
+        key_prime = bytes.fromhex("FEDCBA9876543210")
+        data = b"Now is the time for it"
+
+        mac = mac_algorithm_3(data, key, key_prime, "DES", 32, PaddingMethod.METHOD_2)
+        assert mac.hex().upper() == "5A692CE6"
+
+    def test_alg3_des_padding3_data2(self):
+        """Test MAC Algorithm 3 with DES, Padding Method 3, Data string 2.
+
+        From Annex B.4:
+        Expected MAC = C59F7EED (32 bits)
+        """
+        key = bytes.fromhex("0123456789ABCDEF")
+        key_prime = bytes.fromhex("FEDCBA9876543210")
+        data = b"Now is the time for it"
+
+        mac = mac_algorithm_3(data, key, key_prime, "DES", 32, PaddingMethod.METHOD_3)
+        assert mac.hex().upper() == "C59F7EED"
 
 
 class TestMACAlgorithm5:
