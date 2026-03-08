@@ -515,20 +515,42 @@ class TestMACAlgorithm6:
         mac = mac_algorithm_6(data, key, key_prime, "AES", 128, PaddingMethod.METHOD_2)
         assert mac.hex().upper() == "E7A8FD3F6A4FDB80331EE26E9409CB22"
 
+    def test_alg6_aes192(self):
+        """Test MAC Algorithm 6 with AES-192.
+
+        From Annex B.7.3:
+        K* = C6D09CCE02F83470E0CFAE901790A092418AACB12872FE9D1AD98F062C004681
+        K = 1AD98F062C00468101971BC0198CE5F05842E373D4D482A5
+        K' = 9531D7D12B8F3E8CF8B6A9CEE9976B1137839F7C5DC66AA3
+        Data = "Hello World" (with padding: 48656C6C6F20576F726C648000000000)
+        Expected G = A5C5ADECD54BDA854EA8DDFFFDA5051F
+        """
+        key = bytes.fromhex("1AD98F062C00468101971BC0198CE5F05842E373D4D482A5")
+        key_prime = bytes.fromhex("9531D7D12B8F3E8CF8B6A9CEE9976B1137839F7C5DC66AA3")
+        data = b"Hello World"
+
+        mac = mac_algorithm_6(data, key, key_prime, "AES", 128, PaddingMethod.METHOD_2)
+        assert mac.hex().upper() == "A5C5ADECD54BDA854EA8DDFFFDA5051F"
+
     def test_alg6_aes256(self):
         """Test MAC Algorithm 6 with AES-256.
 
         From Annex B.7.4:
-        K = FF10F382BC199AEB8EE4B666716CC4DC5B59599ED827F92FAC0CF3D469AE645B
-        K' = C6401D3C320C1DE92C4CE2F902D3E636 (Note: Documentation shows only 16 bytes, but should be 32)
-        Data = "Sixteen Letters." (with padding creates 2 blocks)
+        K* = 783D990F8ADA0FE2E2EC4319B490F89DB29AD07A41ED6D75E35076F2C6852EE16476713761403EFC10EC835BEC67C3EB
+        K (derived from K* using KDM1) = 6476713761403EFC10EC835BEC67C3EBFF10F382BC199AEB8EE4B666716CC4DC
+        K' (derived from K* using KDM1) = 5B59599ED827F92FAC0CF3D469AE645BC6401D3C320C1DE92C4CE2F902D3E636
+        Data = "Sixteen Letters." (16 bytes + padding creates 2 blocks)
         Expected G = A83E5B7ED6C8FD2562F27CC1FA3F55A2
         
-        Note: This test may need adjustment due to incomplete K' in documentation
+        Note: The K value shown in the ISO document table appears to have the two 16-byte halves swapped.
+        Using the correctly derived K from K* produces the expected MAC.
         """
-        # Skip this test as K' is incomplete in ISO documentation
-        # The derived K' should be 32 bytes for AES-256, but only 16 bytes are shown
-        pytest.skip("K' value incomplete in ISO documentation for AES-256")
+        key = bytes.fromhex("6476713761403EFC10EC835BEC67C3EBFF10F382BC199AEB8EE4B666716CC4DC")
+        key_prime = bytes.fromhex("5B59599ED827F92FAC0CF3D469AE645BC6401D3C320C1DE92C4CE2F902D3E636")
+        data = b"Sixteen Letters."
+
+        mac = mac_algorithm_6(data, key, key_prime, "AES", 128, PaddingMethod.METHOD_2)
+        assert mac.hex().upper() == "A83E5B7ED6C8FD2562F27CC1FA3F55A2"
 
 
 class TestCalculateMAC:
