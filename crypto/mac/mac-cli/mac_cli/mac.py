@@ -208,6 +208,64 @@ def mac_algorithm_3(
     return g[:mac_bytes]
 
 
+def mac_algorithm_4(
+    data: bytes,
+    key: bytes,
+    key_prime: bytes,
+    key_double_prime: bytes,
+    cipher_name: str,
+    mac_bits: int,
+    padding_method: PaddingMethod,
+) -> bytes:
+    """MAC Algorithm 4 - MacDES.
+
+    Uses Final Iteration 1 and Output Transformation 2.
+    Changes the processing of the first block with double encryption.
+    
+    Args:
+        data: Input data
+        key: Block cipher key K for iteration
+        key_prime: Block cipher key K' for output transformation
+        key_double_prime: Block cipher key K'' for first block
+        cipher_name: Cipher to use
+        mac_bits: Length of MAC in bits (m)
+        padding_method: Padding method to use
+
+    Returns:
+        MAC of m bits
+    """
+    cipher = _get_cipher(cipher_name, key)
+    n = cipher.block_size * 8
+    block_size = cipher.block_size
+
+    # Padding
+    padded = pad(data, n, padding_method)
+
+    # Split into blocks
+    blocks = [padded[i : i + block_size] for i in range(0, len(padded), block_size)]
+
+    # Special processing for first block: H₁ := e_K''(e_K(D₁))
+    cipher_k = _get_cipher(cipher_name, key)
+    cipher_kpp = _get_cipher(cipher_name, key_double_prime)
+    h = cipher_kpp.encrypt(cipher_k.encrypt(blocks[0]))
+
+    # Process remaining blocks (if any) with normal CBC using key K
+    for i in range(1, len(blocks) - 1):
+        h = cipher_k.encrypt(_xor_bytes(blocks[i], h))
+
+    # Final iteration with key K (Final Iteration 1)
+    if len(blocks) > 1:
+        h = cipher_k.encrypt(_xor_bytes(blocks[-1], h))
+
+    # Output Transformation 2: encrypt with K'
+    cipher_prime = _get_cipher(cipher_name, key_prime)
+    g = cipher_prime.encrypt(h)
+
+    # Truncation
+    mac_bytes = mac_bits // 8
+    return g[:mac_bytes]
+
+
 def mac_algorithm_5(
     data: bytes,
     key: bytes,
@@ -280,6 +338,56 @@ def mac_algorithm_5(
     return h[:mac_bytes]
 
 
+def mac_algorithm_6(
+    data: bytes,
+    key: bytes,
+    key_prime: bytes,
+    cipher_name: str,
+    mac_bits: int,
+    padding_method: PaddingMethod,
+) -> bytes:
+    """MAC Algorithm 6 - LMAC.
+
+    Uses Final Iteration 2 and Output Transformation 1.
+    Encrypts last block with K', all previous blocks with K.
+
+    Args:
+        data: Input data
+        key: Block cipher key K for iteration
+        key_prime: Block cipher key K' for final iteration
+        cipher_name: Cipher to use
+        mac_bits: Length of MAC in bits (m)
+        padding_method: Padding method to use
+
+    Returns:
+        MAC of m bits
+    """
+    cipher = _get_cipher(cipher_name, key)
+    n = cipher.block_size * 8
+    block_size = cipher.block_size
+
+    # Padding
+    padded = pad(data, n, padding_method)
+
+    # Split into blocks
+    blocks = [padded[i : i + block_size] for i in range(0, len(padded), block_size)]
+
+    # Process all blocks except last with key K
+    if len(blocks) > 1:
+        h = _cbc_iteration(blocks[:-1], key, cipher_name)
+    else:
+        h = b"\x00" * block_size
+
+    # Final Iteration 2: encrypt last block with K'
+    cipher_prime = _get_cipher(cipher_name, key_prime)
+    h = cipher_prime.encrypt(_xor_bytes(blocks[-1], h))
+
+    # Output Transformation 1 is identity
+    # Truncation
+    mac_bytes = mac_bits // 8
+    return h[:mac_bytes]
+
+
 def calculate_mac(
     data: bytes,
     key: bytes,
@@ -289,6 +397,7 @@ def calculate_mac(
     padding_method: PaddingMethod | None = None,
     key_derivation: KeyDerivationMethod | None = None,
     key_prime: bytes | None = None,
+    key_double_prime: bytes | None = None,
 ) -> bytes:
     """Calculate MAC using specified ISO/IEC 9797-1 algorithm.
 
@@ -301,6 +410,7 @@ def calculate_mac(
         padding_method: Padding method (required for ALG_1, ALG_2, ALG_3, ALG_4, ALG_6)
         key_derivation: Key derivation method (used by ALG_2, ALG_4, ALG_6)
         key_prime: Secondary key K' (if not derived)
+        key_double_prime: Tertiary key K'' for ALG_4 (if not derived)
 
     Returns:
         MAC value
@@ -343,9 +453,35 @@ def calculate_mac(
                 raise ValueError("MAC Algorithm 3 requires key_prime")
             return mac_algorithm_3(data, key, key_prime, cipher_name, mac_bits, padding_method)
 
+        case MACAlgorithm.ALG_4:
+            if padding_method is None:
+                padding_method = PaddingMethod.METHOD_2
+            if key_prime is None:
+                raise ValueError("MAC Algorithm 4 requires key_prime")
+            if key_double_prime is None and key_derivation == KeyDerivationMethod.METHOD_1:
+                # Derive K'' from K'
+                cipher = _get_cipher(cipher_name, key_prime)
+                _, key_double_prime = derive_keys_kdm1(key_prime, block_bits, cipher.encrypt)
+            if key_double_prime is None:
+                raise ValueError("MAC Algorithm 4 requires key_double_prime or key_derivation")
+            return mac_algorithm_4(
+                data, key, key_prime, key_double_prime, cipher_name, mac_bits, padding_method
+            )
+
         case MACAlgorithm.ALG_5:
             # ALG_5 uses Padding Method 4 internally
             return mac_algorithm_5(data, key, cipher_name, mac_bits)
+
+        case MACAlgorithm.ALG_6:
+            if padding_method is None:
+                padding_method = PaddingMethod.METHOD_2
+            if key_prime is None and key_derivation == KeyDerivationMethod.METHOD_1:
+                # Derive K' from K
+                cipher = _get_cipher(cipher_name, key)
+                key_prime, _ = derive_keys_kdm1(key, block_bits, cipher.encrypt)
+            if key_prime is None:
+                raise ValueError("MAC Algorithm 6 requires key_prime or key_derivation")
+            return mac_algorithm_6(data, key, key_prime, cipher_name, mac_bits, padding_method)
 
         case _:
             raise ValueError(f"Algorithm {algorithm} not yet implemented")

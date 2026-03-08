@@ -10,7 +10,9 @@ from mac_cli import (
     mac_algorithm_1,
     mac_algorithm_2,
     mac_algorithm_3,
+    mac_algorithm_4,
     mac_algorithm_5,
+    mac_algorithm_6,
     pad,
     unpad,
     derive_keys_kdm2,
@@ -402,6 +404,133 @@ class TestMACAlgorithm5:
         assert k2.hex().upper() == "F7 DDAC306AE266CCF90BC11EE46D513B".replace(" ", "")
 
 
+class TestMACAlgorithm4:
+    """Test MAC Algorithm 4 (MacDES) with DES test vectors."""
+
+    def test_alg4_des_padding1_data1(self):
+        """Test MAC Algorithm 4 with DES, Padding Method 1, Data string 1.
+
+        From Annex B.5:
+        K = 0123456789ABCDEF
+        K' = FEDCBA9876543210
+        K'' = 0E2C4A6886A4C2E0 (complement alternate 4-bit groups of K')
+        Expected MAC = AD3502B7 (32 bits)
+        """
+        key = bytes.fromhex("0123456789ABCDEF")
+        key_prime = bytes.fromhex("FEDCBA9876543210")
+        key_double_prime = bytes.fromhex("0E2C4A6886A4C2E0")
+        data = b"Now is the time for all "
+
+        mac = mac_algorithm_4(data, key, key_prime, key_double_prime, "DES", 32, PaddingMethod.METHOD_1)
+        assert mac.hex().upper() == "AD3502B7"
+
+    def test_alg4_des_padding2_data1(self):
+        """Test MAC Algorithm 4 with DES, Padding Method 2, Data string 1.
+
+        Expected MAC = 61C333E3 (32 bits)
+        """
+        key = bytes.fromhex("0123456789ABCDEF")
+        key_prime = bytes.fromhex("FEDCBA9876543210")
+        key_double_prime = bytes.fromhex("0E2C4A6886A4C2E0")
+        data = b"Now is the time for all "
+
+        mac = mac_algorithm_4(data, key, key_prime, key_double_prime, "DES", 32, PaddingMethod.METHOD_2)
+        assert mac.hex().upper() == "61C333E3"
+
+    def test_alg4_des_padding3_data1(self):
+        """Test MAC Algorithm 4 with DES, Padding Method 3, Data string 1.
+
+        From Annex B.5:
+        Expected MAC = 952AF838 (32 bits)
+        """
+        key = bytes.fromhex("0123456789ABCDEF")
+        key_prime = bytes.fromhex("FEDCBA9876543210")
+        key_double_prime = bytes.fromhex("0E2C4A6886A4C2E0")
+        data = b"Now is the time for all "
+
+        mac = mac_algorithm_4(data, key, key_prime, key_double_prime, "DES", 32, PaddingMethod.METHOD_3)
+        assert mac.hex().upper() == "952AF838"
+
+    def test_alg4_des_padding1_data2(self):
+        """Test MAC Algorithm 4 with DES, Padding Method 1, Data string 2.
+
+        From Annex B.5:
+        Data = "Now is the time for it"
+        Expected MAC = 05F1084C (32 bits)
+        """
+        key = bytes.fromhex("0123456789ABCDEF")
+        key_prime = bytes.fromhex("FEDCBA9876543210")
+        key_double_prime = bytes.fromhex("0E2C4A6886A4C2E0")
+        data = b"Now is the time for it"
+
+        mac = mac_algorithm_4(data, key, key_prime, key_double_prime, "DES", 32, PaddingMethod.METHOD_1)
+        assert mac.hex().upper() == "05F1084C"
+
+    def test_alg4_des_padding2_data2(self):
+        """Test MAC Algorithm 4 with DES, Padding Method 2, Data string 2.
+
+        From Annex B.5:
+        Expected MAC = A1BC0931 (32 bits)
+        """
+        key = bytes.fromhex("0123456789ABCDEF")
+        key_prime = bytes.fromhex("FEDCBA9876543210")
+        key_double_prime = bytes.fromhex("0E2C4A6886A4C2E0")
+        data = b"Now is the time for it"
+
+        mac = mac_algorithm_4(data, key, key_prime, key_double_prime, "DES", 32, PaddingMethod.METHOD_2)
+        assert mac.hex().upper() == "A1BC0931"
+
+    def test_alg4_des_padding3_data2(self):
+        """Test MAC Algorithm 4 with DES, Padding Method 3, Data string 2.
+
+        From Annex B.5:
+        Expected MAC = AFDEE0F9 (32 bits)
+        """
+        key = bytes.fromhex("0123456789ABCDEF")
+        key_prime = bytes.fromhex("FEDCBA9876543210")
+        key_double_prime = bytes.fromhex("0E2C4A6886A4C2E0")
+        data = b"Now is the time for it"
+
+        mac = mac_algorithm_4(data, key, key_prime, key_double_prime, "DES", 32, PaddingMethod.METHOD_3)
+        assert mac.hex().upper() == "AFDEE0F9"
+
+
+class TestMACAlgorithm6:
+    """Test MAC Algorithm 6 (LMAC) with AES test vectors."""
+
+    def test_alg6_aes128(self):
+        """Test MAC Algorithm 6 with AES-128.
+
+        From Annex B.7.2:
+        K* = 9118695BE6B786F2817ABEFB54E25829
+        K = 0DD9B7C60C9F1EE063D6BB3E4FE56BD9
+        K' = B79F0C87041F6818B6CE3F3B77EEBE08
+        Data = "abc" (with padding: 61626380000000000000000000000000)
+        Expected G = E7A8FD3F6A4FDB80331EE26E9409CB22
+        """
+        key = bytes.fromhex("0DD9B7C60C9F1EE063D6BB3E4FE56BD9")
+        key_prime = bytes.fromhex("B79F0C87041F6818B6CE3F3B77EEBE08")
+        data = b"abc"
+
+        mac = mac_algorithm_6(data, key, key_prime, "AES", 128, PaddingMethod.METHOD_2)
+        assert mac.hex().upper() == "E7A8FD3F6A4FDB80331EE26E9409CB22"
+
+    def test_alg6_aes256(self):
+        """Test MAC Algorithm 6 with AES-256.
+
+        From Annex B.7.4:
+        K = FF10F382BC199AEB8EE4B666716CC4DC5B59599ED827F92FAC0CF3D469AE645B
+        K' = C6401D3C320C1DE92C4CE2F902D3E636 (Note: Documentation shows only 16 bytes, but should be 32)
+        Data = "Sixteen Letters." (with padding creates 2 blocks)
+        Expected G = A83E5B7ED6C8FD2562F27CC1FA3F55A2
+        
+        Note: This test may need adjustment due to incomplete K' in documentation
+        """
+        # Skip this test as K' is incomplete in ISO documentation
+        # The derived K' should be 32 bytes for AES-256, but only 16 bytes are shown
+        pytest.skip("K' value incomplete in ISO documentation for AES-256")
+
+
 class TestCalculateMAC:
     """Test the unified calculate_mac interface."""
 
@@ -433,6 +562,42 @@ class TestCalculateMAC:
             mac_bits=128,
         )
         assert mac.hex().upper() == "BB1D6929E95937287FA37D129B756746"
+
+    def test_calculate_mac_alg4(self):
+        """Test calculate_mac with Algorithm 4."""
+        key = bytes.fromhex("0123456789ABCDEF")
+        key_prime = bytes.fromhex("FEDCBA9876543210")
+        key_double_prime = bytes.fromhex("0E2C4A6886A4C2E0")
+        data = b"Now is the time for all "
+
+        mac = calculate_mac(
+            data,
+            key,
+            MACAlgorithm.ALG_4,
+            cipher_name="DES",
+            mac_bits=32,
+            padding_method=PaddingMethod.METHOD_1,
+            key_prime=key_prime,
+            key_double_prime=key_double_prime,
+        )
+        assert mac.hex().upper() == "AD3502B7"
+
+    def test_calculate_mac_alg6(self):
+        """Test calculate_mac with Algorithm 6."""
+        key = bytes.fromhex("0DD9B7C60C9F1EE063D6BB3E4FE56BD9")
+        key_prime = bytes.fromhex("B79F0C87041F6818B6CE3F3B77EEBE08")
+        data = b"abc"
+
+        mac = calculate_mac(
+            data,
+            key,
+            MACAlgorithm.ALG_6,
+            cipher_name="AES",
+            mac_bits=128,
+            padding_method=PaddingMethod.METHOD_2,
+            key_prime=key_prime,
+        )
+        assert mac.hex().upper() == "E7A8FD3F6A4FDB80331EE26E9409CB22"
 
     def test_calculate_mac_defaults(self):
         """Test calculate_mac with default values."""
