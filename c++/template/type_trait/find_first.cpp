@@ -29,6 +29,13 @@ public:
 };
 
 
+template<typename T, typename... Args>
+constexpr inline int find_first_class() {
+    static_assert(find_first_index<T, Args...>::value != -1, "find_first_class: Fail to founed");
+    return find_first_index<T, Args...>::value;
+}
+
+
 
 // ================================================
 // variant_index
@@ -55,7 +62,9 @@ int main (int argc, char *argv[]) {
 
     // Class not in variant
     // static_assert(-1 == variant_index<Mode3, Mode>::value, "AssertFail");
-
+    static_assert(0 == find_first_class<Mode0, Mode0, Mode1>(), "AssertFail");
+    static_assert(1 == find_first_class<Mode1, Mode0, Mode1>(), "AssertFail");
+    // find_first_class<Mode3, Mode0, Mode1>();
 
     return 0;
 }
