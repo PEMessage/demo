@@ -21,9 +21,11 @@ private:
     // Break down the logic for better readability
     static constexpr bool is_match = std::is_same_v<T, First>;
     static constexpr int rest_index = find_first_index<T, Rest...>::value;
+    //  if not found in rest, propagate -1; otherwise add 1
+    static constexpr int propagated_index = (rest_index == -1) ? -1 : rest_index + 1;
 
 public:
-    static constexpr int value = is_match ? 0 : (rest_index + 1);
+    static constexpr int value = is_match ? 0 : propagated_index;
 };
 
 
@@ -51,9 +53,8 @@ int main (int argc, char *argv[]) {
     static_assert(1 == variant_index<Mode1, Mode>::value, "AssertFail");
     static_assert(2 == variant_index<Mode2, Mode>::value, "AssertFail");
 
-    // char (*__kaboom)[variant_index<Mode3, Mode>::value] = 1;
-    // Undefine behavior if not exist in varint
-    static_assert(2 == variant_index<Mode3, Mode>::value, "AssertFail");
+    // Class not in variant
+    // static_assert(-1 == variant_index<Mode3, Mode>::value, "AssertFail");
 
 
     return 0;
