@@ -7,6 +7,7 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/../../include.cmake")
 # 创建库
 add_library(samgr_mini STATIC
     samgr_mini.cpp
+    samgr_proxy.cpp
 )
 
 # 设置包含目录
@@ -19,5 +20,5 @@ auto_target_link_libraries(samgr_mini PUBLIC ipc refbase hilog misc)
 
 # 导出头文件
 set_target_properties(samgr_mini PROPERTIES
-    PUBLIC_HEADER "samgr_mini.h;iservice_registry.h;isystem_ability_manager.h"
+    PUBLIC_HEADER "samgr_mini.h;samgr_proxy.h;iservice_registry.h;isystem_ability_manager.h"
 )

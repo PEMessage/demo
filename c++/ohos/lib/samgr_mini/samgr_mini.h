@@ -50,11 +50,14 @@ private:
  * 1. AddService/GetService - 按字符串名称注册/查询服务
  * 2. AddSystemAbility/GetSystemAbility - 按整数SAID注册/查询系统能力
  * 3. DeathRecipient - 服务死亡通知与自动清理
+ * 4. 支持作为远程服务注册中心运行（服务端）
+ * 5. 支持作为远程服务注册中心客户端运行（客户端）
  *
  * 设计：
  * - 单例模式，全局唯一实例
  * - 内部使用线程安全的map存储服务
  * - 支持DeathRecipient注册，服务死亡时自动清理
+ * - 支持跨进程服务注册和发现（通过Binder）
  */
 class SamgrMini : public IRemoteStub<IServiceRegistry>,
                   public ISystemAbilityManager {
@@ -91,6 +94,7 @@ public:
 
     /**
      * @brief 获取全局SamgrMini实例
+     * 如果是客户端模式，返回连接到远程SamgrMini的代理
      */
     static sptr<SamgrMini> GetInstance();
 
@@ -114,6 +118,22 @@ public:
      * @brief 列出所有已注册的系统能力
      */
     void ListSystemAbilities(std::vector<int32_t>& saIds);
+
+    /**
+     * @brief 设置远程SamgrMini代理（用于客户端模式）
+     * @param remote 远程SamgrMini的代理对象
+     */
+    static void SetRemoteProxy(const sptr<IRemoteObject>& remote);
+
+    /**
+     * @brief 检查是否是远程模式
+     * @return true表示连接到远程SamgrMini
+     */
+    static bool IsRemoteMode();
+
+    // 远程代理成员（用于客户端模式访问）
+    static std::mutex remoteMutex_;
+    static sptr<IRemoteObject> remoteProxy_;
 
 private:
     // 私有构造函数（单例模式）

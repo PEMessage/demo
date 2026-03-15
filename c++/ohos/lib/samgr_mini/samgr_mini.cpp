@@ -15,6 +15,7 @@
 
 #include "samgr_mini.h"
 #include "hilog/log.h"
+#include "ipc_skeleton.h"
 #include <chrono>
 #include <thread>
 
@@ -28,6 +29,10 @@ static constexpr OHOS::HiviewDFX::HiLogLabel SAMGR_LABEL = {
 // 单例实例初始化
 std::mutex SamgrMini::instanceMutex_;
 sptr<SamgrMini> SamgrMini::instance_;
+
+// 远程代理静态成员定义
+std::mutex SamgrMini::remoteMutex_;
+sptr<IRemoteObject> SamgrMini::remoteProxy_;
 
 // ServiceDeathRecipient 实现
 ServiceDeathRecipient::ServiceDeathRecipient(DeathCallback callback)
@@ -45,6 +50,23 @@ SamgrMini::SamgrMini() : IRemoteStub<IServiceRegistry>(false) {}
 
 sptr<SamgrMini> SamgrMini::GetInstance()
 {
+    // 检查是否有远程代理设置
+    {
+        std::lock_guard<std::mutex> lock(remoteMutex_);
+        if (remoteProxy_ != nullptr) {
+            // 客户端模式：返回一个使用远程代理的SamgrMini
+            // 这里返回this，但所有操作会通过remoteProxy_转发
+            // 为简化实现，我们直接返回本地实例，但接口调用会通过remoteProxy_
+            if (instance_ == nullptr) {
+                std::lock_guard<std::mutex> instLock(instanceMutex_);
+                if (instance_ == nullptr) {
+                    instance_ = new SamgrMini();
+                }
+            }
+            return instance_;
+        }
+    }
+
     if (instance_ == nullptr) {
         std::lock_guard<std::mutex> lock(instanceMutex_);
         if (instance_ == nullptr) {
@@ -54,15 +76,55 @@ sptr<SamgrMini> SamgrMini::GetInstance()
     return instance_;
 }
 
+bool SamgrMini::IsRemoteMode()
+{
+    std::lock_guard<std::mutex> lock(remoteMutex_);
+    return remoteProxy_ != nullptr;
+}
+
+void SamgrMini::SetRemoteProxy(const sptr<IRemoteObject>& remote)
+{
+    std::lock_guard<std::mutex> lock(remoteMutex_);
+    remoteProxy_ = remote;
+    HiLogInfo(SAMGR_LABEL, "SetRemoteProxy: remote mode enabled");
+}
+
 sptr<IRemoteObject> SamgrMini::AsObject()
 {
     return this;
+}
+
+// 客户端模式辅助函数
+static sptr<IRemoteObject> GetRemoteProxy()
+{
+    std::lock_guard<std::mutex> lock(SamgrMini::remoteMutex_);
+    return SamgrMini::remoteProxy_;
 }
 
 // IServiceRegistry 接口实现
 int32_t SamgrMini::AddService(const std::u16string& name,
                                const sptr<IRemoteObject>& service)
 {
+    // 检查是否是客户端模式
+    sptr<IRemoteObject> remote = GetRemoteProxy();
+    if (remote != nullptr && remote != this->AsObject()) {
+        // 客户端模式：转发到远程SamgrMini
+        MessageParcel data;
+        MessageParcel reply;
+        MessageOption option;
+
+        data.WriteInterfaceToken(IServiceRegistry::GetDescriptor());
+        data.WriteString16(name);
+        data.WriteRemoteObject(service);
+
+        int32_t result = remote->SendRequest(1, data, reply, option);  // 1 = AddService
+        if (result == ERR_NONE) {
+            return reply.ReadInt32();
+        }
+        return result;
+    }
+
+    // 服务端模式：本地存储
     if (service == nullptr) {
         HiLogError(SAMGR_LABEL, "AddService failed: service is null");
         return ERR_NULL_OBJECT;
@@ -78,7 +140,7 @@ int32_t SamgrMini::AddService(const std::u16string& name,
         [this](const wptr<IRemoteObject>& obj) {
             this->OnServiceDied(obj);
         });
-    
+
     if (!service->AddDeathRecipient(deathRecipient)) {
         HiLogWarn(SAMGR_LABEL, "AddDeathRecipient failed for service: %{public}s",
                   std::string(name.begin(), name.end()).c_str());
@@ -92,6 +154,25 @@ int32_t SamgrMini::AddService(const std::u16string& name,
 
 sptr<IRemoteObject> SamgrMini::GetService(const std::u16string& name)
 {
+    // 检查是否是客户端模式
+    sptr<IRemoteObject> remote = GetRemoteProxy();
+    if (remote != nullptr && remote != this->AsObject()) {
+        // 客户端模式：转发到远程SamgrMini
+        MessageParcel data;
+        MessageParcel reply;
+        MessageOption option;
+
+        data.WriteInterfaceToken(IServiceRegistry::GetDescriptor());
+        data.WriteString16(name);
+
+        int32_t result = remote->SendRequest(2, data, reply, option);  // 2 = GetService
+        if (result == ERR_NONE) {
+            return reply.ReadRemoteObject();
+        }
+        return nullptr;
+    }
+
+    // 服务端模式：本地查询
     // 先检查服务是否存在
     sptr<IRemoteObject> service;
     const int maxRetry = 50;  // 最多等待5秒
@@ -113,6 +194,25 @@ sptr<IRemoteObject> SamgrMini::GetService(const std::u16string& name)
 
 sptr<IRemoteObject> SamgrMini::CheckService(const std::u16string& name)
 {
+    // 检查是否是客户端模式
+    sptr<IRemoteObject> remote = GetRemoteProxy();
+    if (remote != nullptr && remote != this->AsObject()) {
+        // 客户端模式：转发到远程SamgrMini
+        MessageParcel data;
+        MessageParcel reply;
+        MessageOption option;
+
+        data.WriteInterfaceToken(IServiceRegistry::GetDescriptor());
+        data.WriteString16(name);
+
+        int32_t result = remote->SendRequest(3, data, reply, option);  // 3 = CheckService
+        if (result == ERR_NONE) {
+            return reply.ReadRemoteObject();
+        }
+        return nullptr;
+    }
+
+    // 服务端模式：本地查询
     sptr<IRemoteObject> service;
     if (servicesMap_.Find(name, service)) {
         HiLogInfo(SAMGR_LABEL, "CheckService found: %{public}s",
@@ -138,7 +238,7 @@ int32_t SamgrMini::AddSystemAbility(int32_t systemAbilityId,
         [this](const wptr<IRemoteObject>& obj) {
             this->OnServiceDied(obj);
         });
-    
+
     if (!ability->AddDeathRecipient(deathRecipient)) {
         HiLogWarn(SAMGR_LABEL, "AddDeathRecipient failed for SA: %{public}d", systemAbilityId);
     }
@@ -191,7 +291,7 @@ bool SamgrMini::AddServiceDeathRecipient(const std::u16string& name,
 }
 
 bool SamgrMini::RemoveServiceDeathRecipient(const std::u16string& name,
-                                             const sptr<IRemoteObject::DeathRecipient>& recipient)
+                                              const sptr<IRemoteObject::DeathRecipient>& recipient)
 {
     std::lock_guard<std::mutex> lock(deathRecipientMutex_);
     auto it = serviceDeathRecipients_.find(name);
