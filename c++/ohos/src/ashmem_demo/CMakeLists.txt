@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 project(project LANGUAGES CXX)
-include("../../include.cmake")
+include("${ROOT_DIR}/include.cmake")
 
 
 # See: system/core/rootdir/ueventd.rc

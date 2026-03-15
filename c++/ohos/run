@@ -1,9 +1,19 @@
 #!/bin/bash
 set -e
+# ---------------------------------
+# Some basic setting
+# ---------------------------------
+script_path="$(readlink -f $0)"
+script_dir="$(readlink -f "$(dirname "$script_path")")"
+
 project_dir="$1"
 shift
 
-project_name="$(basename "$project_dir")"
+project_name="$(realpath --relative-to="$script_dir" "$project_dir")"
+# Remove 'src/' prefix and replace remaining slashes with underscores
+project_name="${project_name#src/}"
+project_name="${project_name//\//_}"
+
 if [[ ! "$project_dir" =~ src ]] || [ ! -d "$project_dir" ]  ; then
     echo "must be in src dir"
 fi
@@ -28,7 +38,7 @@ build() {
     (
         set -xe
         # if [ ! -f "out/$project_name/CMakeCache.txt" ] ; then
-        cmake -S "$project_dir" -B "out/$project_name"
+        cmake -S "$project_dir" -B "out/$project_name" -DROOT_DIR="$script_dir"
         ln -sf "out/$project_name/compile_commands.json" compile_commands.json
         # fi
         cmake --build "out/$project_name"
