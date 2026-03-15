@@ -55,40 +55,29 @@ void SignalHandler(int sig)
 int main()
 {
     // 设置信号处理
-    signal(SIGINT, SignalHandler);
-    signal(SIGTERM, SignalHandler);
+    // signal(SIGINT, SignalHandler);
+    // signal(SIGTERM, SignalHandler);
 
     pid_t pid = getpid();
     HiLogInfo(DEMO_LABEL, "========================================");
     HiLogInfo(DEMO_LABEL, "DemoServiceServer starting, PID=%{public}d", pid);
     HiLogInfo(DEMO_LABEL, "========================================");
-    std::cout << "========================================" << std::endl;
-    std::cout << "DemoServiceServer starting, PID=" << pid << std::endl;
-    std::cout << "========================================" << std::endl;
 
     // 1. 获取Samgr的远程对象（通过Binder连接到Samgr进程）
-    std::cout << "\n[Step 1] Connecting to SamgrServer..." << std::endl;
     sptr<IRemoteObject> samgrRemote = IPCSkeleton::GetContextObject();
     if (samgrRemote == nullptr) {
         HiLogError(DEMO_LABEL, "Failed to get Samgr remote object");
-        std::cerr << "ERROR: Failed to connect to SamgrServer!" << std::endl;
-        std::cerr << "Make sure SamgrServer is running first." << std::endl;
         return -1;
     }
     HiLogInfo(DEMO_LABEL, "Connected to SamgrServer");
-    std::cout << "Connected to SamgrServer (handle=0)" << std::endl;
 
     // 2. 创建DemoServiceStub实例
-    std::cout << "\n[Step 2] Creating DemoService..." << std::endl;
     sptr<DemoServiceStub> demoService = new DemoServiceStub();
-    std::cout << "DemoServiceStub created" << std::endl;
 
     // 3. 通过Samgr注册服务（IPC调用）
-    std::cout << "\n[Step 3] Registering service to Samgr..." << std::endl;
     sptr<IServiceRegistry> registry = iface_cast<IServiceRegistry>(samgrRemote);
     if (registry == nullptr) {
         HiLogError(DEMO_LABEL, "Failed to cast Samgr to IServiceRegistry");
-        std::cerr << "ERROR: Failed to cast Samgr to IServiceRegistry" << std::endl;
         return -1;
     }
 
@@ -96,40 +85,21 @@ int main()
     int32_t result = registry->AddService(serviceName, demoService->AsObject());
     if (result != ERR_NONE) {
         HiLogError(DEMO_LABEL, "AddService failed: %{public}d", result);
-        std::cerr << "ERROR: Failed to register service: " << result << std::endl;
         return -1;
     }
     HiLogInfo(DEMO_LABEL, "Service registered: ohos.test.DemoService");
-    std::cout << "Service registered: ohos.test.DemoService" << std::endl;
 
     // 4. 验证服务是否注册成功
-    std::cout << "\n[Step 4] Verifying registration..." << std::endl;
     sptr<IRemoteObject> checkObj = registry->CheckService(serviceName);
     if (checkObj == nullptr) {
         HiLogWarn(DEMO_LABEL, "CheckService returned null, but registration may still be OK");
-        std::cout << "CheckService returned null (this is normal in cross-process mode)" << std::endl;
-    } else {
-        std::cout << "Service verified: CheckService returned valid object" << std::endl;
     }
 
-    // 5. 进入工作循环，等待客户端直接连接
-    std::cout << "\n========================================" << std::endl;
-    std::cout << "DemoServiceServer is running!" << std::endl;
-    std::cout << "Service: ohos.test.DemoService" << std::endl;
-    std::cout << "PID: " << pid << std::endl;
-    std::cout << "========================================" << std::endl;
-    std::cout << "\nWaiting for direct connections from clients..." << std::endl;
-    std::cout << "(Clients will connect directly to this process, not through Samgr)" << std::endl;
-    std::cout << "\nPress Ctrl+C to stop" << std::endl;
 
     HiLogInfo(DEMO_LABEL, "Entering work loop, waiting for client connections...");
 
     IPCSkeleton::JoinWorkThread();
 
     HiLogInfo(DEMO_LABEL, "DemoServiceServer stopped");
-    std::cout << "\n========================================" << std::endl;
-    std::cout << "DemoServiceServer stopped" << std::endl;
-    std::cout << "========================================" << std::endl;
-
     return 0;
 }

@@ -47,16 +47,13 @@ void SignalHandler(int sig)
 int main()
 {
     // 设置信号处理
-    signal(SIGINT, SignalHandler);
-    signal(SIGTERM, SignalHandler);
+    // signal(SIGINT, SignalHandler);
+    // signal(SIGTERM, SignalHandler);
 
     pid_t pid = getpid();
     HiLogInfo(SAMGR_LABEL, "========================================");
     HiLogInfo(SAMGR_LABEL, "SamgrServer starting, PID=%{public}d", pid);
     HiLogInfo(SAMGR_LABEL, "========================================");
-    std::cout << "========================================" << std::endl;
-    std::cout << "SamgrServer starting, PID=" << pid << std::endl;
-    std::cout << "========================================" << std::endl;
 
     // 1. 获取SamgrMini实例
     sptr<SamgrMini> samgr = SamgrMini::GetInstance();
@@ -64,7 +61,6 @@ int main()
         HiLogError(SAMGR_LABEL, "Failed to get SamgrMini instance");
         return -1;
     }
-    std::cout << "SamgrMini instance created" << std::endl;
 
     // 2. 设置Samgr为ContextObject（让其他进程可以通过GetContextObject获取）
     sptr<IRemoteObject> samgrObject = samgr->AsObject();
@@ -73,20 +69,13 @@ int main()
         return -1;
     }
     HiLogInfo(SAMGR_LABEL, "Samgr registered as ContextObject (handle=0)");
-    std::cout << "Samgr registered as ContextObject (handle=0)" << std::endl;
-    std::cout << "Other processes can now use IPCSkeleton::GetContextObject() to connect" << std::endl;
 
     // 3. 进入工作循环，等待其他进程的IPC请求
     HiLogInfo(SAMGR_LABEL, "SamgrServer entering work loop...");
-    std::cout << "\nSamgrServer is running, waiting for IPC requests..." << std::endl;
-    std::cout << "Press Ctrl+C to stop" << std::endl;
 
     IPCSkeleton::JoinWorkThread();
 
     HiLogInfo(SAMGR_LABEL, "SamgrServer stopped");
-    std::cout << "\n========================================" << std::endl;
-    std::cout << "SamgrServer stopped" << std::endl;
-    std::cout << "========================================" << std::endl;
 
     return 0;
 }

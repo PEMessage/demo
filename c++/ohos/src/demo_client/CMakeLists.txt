@@ -1,16 +1,16 @@
 cmake_minimum_required(VERSION 3.10)
-project(demo_client LANGUAGES CXX C)
+project(app LANGUAGES CXX C)
 include("../../include.cmake")
 
-add_executable(demo_client main.cpp
+add_executable(app main.cpp
     ../rpc_common/demo_service_stub.cpp
     ../rpc_common/demo_service_proxy.cpp
 )
-target_include_directories(demo_client PRIVATE 
+target_include_directories(app PRIVATE
     .
     ../rpc_common
 )
-auto_target_link_libraries(demo_client PRIVATE 
+auto_target_link_libraries(app PRIVATE
     samgr_mini 
     ipc 
     refbase 

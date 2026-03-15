@@ -1,15 +1,15 @@
 cmake_minimum_required(VERSION 3.10)
-project(demo_service_server LANGUAGES CXX C)
+project(app LANGUAGES CXX C)
 include("../../include.cmake")
 
-add_executable(demo_service_server main.cpp
+add_executable(app main.cpp
     ../rpc_common/demo_service_stub.cpp
 )
-target_include_directories(demo_service_server PRIVATE 
+target_include_directories(app PRIVATE
     .
     ../rpc_common
 )
-auto_target_link_libraries(demo_service_server PRIVATE 
+auto_target_link_libraries(app PRIVATE
     samgr_mini 
     ipc 
     refbase 
