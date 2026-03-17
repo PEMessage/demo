@@ -10,7 +10,10 @@ private:
     std::function<void()> deleter_; // 删除器
 
 public:
-    RefCounter() : strongRef_(1), weakRef_(0) {}
+    RefCounter() : strongRef_(0), weakRef_(0) {}
+    ~RefCounter() {
+        std::cout << "~RefCounter" << std::endl;
+    }
 
     // 强引用操作
     void IncStrong() {
@@ -76,9 +79,16 @@ public:
     }
 
     virtual ~RefBase() {
-        if (counter_->GetWeak() == 0) {
-            delete counter_;
-        }
+        std::cout << "~Refbase" << std::endl;
+        // PEM MAKR: althought it's Refbase create RefCounter
+        //       but
+        //       1. RefCounter will always be create in heap(not in stack)
+        //       2. it's not Refbase job to delete it, RefCounter will delete itself
+        //       3. since RefCounter might delete it self, upper layer must know how it work
+        //          to avoid wild pointer
+        // if (counter_->GetWeak() == 0) {
+        //     delete counter_;
+        // }
     }
 
     // 禁止拷贝
@@ -92,8 +102,13 @@ public:
     }
 
     void DecStrong() {
+        // PEM Mark:
+        //    DecStrong might delete [this] so any access to field it's a `free after use`
+        //    so we need preserve counter in local var to avoid
+        //    That's why logic not same as IncStrong
+        RefCounter* counter = counter_;
         counter_->DecStrong();
-        counter_->DecWeak();
+        counter->DecWeak();
     }
 
     // 弱引用操作
@@ -280,7 +295,14 @@ public:
     // 提升为强指针
     sptr<T> promote() const {
         if (counter_ && counter_->AttemptIncStrong()) {
-            return sptr<T>(ptr_);
+
+            sptr<T> ret = sptr<T>(ptr_);
+
+            // PEM Mark:
+            // AttemptIncStrong will add once, so we need to decrease it
+            counter_->DecStrong();
+            counter_->DecWeak();
+            return ret;
         }
         return sptr<T>(nullptr);
     }
@@ -294,6 +316,7 @@ public:
     }
 
     explicit operator bool() const { return ptr_ != nullptr; }
+
 };
 
 // sptr 的弱指针提升构造函数
