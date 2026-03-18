@@ -1,6 +1,10 @@
 #include <utility>
 
-template <typename T> class unique_ptr {
+// See: https://www.doubao.com/thread/waede717400eb5966
+// See: https://www.youtube.com/watch?v=YokY6HzLkXs
+
+template <typename T>
+class unique_ptr {
     private:
         T *ptr;
 
