@@ -320,48 +320,60 @@ void SamgrMini::OnServiceDied(const wptr<IRemoteObject>& object)
 
 void SamgrMini::RemoveDeadService(const sptr<IRemoteObject>& object)
 {
-    // 从服务映射中移除死亡的服务
-    servicesMap_.Iterate([this, &object](const std::u16string& name, sptr<IRemoteObject>& service) {
+    // 收集需要删除的服务名称（避免在Iterate中调用Erase导致死锁）
+    std::vector<std::u16string> servicesToRemove;
+    std::vector<int32_t> saIdsToRemove;
+
+    // 从服务映射中查找死亡的服务
+    servicesMap_.Iterate([&object, &servicesToRemove](const std::u16string& name, sptr<IRemoteObject>& service) {
         if (service == object) {
-            HiLogWarn(SAMGR_LABEL, "Removing dead service: %{public}s",
-                      std::string(name.begin(), name.end()).c_str());
-            service.clear();
-            servicesMap_.Erase(name);
-
-            // 通知注册的死亡通知接收者
-            std::lock_guard<std::mutex> lock(deathRecipientMutex_);
-            auto it = serviceDeathRecipients_.find(name);
-            if (it != serviceDeathRecipients_.end()) {
-                for (auto& recipient : it->second) {
-                    if (recipient != nullptr) {
-                        recipient->OnRemoteDied(object);
-                    }
-                }
-                serviceDeathRecipients_.erase(it);
-            }
+            servicesToRemove.push_back(name);
         }
     });
 
-    // 从SA映射中移除死亡的系统能力
-    saMap_.Iterate([this, &object](const int32_t saId, sptr<IRemoteObject>& ability) {
+    // 从SA映射中查找死亡的系统能力
+    saMap_.Iterate([&object, &saIdsToRemove](const int32_t saId, sptr<IRemoteObject>& ability) {
         if (ability == object) {
-            HiLogWarn(SAMGR_LABEL, "Removing dead system ability: SAID=%{public}d", saId);
-            ability.clear();
-            saMap_.Erase(saId);
-
-            // 通知注册的死亡通知接收者
-            std::lock_guard<std::mutex> lock(deathRecipientMutex_);
-            auto it = saDeathRecipients_.find(saId);
-            if (it != saDeathRecipients_.end()) {
-                for (auto& recipient : it->second) {
-                    if (recipient != nullptr) {
-                        recipient->OnRemoteDied(object);
-                    }
-                }
-                saDeathRecipients_.erase(it);
-            }
+            saIdsToRemove.push_back(saId);
         }
     });
+
+    // 删除死亡的服务（在Iterate外部删除，避免死锁）
+    for (const auto& name : servicesToRemove) {
+        HiLogWarn(SAMGR_LABEL, "Removing dead service: %{public}s",
+                  std::string(name.begin(), name.end()).c_str());
+        servicesMap_.Erase(name);
+
+        // 通知注册的死亡通知接收者
+        std::lock_guard<std::mutex> lock(deathRecipientMutex_);
+        auto it = serviceDeathRecipients_.find(name);
+        if (it != serviceDeathRecipients_.end()) {
+            for (auto& recipient : it->second) {
+                if (recipient != nullptr) {
+                    recipient->OnRemoteDied(object);
+                }
+            }
+            serviceDeathRecipients_.erase(it);
+        }
+    }
+
+    // 删除死亡的系统能力
+    for (const auto& saId : saIdsToRemove) {
+        HiLogWarn(SAMGR_LABEL, "Removing dead system ability: SAID=%{public}d", saId);
+        saMap_.Erase(saId);
+
+        // 通知注册的死亡通知接收者
+        std::lock_guard<std::mutex> lock(deathRecipientMutex_);
+        auto it = saDeathRecipients_.find(saId);
+        if (it != saDeathRecipients_.end()) {
+            for (auto& recipient : it->second) {
+                if (recipient != nullptr) {
+                    recipient->OnRemoteDied(object);
+                }
+            }
+            saDeathRecipients_.erase(it);
+        }
+    }
 }
 
 // 远程请求处理（IRemoteStub）
