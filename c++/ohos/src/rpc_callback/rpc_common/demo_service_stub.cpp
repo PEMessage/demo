@@ -30,6 +30,15 @@ DemoServiceStub::DemoServiceStub()
     HiLogInfo(DEMO_LABEL, "DemoServiceStub created");
 }
 
+void DemoServiceStub::CallbackDeathRecipient::OnRemoteDied(const wptr<IRemoteObject>& object)
+{
+    HiLogWarn(DEMO_LABEL, "[Server] Callback client died, clearing callback proxy");
+    if (stub_ != nullptr) {
+        stub_->callbackProxy_ = nullptr;
+        stub_->callbackDeathRecipient_ = nullptr;
+    }
+}
+
 int32_t DemoServiceStub::Ping()
 {
     pid_t pid = getpid();
@@ -75,6 +84,13 @@ int32_t DemoServiceStub::RegisterCallback(const sptr<IRemoteObject>& callback)
 
     // 创建Callback代理
     callbackProxy_ = new CallbackProxy(callback);
+    
+    // 注册死亡回调，当client死亡时清理callbackProxy_
+    callbackDeathRecipient_ = new CallbackDeathRecipient(this);
+    if (!callback->AddDeathRecipient(callbackDeathRecipient_)) {
+        HiLogWarn(DEMO_LABEL, "[Server] Failed to add death recipient for callback");
+    }
+    
     HiLogInfo(DEMO_LABEL, "[Server] Client registered callback successfully");
 
     return ERR_NONE;
@@ -83,7 +99,7 @@ int32_t DemoServiceStub::RegisterCallback(const sptr<IRemoteObject>& callback)
 void DemoServiceStub::TestCallback()
 {
     if (callbackProxy_ == nullptr) {
-        HiLogWarn(DEMO_LABEL, "[Server] No callback registered, cannot test");
+        HiLogWarn(DEMO_LABEL, "[Server] No callback registered (client may have died), skipping callback test");
         return;
     }
 

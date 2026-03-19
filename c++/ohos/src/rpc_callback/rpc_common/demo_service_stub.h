@@ -53,6 +53,16 @@ private:
 
     // 保存Client注册的Callback代理
     sptr<CallbackProxy> callbackProxy_;
+    
+    // Callback死亡通知接收者
+    class CallbackDeathRecipient : public IRemoteObject::DeathRecipient {
+    public:
+        explicit CallbackDeathRecipient(DemoServiceStub* stub) : stub_(stub) {}
+        void OnRemoteDied(const wptr<IRemoteObject>& object) override;
+    private:
+        DemoServiceStub* stub_;
+    };
+    sptr<CallbackDeathRecipient> callbackDeathRecipient_;
 };
 
 } // namespace OHOS
