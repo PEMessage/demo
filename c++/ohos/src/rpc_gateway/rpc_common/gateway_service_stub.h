@@ -49,6 +49,10 @@ public:
     bool ConnectToBackend(const sptr<IRemoteObject> &backendRemote);
     void DisconnectFromBackend();
 
+    // Register/unregister callback with Backend (called when first client registers / last client unregisters)
+    bool EnsureBackendCallbackRegistered();
+    void EnsureBackendCallbackUnregistered();
+
     // Get the callback to register with Backend (Gateway's own callback)
     sptr<IRemoteObject> GetGatewayCallbackForBackend();
 

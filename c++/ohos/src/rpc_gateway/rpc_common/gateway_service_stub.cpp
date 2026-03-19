@@ -69,25 +69,45 @@ bool GatewayServiceStub::ConnectToBackend(const sptr<IRemoteObject> &backendRemo
 
     backendProxy_ = new BackendServiceProxy(backendRemote);
     
-    // Register Gateway's callback with Backend
-    int32_t result = backendProxy_->RegisterGatewayCallback(
-        iface_cast<IEventCallback>(gatewayCallbackForBackend_));
-    if (result != ERR_NONE) {
-        HiLogError(LABEL, "Failed to register gateway callback with backend: %{public}d", result);
-        backendProxy_ = nullptr;
-        return false;
-    }
-
-    HiLogInfo(LABEL, "[Gateway] Successfully connected to Backend and registered callback");
+    // Note: We don't register callback with Backend here.
+    // Callback is only registered when the first Client registers.
+    HiLogInfo(LABEL, "[Gateway] Connected to Backend (callback not registered yet, waiting for clients)");
     return true;
 }
 
 void GatewayServiceStub::DisconnectFromBackend()
 {
     if (backendProxy_ != nullptr) {
+        // Unregister callback if registered
         backendProxy_->UnregisterGatewayCallback();
         backendProxy_ = nullptr;
         HiLogInfo(LABEL, "[Gateway] Disconnected from Backend");
+    }
+}
+
+bool GatewayServiceStub::EnsureBackendCallbackRegistered()
+{
+    if (backendProxy_ == nullptr) {
+        HiLogError(LABEL, "[Gateway] Backend proxy is null");
+        return false;
+    }
+    
+    int32_t result = backendProxy_->RegisterGatewayCallback(
+        iface_cast<IEventCallback>(gatewayCallbackForBackend_));
+    if (result != ERR_NONE) {
+        HiLogError(LABEL, "[Gateway] Failed to register callback with backend: %{public}d", result);
+        return false;
+    }
+    
+    HiLogInfo(LABEL, "[Gateway] Registered callback with Backend");
+    return true;
+}
+
+void GatewayServiceStub::EnsureBackendCallbackUnregistered()
+{
+    if (backendProxy_ != nullptr) {
+        backendProxy_->UnregisterGatewayCallback();
+        HiLogInfo(LABEL, "[Gateway] Unregistered callback from Backend");
     }
 }
 
@@ -118,6 +138,14 @@ int32_t GatewayServiceStub::RegisterClientCallback(const sptr<IEventCallback> &c
         return ERR_NONE;  // Already registered, treat as success
     }
 
+    // If this is the first client, register with Backend first
+    if (clientCallbacks_.empty()) {
+        if (!EnsureBackendCallbackRegistered()) {
+            HiLogError(LABEL, "[Gateway] Failed to register with Backend");
+            return ERR_INVALID_DATA;
+        }
+    }
+
     // Create client info
     ClientCallbackInfo info;
     info.callback = new EventCallbackProxy(callbackObj);
@@ -131,8 +159,8 @@ int32_t GatewayServiceStub::RegisterClientCallback(const sptr<IEventCallback> &c
 
     clientCallbacks_[callbackObj] = info;
     
-    HiLogInfo(LABEL, "[Gateway] Client callback registered, filters: %{public}zu types", 
-              filterEventTypes.size());
+    HiLogInfo(LABEL, "[Gateway] Client callback registered, filters: %{public}zu types, total clients: %{public}zu", 
+              filterEventTypes.size(), clientCallbacks_.size());
     return ERR_NONE;
 }
 
@@ -158,7 +186,13 @@ void GatewayServiceStub::RemoveClientCallback(const sptr<IRemoteObject> &callbac
         // Remove death recipient
         callback->RemoveDeathRecipient(it->second.deathRecipient);
         clientCallbacks_.erase(it);
-        HiLogInfo(LABEL, "[Gateway] Client callback removed");
+        HiLogInfo(LABEL, "[Gateway] Client callback removed, remaining clients: %{public}zu", 
+                  clientCallbacks_.size());
+        
+        // If this was the last client, unregister from Backend
+        if (clientCallbacks_.empty()) {
+            EnsureBackendCallbackUnregistered();
+        }
     }
 }
 
