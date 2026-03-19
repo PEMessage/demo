@@ -64,7 +64,7 @@ while (( ${#before_double_dash[@]} )); do
             build=1
             ;;
         run)
-            build=1
+            # build=1
             run=1
             ;;
         clean)
