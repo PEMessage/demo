@@ -3,11 +3,14 @@
 set -x
 
 # --inventory/-i: specify inventory host file or host list
+#                 or put in ansible.cfg(recommand)
 # --module-name/-m: specify action to execute
-ansible -i inventory.ini -m ping server
-ansible -i inventory.ini -m ping local
-ansible -i inventory.ini -m ping all
+ansible -m ping all
+ansible -m ping server
+ansible -m ping localhost
+
+ansible -m gather_facts all
 
 
 
-ansible-playbook -i inventory.ini playbook.yml
+ansible-playbook playbook.yml
