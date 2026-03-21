@@ -15,6 +15,7 @@
 
 #include "dynamic_buffer.h"
 
+#include <stdint.h> // PEM Modify
 #include <fstream>
 #include <cmath>
 

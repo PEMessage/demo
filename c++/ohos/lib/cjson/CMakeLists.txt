@@ -1,6 +1,7 @@
 include(FetchContent)
 
 set(CJSON_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/code")
+set(ENABLE_CJSON_TEST OFF CACHE BOOL "Enable building cJSON test" FORCE)
 
 if(NOT EXISTS "${CJSON_SOURCE_DIR}")
     FetchContent_Declare(

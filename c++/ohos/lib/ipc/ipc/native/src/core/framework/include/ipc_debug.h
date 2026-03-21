@@ -18,6 +18,7 @@
 
 #include <map>
 #include <string>
+#include <stdint.h> // PEM Modify
 
 #include "hilog/log.h"
 #include "string_ex.h"

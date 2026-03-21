@@ -14,6 +14,7 @@
  */
 
 #include <limits.h> // PEM Modify
+#include <stdint.h> // PEM Modify
 #include "unicode_ex.h"
 
 #include "utils_log.h"
