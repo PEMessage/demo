@@ -6,7 +6,7 @@ include(FetchContent)
 # Fetch content using git clone
 FetchContent_Declare(
     libsec_sources
-    GIT_REPOSITORY https://gitee.com/openharmony/third_party_bounds_checking_function.git
+    GIT_REPOSITORY https://github.com/openharmony/third_party_bounds_checking_function.git
     GIT_TAG        OpenHarmony-v5.1.0-Release
     SOURCE_DIR     ${CMAKE_CURRENT_LIST_DIR}/code
 )
