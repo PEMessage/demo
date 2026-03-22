@@ -16,55 +16,11 @@
 #include "backend_service_stub.h"
 #include "ipc_skeleton.h"
 #include "hilog/log.h"
-#include <unistd.h>
 #include <cstring>
 
 namespace OHOS {
 
 static constexpr HiviewDFX::HiLogLabel LABEL = {LOG_CORE, 0xD001533, "BackendServiceStub"};
-
-BackendServiceStub::BackendServiceStub()
-{
-    HiLogInfo(LABEL, "BackendServiceStub created");
-}
-
-int32_t BackendServiceStub::RegisterGatewayCallback(const sptr<IEventCallback> &callback)
-{
-    if (callback == nullptr) {
-        HiLogError(LABEL, "Callback is null");
-        return ERR_INVALID_DATA;
-    }
-
-    gatewayCallback_ = new EventCallbackProxy(callback->AsObject());
-    HiLogInfo(LABEL, "Gateway callback registered");
-    return ERR_NONE;
-}
-
-int32_t BackendServiceStub::UnregisterGatewayCallback()
-{
-    gatewayCallback_ = nullptr;
-    HiLogInfo(LABEL, "Gateway callback unregistered");
-    return ERR_NONE;
-}
-
-int32_t BackendServiceStub::TriggerEvent(int32_t event, const std::vector<int8_t> &data)
-{
-    if (gatewayCallback_ == nullptr) {
-        HiLogWarn(LABEL, "No gateway callback registered, cannot trigger event");
-        return ERR_INVALID_DATA;
-    }
-
-    HiLogInfo(LABEL, "Triggering event %{public}d to gateway", event);
-    ErrCode result = gatewayCallback_->OnEvent(event, data);
-    HiLogInfo(LABEL, "Event callback returned: %{public}d", result);
-    return result;
-}
-
-std::string BackendServiceStub::GetServiceInfo()
-{
-    pid_t pid = getpid();
-    return "BackendService running on PID=" + std::to_string(pid);
-}
 
 int BackendServiceStub::OnRemoteRequest(uint32_t code, MessageParcel &data,
                                          MessageParcel &reply, MessageOption &option)

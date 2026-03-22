@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-#include "gateway_service_stub.h"
+#include "gateway_service_impl.h"
 #include "backend_service_proxy.h"
 #include "samgr_mini.h"
 #include "samgr_proxy.h"
@@ -34,7 +34,7 @@ static volatile bool _samgr_proxy_init = []() {
 
 static constexpr HiviewDFX::HiLogLabel GATEWAY_LABEL = {LOG_CORE, 0xD001550, "GatewayServer"};
 static volatile bool g_running = true;
-static sptr<GatewayServiceStub> g_gatewayService;
+static sptr<GatewayServiceImpl> g_gatewayService;
 
 void SignalHandler(int sig)
 {
@@ -76,8 +76,8 @@ int main()
     }
     HiLogInfo(GATEWAY_LABEL, "[Gateway] Found BackendService");
 
-    // 3. Create GatewayServiceStub instance
-    g_gatewayService = new GatewayServiceStub();
+    // 3. Create GatewayServiceImpl instance
+    g_gatewayService = new GatewayServiceImpl();
 
     // 4. Connect to Backend (register Gateway's callback)
     if (!g_gatewayService->ConnectToBackend(backendRemote)) {

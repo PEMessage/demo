@@ -11,6 +11,7 @@ set(COMMON_SOURCES
 # Gateway executable
 add_executable(app
     main.cpp
+    gateway_service_impl.cpp
     ../rpc_common/gateway_service_stub.cpp
     ../rpc_common/backend_service_proxy.cpp
     ${COMMON_SOURCES}

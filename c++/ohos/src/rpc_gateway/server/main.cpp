@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-#include "backend_service_stub.h"
+#include "backend_service_impl.h"
 #include "samgr_mini.h"
 #include "samgr_proxy.h"
 #include "ipc_skeleton.h"
@@ -36,7 +36,7 @@ using namespace OHOS;
 
 static constexpr HiviewDFX::HiLogLabel SERVER_LABEL = {LOG_CORE, 0xD001540, "BackendServer"};
 static volatile bool g_running = true;
-static sptr<BackendServiceStub> g_backendService;
+static sptr<BackendServiceImpl> g_backendService;
 
 void SignalHandler(int sig)
 {
@@ -60,8 +60,8 @@ int main()
     }
     HiLogInfo(SERVER_LABEL, "[Server] Connected to SamgrServer");
 
-    // 2. Create BackendServiceStub instance
-    g_backendService = new BackendServiceStub();
+    // 2. Create BackendServiceImpl instance
+    g_backendService = new BackendServiceImpl();
 
     // 3. Register service with Samgr
     sptr<IServiceRegistry> registry = iface_cast<IServiceRegistry>(samgrRemote);

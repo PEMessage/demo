@@ -11,6 +11,7 @@ set(COMMON_SOURCES
 # Server executable
 add_executable(app
     main.cpp
+    backend_service_impl.cpp
     ../rpc_common/backend_service_stub.cpp
     ${COMMON_SOURCES}
 )

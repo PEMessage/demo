@@ -18,37 +18,26 @@
 
 #include "backend_service_interface.h"
 #include "iremote_stub.h"
-#include "event_callback_proxy.h"
 #include <vector>
 
 namespace OHOS {
 
 /**
  * @brief Backend Service Stub
- * Server-side implementation that receives requests from Gateway
+ * RPC layer that handles serialization/deserialization.
+ * Business logic should be implemented in a derived class.
  */
 class BackendServiceStub : public IRemoteStub<IBackendService> {
 public:
-    BackendServiceStub();
+    BackendServiceStub() = default;
     ~BackendServiceStub() override = default;
 
-    // IBackendService interface
-    int32_t RegisterGatewayCallback(const sptr<IEventCallback> &callback) override;
-    int32_t UnregisterGatewayCallback() override;
-    int32_t TriggerEvent(int32_t event, const std::vector<int8_t> &data) override;
-    std::string GetServiceInfo() override;
-
-    // IRemoteStub interface
+    // IRemoteStub interface - handles RPC dispatch
     int OnRemoteRequest(uint32_t code, MessageParcel &data,
-                        MessageParcel &reply, MessageOption &option) override;
-
-    // Check if callback is registered
-    bool HasCallback() const { return gatewayCallback_ != nullptr; }
+                         MessageParcel &reply, MessageOption &option) override;
 
 protected:
-    sptr<EventCallbackProxy> gatewayCallback_;
-
-private:
+    // Handle methods - only do deserialization and call virtual interface methods
     int32_t HandleRegisterGatewayCallback(MessageParcel &data, MessageParcel &reply);
     int32_t HandleUnregisterGatewayCallback(MessageParcel &data, MessageParcel &reply);
     int32_t HandleTriggerEvent(MessageParcel &data, MessageParcel &reply);
