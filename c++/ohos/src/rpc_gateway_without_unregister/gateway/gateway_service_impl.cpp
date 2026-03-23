@@ -15,6 +15,7 @@
 
 #include "gateway_service_impl.h"
 #include "functional_death_recipient.h"
+#include "event_callback_proxy.h"
 #include "hilog/log.h"
 
 namespace OHOS {
@@ -58,15 +59,15 @@ int32_t GatewayServiceImpl::RegisterClientCallback(const sptr<IEventCallback> &c
         return ERR_INVALID_DATA;
     }
 
-    sptr<IRemoteObject> callbackObj = callback->AsObject();
-    if (callbackObj == nullptr) {
-        HiLogError(LABEL, "Callback object is null");
-        return ERR_INVALID_DATA;
-    }
+    // sptr<IRemoteObject> callbackObj = callback->AsObject();
+    // if (callbackObj == nullptr) {
+    //     HiLogError(LABEL, "Callback object is null");
+    //     return ERR_INVALID_DATA;
+    // }
 
 
     // Create client callback
-    clientCallback_ = new EventCallbackProxy(callbackObj);
+    clientCallback_ = callback;
     clientCallback_->EnableTracker();
     
     // Add death recipient using lambda style to detect when client dies
@@ -77,9 +78,10 @@ int32_t GatewayServiceImpl::RegisterClientCallback(const sptr<IEventCallback> &c
             HiLogWarn(LABEL, "[Gateway] Client died, clearing callback");
             this->OnClientDied();
         });
-    if (!callbackObj->AddDeathRecipient(deathRecipient)) {
+    if (!clientCallback_->AsObject()->AddDeathRecipient(deathRecipient)) {
         HiLogWarn(LABEL, "[Gateway] Failed to add death recipient");
     }
+    HiLogWarn(LABEL, "[Gateway] Success add death recipient");
 
     // Create and register gateway callback
     gatewayCallback_ = new GatewayEventCallback(this);

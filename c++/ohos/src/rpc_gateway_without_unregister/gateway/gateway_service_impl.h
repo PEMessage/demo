@@ -71,7 +71,7 @@ private:
     sptr<GatewayEventCallback> gatewayCallback_;
     
     // Client callback - Binder holds death recipient, no need to keep it here
-    sptr<EventCallbackProxy> clientCallback_;
+    sptr<IEventCallback> clientCallback_;
 };
 
 } // namespace OHOS
