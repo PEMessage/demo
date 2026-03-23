@@ -18,4 +18,4 @@ add_executable(app
 )
 
 target_include_directories(app PRIVATE . ../rpc_common)
-auto_target_link_libraries(app PRIVATE samgr_mini ipc refbase hilog misc)
+auto_target_link_libraries(app PRIVATE samgr_mini ipc refbase+debug hilog misc)

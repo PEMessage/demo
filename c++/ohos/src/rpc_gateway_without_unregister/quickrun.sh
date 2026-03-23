@@ -5,23 +5,57 @@ cd /home/zhuojw/demo_new/c++/ohos
 
 trap "kill -- -$$" EXIT
 
-#the rest of your code goes here
+# Start SamgrServer
 ./out/samgr_server/app &
 sleep 1
 
-./out/rpc_gateway_server/app &
+# Start Backend Server (rpc_gateway_without_unregister_server)
+./out/rpc_gateway_without_unregister_server/app &
 sleep 1
 
-./out/rpc_gateway_gateway/app &
+# Start Gateway (rpc_gateway_without_unregister_gateway)
+./out/rpc_gateway_without_unregister_gateway/app &
 sleep 1
 
-# Start Client for 8 seconds then kill it
-./out/rpc_gateway_client/app &
+echo "========================================"
+echo "Test 1: First client registration"
+echo "========================================"
+./out/rpc_gateway_without_unregister_client/app &
 CLIENT_PID=$!
-sleep 8
+sleep 10
+echo "Killing first client (PID: $CLIENT_PID)..."
 kill $CLIENT_PID 2>/dev/null
-
-# Keep Gateway and Server running to observe behavior after client dies
+wait $CLIENT_PID 2>/dev/null
 sleep 10
 
 
+echo ""
+echo "========================================"
+echo "Test 2: Second client registration (after first died)"
+echo "========================================"
+./out/rpc_gateway_without_unregister_client/app &
+CLIENT_PID=$!
+sleep 10
+echo "Killing second client (PID: $CLIENT_PID)..."
+kill $CLIENT_PID 2>/dev/null
+wait $CLIENT_PID 2>/dev/null
+sleep 10
+
+#
+# echo ""
+# echo "========================================"
+# echo "Test 3: Third client registration"
+# echo "========================================"
+# ./out/rpc_gateway_without_unregister_client/app &
+# CLIENT_PID=$!
+# sleep 5
+# echo "Killing third client (PID: $CLIENT_PID)..."
+# kill $CLIENT_PID 2>/dev/null
+# wait $CLIENT_PID 2>/dev/null
+# sleep 2
+#
+# echo ""
+# echo "========================================"
+# echo "All tests completed. Keeping services alive for observation..."
+# echo "========================================"
+# sleep 5

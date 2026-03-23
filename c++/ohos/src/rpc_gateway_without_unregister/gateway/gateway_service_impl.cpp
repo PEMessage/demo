@@ -80,6 +80,7 @@ int32_t GatewayServiceImpl::RegisterClientCallback(const sptr<IEventCallback> &c
 
     // Create client callback
     clientCallback_ = new EventCallbackProxy(callbackObj);
+    clientCallback_->EnableTracker();
     
     // Add death recipient to detect when client dies
     clientDeathRecipient_ = new ClientDeathRecipient(this);
