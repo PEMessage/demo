@@ -6,6 +6,7 @@ include("${ROOT_DIR}/include.cmake")
 set(COMMON_SOURCES
     ../rpc_common/event_callback_proxy.cpp
     ../rpc_common/event_callback_stub.cpp
+    ../rpc_common/functional_death_recipient.cpp
 )
 
 # Gateway executable

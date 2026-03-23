@@ -14,26 +14,12 @@
  */
 
 #include "gateway_service_impl.h"
+#include "functional_death_recipient.h"
 #include "hilog/log.h"
 
 namespace OHOS {
 
 static constexpr HiviewDFX::HiLogLabel LABEL = {LOG_CORE, 0xD001536, "GatewayServiceImpl"};
-
-// Death recipient for client callback
-class ClientDeathRecipient : public IRemoteObject::DeathRecipient {
-public:
-    explicit ClientDeathRecipient(GatewayServiceImpl *gateway) : gateway_(gateway) {}
-    void OnRemoteDied(const wptr<IRemoteObject> &object) override {
-        (void)object;
-        HiLogWarn(LABEL, "[Gateway] Client died, clearing callback");
-        if (gateway_ != nullptr) {
-            gateway_->OnClientDied();
-        }
-    }
-private:
-    GatewayServiceImpl *gateway_;
-};
 
 // GatewayEventCallback implementation
 GatewayServiceImpl::GatewayEventCallback::GatewayEventCallback(GatewayServiceImpl *gateway)
@@ -78,13 +64,19 @@ int32_t GatewayServiceImpl::RegisterClientCallback(const sptr<IEventCallback> &c
         return ERR_INVALID_DATA;
     }
 
+
     // Create client callback
     clientCallback_ = new EventCallbackProxy(callbackObj);
-    clientCallback_->EnableTracker();
     
-    // Add death recipient to detect when client dies
-    clientDeathRecipient_ = new ClientDeathRecipient(this);
-    if (!callbackObj->AddDeathRecipient(clientDeathRecipient_)) {
+    // Add death recipient using lambda style to detect when client dies
+    // Note: AddDeathRecipient holds strong reference, no need to keep sptr ourselves
+    auto deathRecipient = new FunctionalDeathRecipient(
+        [this](const wptr<IRemoteObject>& obj) {
+            (void)obj;
+            HiLogWarn(LABEL, "[Gateway] Client died, clearing callback");
+            this->OnClientDied();
+        });
+    if (!callbackObj->AddDeathRecipient(deathRecipient)) {
         HiLogWarn(LABEL, "[Gateway] Failed to add death recipient");
     }
 
@@ -109,7 +101,6 @@ int32_t GatewayServiceImpl::RegisterClientCallback(const sptr<IEventCallback> &c
 void GatewayServiceImpl::OnClientDied()
 {
     clientCallback_ = nullptr;
-    clientDeathRecipient_ = nullptr;
     HiLogInfo(LABEL, "[Gateway] Client callback cleared");
 }
 

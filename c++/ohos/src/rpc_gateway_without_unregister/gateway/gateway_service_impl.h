@@ -70,9 +70,8 @@ private:
     // Gateway's callback to backend
     sptr<GatewayEventCallback> gatewayCallback_;
     
-    // Client callback and its death recipient
+    // Client callback - Binder holds death recipient, no need to keep it here
     sptr<EventCallbackProxy> clientCallback_;
-    sptr<IRemoteObject::DeathRecipient> clientDeathRecipient_;
 };
 
 } // namespace OHOS
