@@ -20,16 +20,12 @@
 #include "event_callback_proxy.h"
 #include "event_callback_stub.h"
 #include "backend_service_proxy.h"
-#include <map>
-#include <mutex>
-#include <vector>
 
 namespace OHOS {
 
 /**
- * @brief Gateway Service Implementation
- * Concrete implementation of the GatewayService business logic.
- * This class extends GatewayServiceStub to provide actual functionality.
+ * @brief Gateway Service Implementation (Simplified - Single Client)
+ * Only supports one client at a time. When client dies, callback becomes null automatically.
  */
 class GatewayServiceImpl : public GatewayServiceStub {
 public:
@@ -43,11 +39,8 @@ public:
     // Connect to Backend Server
     bool ConnectToBackend(const sptr<IRemoteObject> &backendRemote);
 
-    // Get the callback to register with Backend (Gateway's own callback)
-    sptr<IRemoteObject> GetGatewayCallbackForBackend();
-
 protected:
-    // Inner class: Gateway's callback implementation that receives events from Backend
+    // Inner class: Gateway's callback that receives events from Backend
     class GatewayEventCallback : public EventCallbackStub {
     public:
         explicit GatewayEventCallback(GatewayServiceImpl *gateway);
@@ -56,31 +49,16 @@ protected:
         GatewayServiceImpl *gateway_;
     };
 
-    // Client callback info with filter
-    struct ClientCallbackInfo {
-        sptr<EventCallbackProxy> callback;
-        std::vector<int32_t> filterTypes;  // Empty = accept all
-        sptr<IRemoteObject::DeathRecipient> deathRecipient;
-    };
-
-    // Forward declaration
-    class ClientDeathRecipient;
-
-    // Forward event to matching clients
-    void ForwardEventToClients(int32_t event, const std::vector<int8_t> &data);
-    bool ShouldForwardEvent(const ClientCallbackInfo &info, int32_t event);
-
-public:
-    // Called by death recipient when client dies
-    void RemoveClientCallback(const sptr<IRemoteObject> &callback);
+    // Forward event to client (if registered)
+    void ForwardEventToClient(int32_t event, const std::vector<int8_t> &data);
 
 private:
-    std::mutex clientCallbacksMutex_;
-    std::map<sptr<IRemoteObject>, ClientCallbackInfo> clientCallbacks_;
-    
+    // Backend connection
     sptr<BackendServiceProxy> backendProxy_;
     sptr<GatewayEventCallback> gatewayCallback_;
-    sptr<IRemoteObject> gatewayCallbackForBackend_;
+    
+    // Single client callback - when client dies, sptr becomes null automatically
+    sptr<EventCallbackProxy> clientCallback_;
 };
 
 } // namespace OHOS
