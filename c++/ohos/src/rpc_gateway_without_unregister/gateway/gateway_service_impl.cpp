@@ -67,6 +67,7 @@ int32_t GatewayServiceImpl::RegisterClientCallback(const sptr<IEventCallback> &c
 
     // Create client callback
     clientCallback_ = new EventCallbackProxy(callbackObj);
+    clientCallback_->EnableTracker();
     
     // Add death recipient using lambda style to detect when client dies
     // Note: AddDeathRecipient holds strong reference, no need to keep sptr ourselves
@@ -100,6 +101,13 @@ int32_t GatewayServiceImpl::RegisterClientCallback(const sptr<IEventCallback> &c
 // Called when client dies
 void GatewayServiceImpl::OnClientDied()
 {
+    //
+    // Check if callback is already cleared (e.g., by re-registration)
+    // This prevents duplicate clearing when client re-registers and then dies
+    if (clientCallback_ == nullptr) {
+        HiLogInfo(LABEL, "[Gateway] Client callback already cleared, skipping");
+        return;
+    }
     clientCallback_ = nullptr;
     HiLogInfo(LABEL, "[Gateway] Client callback cleared");
 }
