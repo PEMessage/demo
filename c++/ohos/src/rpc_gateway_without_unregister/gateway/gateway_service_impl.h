@@ -25,18 +25,25 @@ namespace OHOS {
 
 /**
  * @brief Gateway Service Implementation (Simplified - Single Client)
- * Only supports one client at a time. When client dies, callback becomes null automatically.
+ * 
+ * Lazy initialization:
+ * - ConnectToBackend: only saves backendProxy_
+ * - RegisterClientCallback: creates GatewayEventCallback and registers with backend
+ * 
+ * Cleanup:
+ * - When client dies: DeathRecipient sets clientCallback_ to null
+ * - When gateway dies: backend automatically detects via Binder death recipient
  */
 class GatewayServiceImpl : public GatewayServiceStub {
 public:
-    GatewayServiceImpl();
+    GatewayServiceImpl() = default;
     ~GatewayServiceImpl() override = default;
 
     // IGatewayService interface implementation
     int32_t RegisterClientCallback(const sptr<IEventCallback> &callback,
                                     const std::vector<int32_t> &filterEventTypes) override;
 
-    // Connect to Backend Server
+    // Connect to Backend Server (just saves the proxy)
     bool ConnectToBackend(const sptr<IRemoteObject> &backendRemote);
 
 protected:
@@ -52,13 +59,20 @@ protected:
     // Forward event to client (if registered)
     void ForwardEventToClient(int32_t event, const std::vector<int8_t> &data);
 
+public:
+    // Called when client dies
+    void OnClientDied();
+
 private:
     // Backend connection
     sptr<BackendServiceProxy> backendProxy_;
+    
+    // Gateway's callback to backend
     sptr<GatewayEventCallback> gatewayCallback_;
     
-    // Single client callback - when client dies, sptr becomes null automatically
+    // Client callback and its death recipient
     sptr<EventCallbackProxy> clientCallback_;
+    sptr<IRemoteObject::DeathRecipient> clientDeathRecipient_;
 };
 
 } // namespace OHOS

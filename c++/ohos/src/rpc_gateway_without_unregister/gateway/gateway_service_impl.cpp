@@ -20,6 +20,21 @@ namespace OHOS {
 
 static constexpr HiviewDFX::HiLogLabel LABEL = {LOG_CORE, 0xD001536, "GatewayServiceImpl"};
 
+// Death recipient for client callback
+class ClientDeathRecipient : public IRemoteObject::DeathRecipient {
+public:
+    explicit ClientDeathRecipient(GatewayServiceImpl *gateway) : gateway_(gateway) {}
+    void OnRemoteDied(const wptr<IRemoteObject> &object) override {
+        (void)object;
+        HiLogWarn(LABEL, "[Gateway] Client died, clearing callback");
+        if (gateway_ != nullptr) {
+            gateway_->OnClientDied();
+        }
+    }
+private:
+    GatewayServiceImpl *gateway_;
+};
+
 // GatewayEventCallback implementation
 GatewayServiceImpl::GatewayEventCallback::GatewayEventCallback(GatewayServiceImpl *gateway)
     : gateway_(gateway) {}
@@ -33,13 +48,7 @@ ErrCode GatewayServiceImpl::GatewayEventCallback::OnEvent(int32_t event, const s
     return ERR_NONE;
 }
 
-// GatewayServiceImpl implementation
-GatewayServiceImpl::GatewayServiceImpl()
-{
-    HiLogInfo(LABEL, "GatewayServiceImpl created");
-    gatewayCallback_ = new GatewayEventCallback(this);
-}
-
+// ConnectToBackend: Just save the proxy, don't register callback yet
 bool GatewayServiceImpl::ConnectToBackend(const sptr<IRemoteObject> &backendRemote)
 {
     if (backendRemote == nullptr) {
@@ -48,38 +57,64 @@ bool GatewayServiceImpl::ConnectToBackend(const sptr<IRemoteObject> &backendRemo
     }
 
     backendProxy_ = new BackendServiceProxy(backendRemote);
-    
-    // Register Gateway's callback with Backend immediately
-    int32_t result = backendProxy_->RegisterGatewayCallback(
-        iface_cast<IEventCallback>(gatewayCallback_->AsObject()));
-    if (result != ERR_NONE) {
-        HiLogError(LABEL, "Failed to register with backend: %{public}d", result);
-        return false;
-    }
-    
     HiLogInfo(LABEL, "[Gateway] Connected to Backend");
     return true;
 }
 
+// RegisterClientCallback: Create callbacks and register with backend
 int32_t GatewayServiceImpl::RegisterClientCallback(const sptr<IEventCallback> &callback,
                                                     const std::vector<int32_t> &filterEventTypes)
 {
-    (void)filterEventTypes;  // Not used in simplified version
+    (void)filterEventTypes;
     
     if (callback == nullptr) {
         HiLogError(LABEL, "Callback is null");
         return ERR_INVALID_DATA;
     }
 
-    // Simply store the client callback
-    clientCallback_ = new EventCallbackProxy(callback->AsObject());
+    sptr<IRemoteObject> callbackObj = callback->AsObject();
+    if (callbackObj == nullptr) {
+        HiLogError(LABEL, "Callback object is null");
+        return ERR_INVALID_DATA;
+    }
+
+    // Create client callback
+    clientCallback_ = new EventCallbackProxy(callbackObj);
+    
+    // Add death recipient to detect when client dies
+    clientDeathRecipient_ = new ClientDeathRecipient(this);
+    if (!callbackObj->AddDeathRecipient(clientDeathRecipient_)) {
+        HiLogWarn(LABEL, "[Gateway] Failed to add death recipient");
+    }
+
+    // Create and register gateway callback
+    gatewayCallback_ = new GatewayEventCallback(this);
+    
+    if (backendProxy_ != nullptr) {
+        int32_t result = backendProxy_->RegisterGatewayCallback(
+            iface_cast<IEventCallback>(gatewayCallback_->AsObject()));
+        if (result != ERR_NONE) {
+            HiLogError(LABEL, "Failed to register with backend: %{public}d", result);
+            return result;
+        }
+        HiLogInfo(LABEL, "[Gateway] Registered callback with Backend");
+    }
+
     HiLogInfo(LABEL, "[Gateway] Client callback registered");
     return ERR_NONE;
 }
 
+// Called when client dies
+void GatewayServiceImpl::OnClientDied()
+{
+    clientCallback_ = nullptr;
+    clientDeathRecipient_ = nullptr;
+    HiLogInfo(LABEL, "[Gateway] Client callback cleared");
+}
+
+// Forward event from Backend to Client
 void GatewayServiceImpl::ForwardEventToClient(int32_t event, const std::vector<int8_t> &data)
 {
-    // When client dies, clientCallback_ becomes null automatically via Binder death detection
     if (clientCallback_ == nullptr) {
         HiLogWarn(LABEL, "[Gateway] No client callback (client may have died)");
         return;
