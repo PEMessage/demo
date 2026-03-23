@@ -22,11 +22,10 @@ echo "Test 1: First client registration"
 echo "========================================"
 ./out/rpc_gateway_without_unregister_client/app &
 CLIENT_PID=$!
-sleep 10
+sleep 20
 echo "Killing first client (PID: $CLIENT_PID)..."
 kill $CLIENT_PID 2>/dev/null
 wait $CLIENT_PID 2>/dev/null
-sleep 10
 
 
 echo ""
@@ -35,7 +34,7 @@ echo "Test 2: Second client registration (after first died)"
 echo "========================================"
 ./out/rpc_gateway_without_unregister_client/app &
 CLIENT_PID=$!
-sleep 10
+sleep 20
 echo "Killing second client (PID: $CLIENT_PID)..."
 kill $CLIENT_PID 2>/dev/null
 wait $CLIENT_PID 2>/dev/null

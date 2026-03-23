@@ -37,12 +37,15 @@ static volatile bool g_running = true;
 
 // Client's callback implementation
 class ClientEventCallback : public EventCallbackStub {
+private:
+    int id_;
 public:
+    ClientEventCallback(int id): id_(id) {};
     ErrCode OnEvent(int32_t event, const std::vector<int8_t> &reqData) override {
         // Convert data to string
         std::string dataStr(reqData.begin(), reqData.end());
-        HiLogInfo(CLIENT_LABEL, "[Client] OnEvent received: event=%{public}d, data=%{public}s",
-                  event, dataStr.c_str());
+        HiLogInfo(CLIENT_LABEL, "[Client] ID: %{public}d OnEvent received: event=%{public}d, data=%{public}s",
+                  id_, event, dataStr.c_str());
         return ERR_NONE;
     }
 };
@@ -88,14 +91,14 @@ int main()
     sptr<GatewayServiceProxy> gatewayProxy = new GatewayServiceProxy(gatewayRemote);
 
     // 4. Create client's callback
-    sptr<ClientEventCallback> clientCallback = new ClientEventCallback();
+    sptr<ClientEventCallback> clientCallback0 = new ClientEventCallback(0);
 
     // 5. Register callback with Gateway (with optional event filter)
     // Example: only receive events 1000, 1002, 1004
     std::vector<int32_t> filterTypes = {1000, 1002, 1004};
     
     HiLogInfo(CLIENT_LABEL, "[Client] Registering callback with Gateway (filtered events: 1000, 1002, 1004)");
-    int32_t result = gatewayProxy->RegisterClientCallback(clientCallback, filterTypes);
+    int32_t result = gatewayProxy->RegisterClientCallback(clientCallback0, filterTypes);
     if (result != ERR_NONE) {
         HiLogError(CLIENT_LABEL, "Failed to register callback: %{public}d", result);
         return -1;
@@ -103,6 +106,17 @@ int main()
     HiLogInfo(CLIENT_LABEL, "[Client] Callback registered successfully");
     HiLogInfo(CLIENT_LABEL, "[Client] Waiting for events from Server via Gateway...");
     HiLogInfo(CLIENT_LABEL, "[Client] Only events 1000, 1002, 1004 will be received (filtered)");
+
+    sleep(5);
+
+    HiLogInfo(CLIENT_LABEL, "[Client] Overwrite it with new callback");
+    sptr<ClientEventCallback> clientCallback1 = new ClientEventCallback(1);
+    result = gatewayProxy->RegisterClientCallback(clientCallback1, filterTypes);
+    if (result != ERR_NONE) {
+        HiLogError(CLIENT_LABEL, "Failed to register callback: %{public}d", result);
+        return -1;
+    }
+    HiLogInfo(CLIENT_LABEL, "[Client] Overwrite Callback registered successfully");
 
     // 6. Keep running to receive callbacks
     while (g_running) {
