@@ -29,5 +29,5 @@ auto_target_link_libraries(refbase+debug PUBLIC misc)
 target_compile_definitions(refbase+debug PUBLIC
     DEBUG_REFBASE
     PRINT_TRACK_AT_ONCE
-    TRACK_ALL
+    # TRACK_ALL
 )
