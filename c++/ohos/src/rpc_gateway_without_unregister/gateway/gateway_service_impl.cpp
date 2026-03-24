@@ -68,7 +68,7 @@ int32_t GatewayServiceImpl::RegisterClientCallback(const sptr<IEventCallback> &c
 
     // Create client callback
     clientCallback_ = callback;
-    clientCallback_->EnableTracker();
+    // clientCallback_->EnableTracker();
     
     // Add death recipient using lambda style to detect when client dies
     // Note: AddDeathRecipient holds strong reference, no need to keep sptr ourselves
@@ -76,8 +76,21 @@ int32_t GatewayServiceImpl::RegisterClientCallback(const sptr<IEventCallback> &c
         [this](const wptr<IRemoteObject>& obj) {
             (void)obj;
             HiLogWarn(LABEL, "[Gateway] Client died, clearing callback");
-            this->OnClientDied();
+            HiLogWarn(
+                    LABEL,
+                    "[Gateway] clientCallback %{public}p, as object %{public}p, obj %{public}p",
+                    clientCallback_.GetRefPtr(),
+                    clientCallback_->AsObject().GetRefPtr(),
+                    obj.GetRefPtr()
+                    );
+            if (clientCallback_ == nullptr || clientCallback_->AsObject() != obj) {
+                HiLogWarn(LABEL, "[Gateway] Client died, not matching object skip");
+                return;
+            }
+            HiLogWarn(LABEL, "[Gateway] Client died, and matching object");
+            OnClientDied();
         });
+    deathRecipient->EnableTracker();
     if (!clientCallback_->AsObject()->AddDeathRecipient(deathRecipient)) {
         HiLogWarn(LABEL, "[Gateway] Failed to add death recipient");
     }
@@ -103,13 +116,6 @@ int32_t GatewayServiceImpl::RegisterClientCallback(const sptr<IEventCallback> &c
 // Called when client dies
 void GatewayServiceImpl::OnClientDied()
 {
-    //
-    // Check if callback is already cleared (e.g., by re-registration)
-    // This prevents duplicate clearing when client re-registers and then dies
-    if (clientCallback_ == nullptr) {
-        HiLogInfo(LABEL, "[Gateway] Client callback already cleared, skipping");
-        return;
-    }
     clientCallback_ = nullptr;
     HiLogInfo(LABEL, "[Gateway] Client callback cleared");
 }
