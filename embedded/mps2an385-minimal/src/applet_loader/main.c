@@ -135,6 +135,10 @@ int main(void) {
     
     load_applet(out_applet_loader_applets_sample_applet_bin, out_applet_loader_applets_sample_applet_bin_len);
     load_applet(out_applet_loader_applets_counter_applet_bin, out_applet_loader_applets_counter_applet_bin_len);
+
+    printf("\n========================================\n");
+    printf("all success!\n");
+    printf("========================================\n");
     
     while (1) {
         __asm volatile ("wfi");
