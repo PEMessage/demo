@@ -22,7 +22,7 @@ CC=${CROSS_COMPILE}gcc
 OBJCOPY=${CROSS_COMPILE}objcopy
 OBJDUMP=${CROSS_COMPILE}objdump
 
-CFLAGS="-mcpu=cortex-m3 -mthumb -Wall -Os -fPIC -nostdlib -nostartfiles -fno-builtin"
+CFLAGS="-mcpu=cortex-m3 -mthumb -Wall -Os -fPIC -shared -nostdlib -nostartfiles -fno-builtin"
 CFLAGS+=" -I ${SCRIPT_DIR}/applet_lib"
 LDFLAGS="-T ${SCRIPT_DIR}/applet_lib/applet.ld"
 

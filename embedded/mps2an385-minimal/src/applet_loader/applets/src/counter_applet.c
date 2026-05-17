@@ -1,14 +1,19 @@
 #include "applet_api.h"
 
+// Declare external function provided by the loader
+int printf(const char* fmt, ...);
+
 static uint32_t counter_applet_main(const applet_api_t* api, void* arg) {
-    api->print("\n=== Counter Applet ===\n");
+    (void)arg;
+
+    printf("\n=== Counter Applet ===\n");
     
     for (int i = 10; i >= 0; i--) {
-        api->print("Countdown: %d\n", i);
+        printf("Countdown: %d\n", i);
         api->delay_ms(300);
     }
     
-    api->print("Blast off!\n");
+    printf("Blast off!\n");
     return 100;
 }
 

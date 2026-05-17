@@ -1,32 +1,35 @@
 #include "applet_api.h"
+#include <stddef.h>
 
-static const applet_api_t* g_api = NULL;
+// Declare external functions provided by the loader
+int printf(const char* fmt, ...);
+void* malloc(size_t size);
+void free(void* ptr);
 
 char global_string[] = "Hello World from global";
 static char static_global_string[] = "Hello World from static global";
 
 static uint32_t applet_main(const applet_api_t* api, void* arg) {
-    g_api = api;
-    {
-        api->print("&g_api is %p\n", &g_api);
+    (void)api;
+    (void)arg;
 
-        api->print("&global_string is %p\n", &global_string);
-        api->print("global_string is %s\n", global_string);
+    printf("&global_string is %p\n", global_string);
+    printf("global_string is %s\n", global_string);
+    printf("&static_global_string is %p\n", static_global_string);
+    printf("static_global_string is %s\n", static_global_string);
+    printf("Hello from sample applet!\n");
+    printf("Tick: %lu\n", api->get_tick());
 
-        api->print("&static_global_string is %p\n", &static_global_string);
-        api->print("static_global_string is %s\n", static_global_string);
-    }
+    void* p = malloc(64);
+    printf("malloc(64) = %p\n", p);
+    free(p);
 
-    
-    api->print("Hello from sample applet!\n");
-    api->print("Tick: %lu\n", api->get_tick());
-    
     for (int i = 0; i < 5; i++) {
-        api->print("Count: %d\n", i);
+        printf("Count: %d\n", i);
         api->delay_ms(500);
     }
-    
-    api->print("Sample applet finished!\n");
+
+    printf("Sample applet finished!\n");
     return 42;
 }
 

@@ -13,33 +13,27 @@ typedef struct {
     uint32_t version;
     const char* name;
     uint32_t (*entry)(const struct applet_api* api, void* arg);
-    uint32_t got_start;
-    uint32_t got_end;
 } applet_header_t;
 
 #define APPLET_MAGIC 0x4150504C
-#define APPLET_VERSION 2
+#define APPLET_VERSION 3
 
 // keep this value same as applets/applet_lib/applet.lds
 #define APPLET_LINK_ADDR 0x40000000
 
 #define APPLET_EXPORT_HEADER(name_str, entry_func) \
-    extern char __got_start[]; \
-    extern char __got_end[]; \
     __attribute__((section(".applet_header"), used)) \
     applet_header_t applet_header = { \
         .magic = APPLET_MAGIC, \
         .version = APPLET_VERSION, \
         .name = name_str, \
         .entry = entry_func, \
-        .got_start = (uint32_t)__got_start, \
-        .got_end = (uint32_t)__got_end, \
     }
 
 typedef struct applet_api {
     uint32_t version;
     
-    void (*print)(const char* fmt, ...);
+    int (*print)(const char* fmt, ...);
     void (*putc)(char c);
     uint32_t (*get_tick)(void);
     void (*delay_ms)(uint32_t ms);

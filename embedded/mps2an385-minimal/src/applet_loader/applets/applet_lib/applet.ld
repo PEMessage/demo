@@ -10,15 +10,26 @@ SECTIONS
 {
   .applet_header : {
     KEEP(*(.applet_header))
+    /* Store .dynamic offset so loader can find it (objcopy doesn't apply R_ARM_ABS32) */
+    LONG(ADDR(.dynamic) - 0x40000000);
   } > ram
-  
+
   .text : {
     *(.text*)
     *(.rodata*)
   } > ram
-  
+
+  .plt : {
+    *(.plt)
+    *(.plt.*)
+  } > ram
+
   .data : {
     *(.data*)
+  } > ram
+
+  .dynamic : {
+    *(.dynamic)
   } > ram
 
   .got : {
@@ -28,6 +39,7 @@ SECTIONS
 
   __got_start = ADDR(.got);
   __got_end = ADDR(.got) + SIZEOF(.got);
+  __dynamic_start = ADDR(.dynamic);
 
   .bss : {
     *(.bss*)
