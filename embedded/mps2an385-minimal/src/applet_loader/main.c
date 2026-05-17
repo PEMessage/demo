@@ -107,7 +107,31 @@ static int load_applet(const uint8_t* data, size_t size) {
     printf("Name (link): 0x%08lX\n", (unsigned long)name_link);
     printf("Name (load): 0x%08lX\n", (unsigned long)name_load);
     printf("Name: %s\n", header->name);
-    
+
+
+    // Relocate GOT entries for global variables
+    assert(header->got_end != 0 &&  header->got_start != 0);
+    uint32_t got_start_link = header->got_start;
+    uint32_t got_end_link = header->got_end;
+    uint32_t got_start_load = (uint32_t)((int64_t)got_start_link + delta);
+    uint32_t got_end_load = (uint32_t)((int64_t)got_end_link + delta);
+
+    printf("GOT (link): 0x%08lX - 0x%08lX\n",
+           (unsigned long)got_start_link, (unsigned long)got_end_link);
+    printf("GOT (load): 0x%08lX - 0x%08lX\n",
+           (unsigned long)got_start_load, (unsigned long)got_end_load);
+
+    for (uint32_t* got_entry = (uint32_t*)got_start_load;
+            (uint32_t)got_entry < got_end_load;
+            got_entry++) {
+        uint32_t val = *got_entry;
+        // Only relocate non-zero addresses within the applet's link range
+        if (val != 0 && val >= link_base && val < (link_base + APPLET_MAX_SIZE)) {
+            uint32_t relocated = (uint32_t)((int64_t)val + delta);
+            *got_entry = relocated;
+        }
+    }
+
     printf("Executing applet...\n");
     printf("=====================================\n");
     
