@@ -13,6 +13,8 @@ typedef struct {
     uint32_t version;
     const char* name;
     uint32_t (*entry)(const struct applet_api* api, void* arg);
+    void * bss_start;
+    void * bss_end;
     uint32_t tail;
 } applet_header_t;
 
@@ -26,12 +28,16 @@ typedef struct {
 // NOTICE:
 // __attribute__ line must below extern declare, otherwise not work
 #define APPLET_EXPORT_HEADER(name_str, entry_func) \
+    extern char __bss_start[]; \
+    extern char __bss_end[]; \
     __attribute__((section(".applet_header"), used)) \
     applet_header_t applet_header = { \
         .magic = APPLET_MAGIC, \
         .version = APPLET_VERSION, \
         .name = name_str, \
         .entry = entry_func, \
+        .bss_start = __bss_start, \
+        .bss_end = __bss_end, \
         .tail = APPLET_MAGIC, \
     }
 

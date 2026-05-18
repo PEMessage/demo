@@ -192,9 +192,12 @@ static void apply_single_relocs(int64_t delta, const Elf32_Rel* rel, uint32_t re
         printf("[%ld] %p: %s offset = 0x%08lX\n", i, &rel[i], arm_reloc_tag_string(r_type), rel[i].r_offset);
 
         switch (r_type) {
-            case R_ARM_RELATIVE:
-                *target = (uint32_t)((int64_t)*target + delta);
+            case R_ARM_RELATIVE: {
+                uint32_t next_target  = (uint32_t)((int64_t)*target + delta);
+                printf("| target %08X => %08X\n", *target, next_target);
+                *target = next_target;
                 break;
+            }
 
             case R_ARM_ABS32:
             case R_ARM_GLOB_DAT:
@@ -204,6 +207,8 @@ static void apply_single_relocs(int64_t delta, const Elf32_Rel* rel, uint32_t re
                 if (sym->st_shndx == 0) {
                     const char* sym_name = strtab + sym->st_name;
                     void* resolved = loader_lookup_symbol(sym_name);
+                    printf("| resolved: %s -- %p\n", sym_name, resolved);
+
                     if (resolved == NULL) {
                         printf("Warning: unresolved symbol '%s'\n", sym_name);
                         continue;
@@ -211,6 +216,8 @@ static void apply_single_relocs(int64_t delta, const Elf32_Rel* rel, uint32_t re
                     sym_addr = (uint32_t)resolved;
                 } else {
                     sym_addr = (uint32_t)((int64_t)sym->st_value + delta);
+                    printf("| sym->value %08X => sym_addr %08X\n",  sym->st_value, sym_addr);
+
                 }
                 *target = sym_addr;
                 break;
@@ -266,6 +273,9 @@ static int load_applet(const uint8_t* data, size_t size) {
         return -1;
     }
     
+    // some background bytes to help identify bug
+    memset(applet_memory, 0xAE, sizeof(applet_memory));
+
     printf("Loading applet (%zu bytes)...\n", size);
     memcpy(applet_memory, data, size);
     
@@ -303,6 +313,16 @@ static int load_applet(const uint8_t* data, size_t size) {
 
     apply_relocations(delta, &dyn_info);
     
+    printf("=====================================\n");
+    printf("BSS: 0x%08X -  0x%08X\n", (uintptr_t)header->bss_start, (uintptr_t)header->bss_end);
+    if (!(header->bss_start >= applet_memory && header->bss_end <= applet_memory + APPLET_MAX_SIZE)) {
+        printf("BSS: Exceed limit\n");
+        return -3;
+    } else {
+        printf("BSS: Within limit\n");
+    }
+    memset(header->bss_start, 0, header->bss_end - header->bss_start);
+
     printf("=====================================\n");
     printf("Entry: 0x%08lX\n", (unsigned long)header->entry);
     printf("Name: %s\n", header->name);

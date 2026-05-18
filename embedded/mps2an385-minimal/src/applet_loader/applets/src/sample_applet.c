@@ -9,6 +9,9 @@ void free(void* ptr);
 char global_string[] = "Hello World from global";
 static char static_global_string[] = "Hello World from static global";
 
+
+char empty_arrow[128] = {0};
+
 static uint32_t applet_main(const applet_api_t* api, void* arg) {
     (void)api;
     (void)arg;
@@ -18,7 +21,15 @@ static uint32_t applet_main(const applet_api_t* api, void* arg) {
     printf("&static_global_string is %p\n", static_global_string);
     printf("static_global_string is %s\n", static_global_string);
     printf("Hello from sample applet!\n");
+
     printf("Tick: %lu\n", api->get_tick());
+
+    printf("empty_arrow:\n  ");
+    for (int i = 0 ; i < sizeof(empty_arrow) ; i ++) {
+        printf("%02X ", empty_arrow[i]);
+    }
+    printf("\n");
+
 
     void* p = malloc(64);
     printf("malloc(64) = %p\n", p);
