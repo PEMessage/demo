@@ -6,39 +6,66 @@
 
 extern int stdout_init(void);
 
-// ========== ELF structures for dynamic linking ==========
-#define DT_NULL         0
-#define DT_NEEDED       1
-#define DT_PLTRELSZ     2
-#define DT_PLTGOT       3
-#define DT_HASH         4
-#define DT_STRTAB       5
-#define DT_SYMTAB       6
-#define DT_RELA         7
-#define DT_RELASZ       8
-#define DT_RELAENT      9
-#define DT_STRSZ        10
-#define DT_SYMENT       11
-#define DT_INIT         12
-#define DT_FINI         13
-#define DT_SONAME       14
-#define DT_RPATH        15
-#define DT_SYMBOLIC     16
-#define DT_REL          17
-#define DT_RELSZ        18
-#define DT_RELENT       19
-#define DT_PLTREL       20
-#define DT_DEBUG        21
-#define DT_TEXTREL      22
-#define DT_JMPREL       23
-#define DT_BIND_NOW     24
-#define DT_INIT_ARRAY   25
-#define DT_FINI_ARRAY   26
-#define DT_INIT_ARRAYSZ 27
-#define DT_FINI_ARRAYSZ 28
-#define DT_RUNPATH      29
-#define DT_FLAGS        30
+// ========== dynamic section struct ==========
+typedef struct {
+    int32_t d_tag;
+    union {
+        uint32_t d_val;
+        uint32_t d_ptr;
+    } d_un;
+} Elf32_Dyn;
 
+#define ELF_DYNAMIC_TAGS                                                      \
+    X(DT_NULL,       0)                                                       \
+    X(DT_NEEDED,     1)                                                       \
+    X(DT_PLTRELSZ,   2)                                                       \
+    X(DT_PLTGOT,     3)                                                       \
+    X(DT_HASH,       4)                                                       \
+    X(DT_STRTAB,     5)                                                       \
+    X(DT_SYMTAB,     6)                                                       \
+    X(DT_RELA,       7)                                                       \
+    X(DT_RELASZ,     8)                                                       \
+    X(DT_RELAENT,    9)                                                       \
+    X(DT_STRSZ,     10)                                                       \
+    X(DT_SYMENT,    11)                                                       \
+    X(DT_INIT,      12)                                                       \
+    X(DT_FINI,      13)                                                       \
+    X(DT_SONAME,    14)                                                       \
+    X(DT_RPATH,     15)                                                       \
+    X(DT_SYMBOLIC,  16)                                                       \
+    X(DT_REL,       17)                                                       \
+    X(DT_RELSZ,     18)                                                       \
+    X(DT_RELENT,    19)                                                       \
+    X(DT_PLTREL,    20)                                                       \
+    X(DT_DEBUG,     21)                                                       \
+    X(DT_TEXTREL,   22)                                                       \
+    X(DT_JMPREL,    23)                                                       \
+    X(DT_BIND_NOW,  24)                                                       \
+    X(DT_INIT_ARRAY,      25)                                                 \
+    X(DT_FINI_ARRAY,      26)                                                 \
+    X(DT_INIT_ARRAYSZ,    27)                                                 \
+    X(DT_FINI_ARRAYSZ,    28)                                                 \
+    X(DT_RUNPATH,         29)                                                 \
+    X(DT_FLAGS,           30)
+
+typedef enum dynamic_tag {
+#define X(name, value) name = value,
+    ELF_DYNAMIC_TAGS
+#undef X
+    DT_NUM_TAGS              /* optional sentinel, not a real tag */
+} dynamic_tag_t;
+
+const char* dynamic_tag_string(dynamic_tag_t tag) {
+    switch (tag) {
+#define X(name, value) case name: return #name;
+        ELF_DYNAMIC_TAGS
+#undef X
+        default: return "DT_UNKNOWN";
+    }
+}
+
+
+// ========== ELF structures for dynamic linking ==========
 // ARM relocation types
 #define R_ARM_NONE          0
 #define R_ARM_ABS32         2
@@ -50,13 +77,6 @@ extern int stdout_init(void);
 #define R_ARM_BASE_PREL     25
 #define R_ARM_GOT_BREL      26
 
-typedef struct {
-    int32_t d_tag;
-    union {
-        uint32_t d_val;
-        uint32_t d_ptr;
-    } d_un;
-} Elf32_Dyn;
 
 typedef struct {
     uint32_t st_name;
@@ -211,6 +231,7 @@ static int load_applet(const uint8_t* data, size_t size) {
     printf("Load base: 0x%08lX\n", (unsigned long)load_base);
     printf("Delta: %ld\n", (long)delta);
 
+    printf("=====================================\n");
     void* dynamic_load = applet_memory + sizeof(*header);
     printf("Header size: 0x%08lX\n", (unsigned long)sizeof(*header));
     printf("Dynamic section addr: 0x%08lX\n", (unsigned long)dynamic_load);
@@ -225,7 +246,14 @@ static int load_applet(const uint8_t* data, size_t size) {
     const char* strtab = NULL;
 
     for (int i = 0; dyn[i].d_tag != DT_NULL; i++) {
-        uint32_t addr = (uint32_t)(dyn[i].d_un.d_ptr + delta);
+        printf(
+                "Dynamic: tag %s(%ld) = 0x%08lX\n",
+                dynamic_tag_string(dyn[i].d_tag),
+                (unsigned long)dyn[i].d_tag,
+                (unsigned long)dyn[i].d_un.d_val
+              );
+
+        void *addr = (void *)(uint32_t)(dyn[i].d_un.d_ptr + delta);
         switch ((uint32_t)dyn[i].d_tag) {
             case DT_REL:      rel = (const Elf32_Rel*)addr; break;
             case DT_RELSZ:    relsz = dyn[i].d_un.d_val; break;
@@ -237,19 +265,21 @@ static int load_applet(const uint8_t* data, size_t size) {
     }
 
     if (rel != NULL && symtab != NULL && strtab != NULL) {
+        printf("------------\n");
         printf("Applying .rel.dyn (%lu bytes)...\n", (unsigned long)relsz);
         apply_relocations(applet_memory, link_base, delta, rel, relsz, symtab, strtab);
     }
     if (jmprel != NULL && symtab != NULL && strtab != NULL) {
+        printf("------------\n");
         printf("Applying .rel.plt (%lu bytes)...\n", (unsigned long)jmprelsz);
         apply_relocations(applet_memory, link_base, delta, jmprel, jmprelsz, symtab, strtab);
     }
     
+    printf("=====================================\n");
     printf("Entry: 0x%08lX\n", (unsigned long)header->entry);
     printf("Name: %s\n", header->name);
     
     printf("Executing applet...\n");
-    printf("=====================================\n");
     
     uint32_t result = header->entry(&g_applet_api, NULL);
     
