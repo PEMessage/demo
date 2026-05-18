@@ -194,8 +194,8 @@ static int load_applet(const uint8_t* data, size_t size) {
         return -1;
     }
     
-    if (header->version > APPLET_VERSION) {
-        printf("Error: Unsupported applet version (expected <= %d, got %lu)\n", 
+    if (header->version != APPLET_VERSION) {
+        printf("Error: Unsupported applet version (expected %d, got %lu)\n",
                APPLET_VERSION, (unsigned long)header->version);
         return -1;
     }
@@ -211,47 +211,36 @@ static int load_applet(const uint8_t* data, size_t size) {
     printf("Load base: 0x%08lX\n", (unsigned long)load_base);
     printf("Delta: %ld\n", (long)delta);
 
-    if (header->version >= 3) {
-        uint32_t dynamic_offset = *(uint32_t*)(applet_memory + sizeof(applet_header_t));
-        uint32_t dynamic_load = load_base + dynamic_offset;
-        const Elf32_Dyn* dyn = (const Elf32_Dyn*)dynamic_load;
+    uint32_t dynamic_offset = *(uint32_t*)(applet_memory + sizeof(applet_header_t));
+    uint32_t dynamic_load = load_base + dynamic_offset;
+    const Elf32_Dyn* dyn = (const Elf32_Dyn*)dynamic_load;
 
-        const Elf32_Rel* rel = NULL;
-        uint32_t relsz = 0;
-        const Elf32_Rel* jmprel = NULL;
-        uint32_t jmprelsz = 0;
-        const Elf32_Sym* symtab = NULL;
-        const char* strtab = NULL;
+    const Elf32_Rel* rel = NULL;
+    uint32_t relsz = 0;
+    const Elf32_Rel* jmprel = NULL;
+    uint32_t jmprelsz = 0;
+    const Elf32_Sym* symtab = NULL;
+    const char* strtab = NULL;
 
-        for (int i = 0; dyn[i].d_tag != DT_NULL; i++) {
-            uint32_t addr = (uint32_t)(dyn[i].d_un.d_ptr + delta);
-            switch ((uint32_t)dyn[i].d_tag) {
-                case DT_REL:      rel = (const Elf32_Rel*)addr; break;
-                case DT_RELSZ:    relsz = dyn[i].d_un.d_val; break;
-                case DT_JMPREL:   jmprel = (const Elf32_Rel*)addr; break;
-                case DT_PLTRELSZ: jmprelsz = dyn[i].d_un.d_val; break;
-                case DT_SYMTAB:   symtab = (const Elf32_Sym*)addr; break;
-                case DT_STRTAB:   strtab = (const char*)addr; break;
-            }
+    for (int i = 0; dyn[i].d_tag != DT_NULL; i++) {
+        uint32_t addr = (uint32_t)(dyn[i].d_un.d_ptr + delta);
+        switch ((uint32_t)dyn[i].d_tag) {
+            case DT_REL:      rel = (const Elf32_Rel*)addr; break;
+            case DT_RELSZ:    relsz = dyn[i].d_un.d_val; break;
+            case DT_JMPREL:   jmprel = (const Elf32_Rel*)addr; break;
+            case DT_PLTRELSZ: jmprelsz = dyn[i].d_un.d_val; break;
+            case DT_SYMTAB:   symtab = (const Elf32_Sym*)addr; break;
+            case DT_STRTAB:   strtab = (const char*)addr; break;
         }
+    }
 
-        if (rel != NULL && symtab != NULL && strtab != NULL) {
-            printf("Applying .rel.dyn (%lu bytes)...\n", (unsigned long)relsz);
-            apply_relocations(applet_memory, link_base, delta, rel, relsz, symtab, strtab);
-        }
-        if (jmprel != NULL && symtab != NULL && strtab != NULL) {
-            printf("Applying .rel.plt (%lu bytes)...\n", (unsigned long)jmprelsz);
-            apply_relocations(applet_memory, link_base, delta, jmprel, jmprelsz, symtab, strtab);
-        }
-    } else {
-        // Legacy manual relocation for v1/v2 applets
-        uint32_t entry_link = (uint32_t)header->entry;
-        uint32_t entry_load = (int64_t)entry_link + (int64_t)delta;
-        header->entry = (uint32_t (*)(const struct applet_api*, void*))entry_load;
-
-        uint32_t name_link = (uint32_t)header->name;
-        uint32_t name_load = (int64_t)name_link + (int64_t)delta;
-        header->name = (const char*)name_load;
+    if (rel != NULL && symtab != NULL && strtab != NULL) {
+        printf("Applying .rel.dyn (%lu bytes)...\n", (unsigned long)relsz);
+        apply_relocations(applet_memory, link_base, delta, rel, relsz, symtab, strtab);
+    }
+    if (jmprel != NULL && symtab != NULL && strtab != NULL) {
+        printf("Applying .rel.plt (%lu bytes)...\n", (unsigned long)jmprelsz);
+        apply_relocations(applet_memory, link_base, delta, jmprel, jmprelsz, symtab, strtab);
     }
     
     printf("Entry: 0x%08lX\n", (unsigned long)header->entry);

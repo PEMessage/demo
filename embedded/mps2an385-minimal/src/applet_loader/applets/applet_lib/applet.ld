@@ -37,10 +37,6 @@ SECTIONS
     *(.got.plt)
   } > ram
 
-  __got_start = ADDR(.got);
-  __got_end = ADDR(.got) + SIZEOF(.got);
-  __dynamic_start = ADDR(.dynamic);
-
   .bss : {
     *(.bss*)
     *(COMMON)
