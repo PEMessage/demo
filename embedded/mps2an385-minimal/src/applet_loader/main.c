@@ -171,17 +171,25 @@ static void* loader_lookup_symbol(const char* name) {
     return NULL;
 }
 
-static void apply_relocations(uint8_t* load_base, uint32_t link_base, int64_t delta,
-                               const Elf32_Rel* rel, uint32_t relsz,
-                               const Elf32_Sym* symtab, const char* strtab) {
+typedef struct {
+    const Elf32_Rel* rel;
+    uint32_t relsz;
+    const Elf32_Rel* jmprel;
+    uint32_t jmprelsz;
+    const Elf32_Sym* symtab;
+    const char* strtab;
+} applet_dyn_info_t;
+
+static void apply_single_relocs(int64_t delta, const Elf32_Rel* rel, uint32_t relsz,
+                                   const Elf32_Sym* symtab, const char* strtab) {
     uint32_t count = relsz / sizeof(Elf32_Rel);
     for (uint32_t i = 0; i < count; i++) {
         uint32_t r_info = rel[i].r_info;
         uint32_t r_sym = r_info >> 8;
         uint32_t r_type = r_info & 0xFF;
 
-        uint32_t* target = (uint32_t*)(load_base + (rel[i].r_offset - link_base));
-        printf("[%d]: %s offset = 0x%08lX\n", i, arm_reloc_tag_string(r_type),  rel[i].r_offset);
+        uint32_t* target = (uint32_t*)((int64_t)rel[i].r_offset + delta);
+        printf("[%ld] %p: %s offset = 0x%08lX\n", i, &rel[i], arm_reloc_tag_string(r_type), rel[i].r_offset);
 
         switch (r_type) {
             case R_ARM_RELATIVE:
@@ -212,6 +220,44 @@ static void apply_relocations(uint8_t* load_base, uint32_t link_base, int64_t de
                 break;
         }
     }
+}
+
+static void apply_relocations(int64_t delta, const applet_dyn_info_t* dyn) {
+    if (dyn->rel != NULL && dyn->symtab != NULL && dyn->strtab != NULL) {
+        printf("------------\n");
+        printf("Applying .rel.dyn (%lu bytes)...\n", (unsigned long)dyn->relsz);
+        apply_single_relocs(delta, dyn->rel, dyn->relsz, dyn->symtab, dyn->strtab);
+    }
+    if (dyn->jmprel != NULL && dyn->symtab != NULL && dyn->strtab != NULL) {
+        printf("------------\n");
+        printf("Applying .rel.plt (%lu bytes)...\n", (unsigned long)dyn->jmprelsz);
+        apply_single_relocs(delta, dyn->jmprel, dyn->jmprelsz, dyn->symtab, dyn->strtab);
+    }
+}
+
+static applet_dyn_info_t parse_dynamic_section(const Elf32_Dyn* dyn, int64_t delta) {
+    applet_dyn_info_t info = {0};
+
+    for (int i = 0; dyn[i].d_tag != DT_NULL; i++) {
+        printf(
+                "[%d] %p: tag %s(%ld) = 0x%08lX\n",
+                i, &dyn[i],
+                dynamic_tag_string(dyn[i].d_tag),
+                (unsigned long)dyn[i].d_tag,
+                (unsigned long)dyn[i].d_un.d_val
+              );
+
+        void *addr = (void *)(uint32_t)(dyn[i].d_un.d_ptr + delta);
+        switch ((uint32_t)dyn[i].d_tag) {
+            case DT_REL:      info.rel = (const Elf32_Rel*)addr; break;
+            case DT_RELSZ:    info.relsz = dyn[i].d_un.d_val; break;
+            case DT_JMPREL:   info.jmprel = (const Elf32_Rel*)addr; break;
+            case DT_PLTRELSZ: info.jmprelsz = dyn[i].d_un.d_val; break;
+            case DT_SYMTAB:   info.symtab = (const Elf32_Sym*)addr; break;
+            case DT_STRTAB:   info.strtab = (const char*)addr; break;
+        }
+    }
+    return info;
 }
 
 static int load_applet(const uint8_t* data, size_t size) {
@@ -253,44 +299,9 @@ static int load_applet(const uint8_t* data, size_t size) {
     printf("Header size: 0x%08lX\n", (unsigned long)sizeof(*header));
     printf("Dynamic section addr: 0x%08lX\n", (unsigned long)dynamic_load);
 
-    const Elf32_Dyn* dyn = (const Elf32_Dyn*)dynamic_load;
+    applet_dyn_info_t dyn_info = parse_dynamic_section((const Elf32_Dyn*)dynamic_load, delta);
 
-    const Elf32_Rel* rel = NULL;
-    uint32_t relsz = 0;
-    const Elf32_Rel* jmprel = NULL;
-    uint32_t jmprelsz = 0;
-    const Elf32_Sym* symtab = NULL;
-    const char* strtab = NULL;
-
-    for (int i = 0; dyn[i].d_tag != DT_NULL; i++) {
-        printf(
-                "Dynamic: tag %s(%ld) = 0x%08lX\n",
-                dynamic_tag_string(dyn[i].d_tag),
-                (unsigned long)dyn[i].d_tag,
-                (unsigned long)dyn[i].d_un.d_val
-              );
-
-        void *addr = (void *)(uint32_t)(dyn[i].d_un.d_ptr + delta);
-        switch ((uint32_t)dyn[i].d_tag) {
-            case DT_REL:      rel = (const Elf32_Rel*)addr; break;
-            case DT_RELSZ:    relsz = dyn[i].d_un.d_val; break;
-            case DT_JMPREL:   jmprel = (const Elf32_Rel*)addr; break;
-            case DT_PLTRELSZ: jmprelsz = dyn[i].d_un.d_val; break;
-            case DT_SYMTAB:   symtab = (const Elf32_Sym*)addr; break;
-            case DT_STRTAB:   strtab = (const char*)addr; break;
-        }
-    }
-
-    if (rel != NULL && symtab != NULL && strtab != NULL) {
-        printf("------------\n");
-        printf("Applying .rel.dyn (%lu bytes)...\n", (unsigned long)relsz);
-        apply_relocations(applet_memory, link_base, delta, rel, relsz, symtab, strtab);
-    }
-    if (jmprel != NULL && symtab != NULL && strtab != NULL) {
-        printf("------------\n");
-        printf("Applying .rel.plt (%lu bytes)...\n", (unsigned long)jmprelsz);
-        apply_relocations(applet_memory, link_base, delta, jmprel, jmprelsz, symtab, strtab);
-    }
+    apply_relocations(delta, &dyn_info);
     
     printf("=====================================\n");
     printf("Entry: 0x%08lX\n", (unsigned long)header->entry);
