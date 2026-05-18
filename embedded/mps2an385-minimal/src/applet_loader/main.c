@@ -211,8 +211,10 @@ static int load_applet(const uint8_t* data, size_t size) {
     printf("Load base: 0x%08lX\n", (unsigned long)load_base);
     printf("Delta: %ld\n", (long)delta);
 
-    uint32_t dynamic_offset = *(uint32_t*)(applet_memory + sizeof(applet_header_t));
-    uint32_t dynamic_load = load_base + dynamic_offset;
+    void* dynamic_load = applet_memory + sizeof(*header);
+    printf("Header size: 0x%08lX\n", (unsigned long)sizeof(*header));
+    printf("Dynamic section addr: 0x%08lX\n", (unsigned long)dynamic_load);
+
     const Elf32_Dyn* dyn = (const Elf32_Dyn*)dynamic_load;
 
     const Elf32_Rel* rel = NULL;

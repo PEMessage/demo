@@ -18,7 +18,10 @@ CFLAGS += -I ${THIS_DIR}/applets/applet_lib
 
 $(info  $(CFLAGS))
 
-$(APPLETS_OUT)/%.elf: $(APPLETS_DIR)/src/%.c
+EXTER_DEPS := $(THIS_DIR)/applets/applet_lib/applet_api.h \
+			  $(THIS_DIR)/applets/applet_lib/applet.ld
+
+$(APPLETS_OUT)/%.elf: $(APPLETS_DIR)/src/%.c $(EXTER_DEPS)
 	$(APPLETS_DIR)/build_applets.sh $@ $<
 
 $(APPLETS_OUT)/%.bin: $(APPLETS_OUT)/%.elf
