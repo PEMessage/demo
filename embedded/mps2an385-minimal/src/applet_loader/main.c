@@ -64,18 +64,39 @@ const char* dynamic_tag_string(dynamic_tag_t tag) {
     }
 }
 
-
-// ========== ELF structures for dynamic linking ==========
+// ========== relocation section ==========
 // ARM relocation types
-#define R_ARM_NONE          0
-#define R_ARM_ABS32         2
-#define R_ARM_REL32         3
-#define R_ARM_THM_CALL      10
-#define R_ARM_GLOB_DAT      21
-#define R_ARM_JUMP_SLOT     22
-#define R_ARM_RELATIVE      23
-#define R_ARM_BASE_PREL     25
-#define R_ARM_GOT_BREL      26
+typedef struct {
+    uint32_t r_offset;
+    uint32_t r_info;
+} Elf32_Rel;
+
+#define ARM_RELOC_TYPES                                                       \
+    X(R_ARM_NONE,          0)                                                 \
+    X(R_ARM_ABS32,         2)                                                 \
+    X(R_ARM_REL32,         3)                                                 \
+    X(R_ARM_THM_CALL,     10)                                                 \
+    X(R_ARM_GLOB_DAT,     21)                                                 \
+    X(R_ARM_JUMP_SLOT,    22)                                                 \
+    X(R_ARM_RELATIVE,     23)                                                 \
+    X(R_ARM_BASE_PREL,    25)                                                 \
+    X(R_ARM_GOT_BREL,     26)
+
+typedef enum arm_reloc_tag {
+#define X(name, value) name = value,
+    ARM_RELOC_TYPES
+#undef X
+    ARM_RELOC_NUM
+} arm_reloc_tag_t;
+
+const char* arm_reloc_tag_string(arm_reloc_tag_t tag) {
+    switch (tag) {
+#define X(name, value) case name: return #name;
+        ARM_RELOC_TYPES
+#undef X
+        default: return "R_ARM_UNKNOW";
+    }
+}
 
 
 typedef struct {
@@ -87,10 +108,6 @@ typedef struct {
     uint16_t st_shndx;
 } Elf32_Sym;
 
-typedef struct {
-    uint32_t r_offset;
-    uint32_t r_info;
-} Elf32_Rel;
 // ========== End ELF structures ==========
 
 static uint32_t sys_get_tick(void) {
@@ -159,12 +176,12 @@ static void apply_relocations(uint8_t* load_base, uint32_t link_base, int64_t de
                                const Elf32_Sym* symtab, const char* strtab) {
     uint32_t count = relsz / sizeof(Elf32_Rel);
     for (uint32_t i = 0; i < count; i++) {
-        uint32_t r_offset = rel[i].r_offset;
         uint32_t r_info = rel[i].r_info;
         uint32_t r_sym = r_info >> 8;
         uint32_t r_type = r_info & 0xFF;
 
-        uint32_t* target = (uint32_t*)(load_base + (r_offset - link_base));
+        uint32_t* target = (uint32_t*)(load_base + (rel[i].r_offset - link_base));
+        printf("[%d]: %s offset = 0x%08lX\n", i, arm_reloc_tag_string(r_type),  rel[i].r_offset);
 
         switch (r_type) {
             case R_ARM_RELATIVE:
