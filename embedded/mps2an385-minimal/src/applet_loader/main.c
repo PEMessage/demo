@@ -188,13 +188,13 @@ static void apply_single_relocs(int64_t delta, const Elf32_Rel* rel, uint32_t re
         uint32_t r_sym = r_info >> 8;
         uint32_t r_type = r_info & 0xFF;
 
-        uint32_t* target = (uint32_t*)((int64_t)rel[i].r_offset + delta);
+        uint32_t* target = (uint32_t*)(uintptr_t)((int64_t)rel[i].r_offset + delta);
         printf("[%ld] %p: %s offset = 0x%08lX\n", i, &rel[i], arm_reloc_tag_string(r_type), rel[i].r_offset);
 
         switch (r_type) {
             case R_ARM_RELATIVE: {
                 uint32_t next_target  = (uint32_t)((int64_t)*target + delta);
-                printf("| target %08X => %08X\n", *target, next_target);
+                printf("| target %08lX => %08lX\n", *target, next_target);
                 *target = next_target;
                 break;
             }
@@ -216,7 +216,7 @@ static void apply_single_relocs(int64_t delta, const Elf32_Rel* rel, uint32_t re
                     sym_addr = (uint32_t)resolved;
                 } else {
                     sym_addr = (uint32_t)((int64_t)sym->st_value + delta);
-                    printf("| sym->value %08X => sym_addr %08X\n",  sym->st_value, sym_addr);
+                    printf("| sym->value %08lX => sym_addr %08lX\n",  sym->st_value, sym_addr);
 
                 }
                 *target = sym_addr;
@@ -229,7 +229,7 @@ static void apply_single_relocs(int64_t delta, const Elf32_Rel* rel, uint32_t re
     }
 }
 
-static void apply_relocations(int64_t delta, const applet_dyn_info_t* dyn) {
+static void apply_relocations(const applet_dyn_info_t* dyn, int64_t delta) {
     if (dyn->rel != NULL && dyn->symtab != NULL && dyn->strtab != NULL) {
         printf("------------\n");
         printf("Applying .rel.dyn (%lu bytes)...\n", (unsigned long)dyn->relsz);
@@ -255,11 +255,12 @@ static applet_dyn_info_t parse_dynamic_section(const Elf32_Dyn* dyn, int64_t del
               );
 
         void *addr = (void *)(uint32_t)(dyn[i].d_un.d_ptr + delta);
+        uint32_t val = dyn[i].d_un.d_val;
         switch ((uint32_t)dyn[i].d_tag) {
             case DT_REL:      info.rel = (const Elf32_Rel*)addr; break;
-            case DT_RELSZ:    info.relsz = dyn[i].d_un.d_val; break;
+            case DT_RELSZ:    info.relsz = val; break;
             case DT_JMPREL:   info.jmprel = (const Elf32_Rel*)addr; break;
-            case DT_PLTRELSZ: info.jmprelsz = dyn[i].d_un.d_val; break;
+            case DT_PLTRELSZ: info.jmprelsz = val; break;
             case DT_SYMTAB:   info.symtab = (const Elf32_Sym*)addr; break;
             case DT_STRTAB:   info.strtab = (const char*)addr; break;
         }
@@ -311,11 +312,14 @@ static int load_applet(const uint8_t* data, size_t size) {
 
     applet_dyn_info_t dyn_info = parse_dynamic_section((const Elf32_Dyn*)dynamic_load, delta);
 
-    apply_relocations(delta, &dyn_info);
+    apply_relocations(&dyn_info, delta);
     
+    // NOTICE:
+    // .rel.dyn's  R_ARM_ABS32 will modify header->bss_start/bss_end,
+    // so header->bss_start / end only accessiable after `apply_relocations`
     printf("=====================================\n");
     printf("BSS: 0x%08X -  0x%08X\n", (uintptr_t)header->bss_start, (uintptr_t)header->bss_end);
-    if (!(header->bss_start >= applet_memory && header->bss_end <= applet_memory + APPLET_MAX_SIZE)) {
+    if (!(header->bss_start >= (void *)applet_memory && header->bss_end <= (void *)(applet_memory + APPLET_MAX_SIZE))) {
         printf("BSS: Exceed limit\n");
         return -3;
     } else {
