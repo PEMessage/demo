@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
+// GCC 的语句表达式扩展（({ ... })），该结构可以包含多条语句并返回最后一个表达式的值（此处为 test.bytes[0]）
 #define IS_LITTLE_ENDIAN ({ \
     union { \
         uint16_t word; \
