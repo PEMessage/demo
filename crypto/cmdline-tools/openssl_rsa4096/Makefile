@@ -28,6 +28,9 @@ $(KEYGEN):
 	# ======================================
 	# 生成RSA4096私钥 (传统PKCS#1 RSAPrivateKey格式)
 	# ======================================
+	# 注意: OpenSSL 3.x 中 genrsa 默认输出 PKCS#8 格式!
+	# 必须加 -traditional 才能得到裸 RSAPrivateKey (PKCS#1)
+	#
 	# RSAPrivateKey ::= SEQUENCE {
 	#   version         Version,
 	#   modulus         INTEGER,        -- n
@@ -40,7 +43,7 @@ $(KEYGEN):
 	#   coefficient     INTEGER,        -- (inverse of q) mod p
 	#   otherPrimeInfos OtherPrimeInfos OPTIONAL
 	# }
-	openssl genrsa -out $(PREFIX_DIR)/$(KEY_ID)_private_key_pkcs1.pem 4096
+	openssl genrsa -traditional -out $(PREFIX_DIR)/$(KEY_ID)_private_key_pkcs1.pem 4096
 	openssl asn1parse -dump -in $(PREFIX_DIR)/$(KEY_ID)_private_key_pkcs1.pem
 
 	# ======================================
