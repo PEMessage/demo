@@ -5,6 +5,8 @@ KEY_ID := ecc_secp384r1
 
 $(SHELL mkdir -p $(PREFIX_DIR))
 
+SHELL = ./color_shell.sh
+
 # =======================================
 .PHONY: verify run
 run: verify
@@ -15,20 +17,67 @@ KEYS := \
 		   $(PREFIX_DIR)/$(KEY_ID)_public_key.der
 $(KEYS):
 	mkdir -p $(PREFIX_DIR)
-	# 生成secp384r1椭圆曲线私钥
+	# ======================================
+	# 生成secp384r1椭圆曲线私钥(SEC1 ECPrivateKey)
+	# ======================================
 	openssl ecparam -name secp384r1 \
 		-genkey \
-		-out $(PREFIX_DIR)/$(KEY_ID)_private_key.pem \
+		-out $(PREFIX_DIR)/$(KEY_ID)_private_key_sec1.pem \
 		-noout
-	# 生成der格式私钥
+	openssl asn1parse -dump -in $(PREFIX_DIR)/$(KEY_ID)_private_key_sec1.pem
+	# ======================================
+	# 生成secp384r1椭圆曲线私钥(PKCS8)
+	# ======================================
+	# PrivateKeyInfo ::= SEQUENCE {
+	#   version         INTEGER { v1(0) },
+	#   privateKeyAlgorithm   PrivateKeyAlgorithmIdentifier,
+	#   privateKey      OCTET STRING,   -- 内层包含 ECPrivateKey
+	#   attributes      [0] IMPLICIT Attributes OPTIONAL
+	# }
+	openssl genpkey -algorithm EC \
+		-pkeyopt ec_paramgen_curve:secp384r1 \
+		-out $(PREFIX_DIR)/$(KEY_ID)_private_key.pem
+	openssl asn1parse -dump -in $(PREFIX_DIR)/$(KEY_ID)_private_key.pem
+
+	# ======================================
+	# (1) pem -> der格式私钥 (SEC1 ECPrivateKey 会剥离pkcs8外壳)
+	# ======================================
 	openssl pkey -in $(PREFIX_DIR)/$(KEY_ID)_private_key.pem \
+		-outform der -out $(PREFIX_DIR)/$(KEY_ID)_private_key_sec1.der
+	openssl asn1parse -dump -in $(PREFIX_DIR)/$(KEY_ID)_private_key_sec1.der -inform der
+
+	# another not uniform way
+	openssl pkcs8 -nocrypt -in $(PREFIX_DIR)/$(KEY_ID)_private_key.pem \
+		-outform der -out $(PREFIX_DIR)/$(KEY_ID)_private_key_sec1.der
+	openssl asn1parse -dump -in $(PREFIX_DIR)/$(KEY_ID)_private_key_sec1.der -inform der
+
+	# ======================================
+	# (2) pem -> der格式私钥 (保留pkcs8 外壳)
+	# --
+	#  -topk8: 默认输出仍然是 SEC1 ECPrivateKey
+	#  -nocrypt: 必须加, 否则解析失败
+	# ======================================
+	openssl pkcs8 -topk8 -nocrypt -in $(PREFIX_DIR)/$(KEY_ID)_private_key.pem \
 		-outform der -out $(PREFIX_DIR)/$(KEY_ID)_private_key.der
-	# 从私钥中导出公钥
+	openssl asn1parse -dump -in $(PREFIX_DIR)/$(KEY_ID)_private_key.der -inform der
+
+	# ======================================
+	# pem 私钥 -> pem 公钥
+	# ======================================
+
+	openssl pkey -in $(PREFIX_DIR)/$(KEY_ID)_private_key.pem \
+             -pubout -out $(PREFIX_DIR)/$(KEY_ID)_public_key.pem
+	openssl asn1parse -dump -in $(PREFIX_DIR)/$(KEY_ID)_public_key.pem
+
+	# another not uniform way
 	openssl ec -in $(PREFIX_DIR)/$(KEY_ID)_private_key.pem \
 		-pubout -out $(PREFIX_DIR)/$(KEY_ID)_public_key.pem
+	openssl asn1parse -dump -in $(PREFIX_DIR)/$(KEY_ID)_public_key.pem
+
 	# 生成der格式公钥
 	openssl pkey -in $(PREFIX_DIR)/$(KEY_ID)_public_key.pem  -pubin \
 		-outform der -out $(PREFIX_DIR)/$(KEY_ID)_public_key.der
+	openssl asn1parse -dump -in $(PREFIX_DIR)/$(KEY_ID)_public_key.der -inform der
 
 # =======================================
 DATAS := \
