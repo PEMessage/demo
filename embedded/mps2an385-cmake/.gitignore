@@ -6,3 +6,4 @@ out
 compile_commands.json
 lib/FreeRTOS-GDB-Support/
 lib/newlib/newlib-src/
+!.clangd
