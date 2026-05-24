@@ -32,7 +32,8 @@ rootProject.name = "multi-project"
 val projects = listOf(
     "helloworld" to "app/helloworld/",
     "helloworld-kotlin" to "app/helloworld-kotlin/",
-    "calc-aes" to "app/calc-aes/"
+    "calc-aes" to "app/calc-aes/",
+    "zero-padding-3des-cbc" to "app/zero-padding-3des-cbc/"
 )
 
 // See: https://docs.gradle.org/8.14.2/userguide/multi_project_builds.html#multi_project_layout
