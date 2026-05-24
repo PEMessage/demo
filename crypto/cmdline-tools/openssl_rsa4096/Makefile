@@ -17,10 +17,18 @@ KEYS :=  $(PREFIX_DIR)/$(KEY_ID)_private_key_pkcs1.der \
 		 $(PREFIX_DIR)/$(KEY_ID)_public_key.der
 
 # =======================================
-.PHONY: verify run keygen keys
+CERTS := $(PREFIX_DIR)/$(KEY_ID)_cert.csr \
+		 $(PREFIX_DIR)/$(KEY_ID)_cert.pem \
+		 $(PREFIX_DIR)/$(KEY_ID)_cert_pubkey.pem
+
+# =======================================
+.PHONY: verify run keygen keys certs clean
 run: verify
 keygen: $(KEYGEN)
 keys: $(KEYS)
+certs: $(CERTS)
+clean:
+	rm -rf $(PREFIX_DIR)
 # =======================================
 
 $(KEYGEN):
@@ -117,6 +125,51 @@ $(KEYS): $(KEYGEN)
 		-outform der -out $(PREFIX_DIR)/$(KEY_ID)_public_key.der
 	openssl asn1parse -dump -in $(PREFIX_DIR)/$(KEY_ID)_public_key.der -inform der
 
+$(CERTS): $(KEYGEN)
+	mkdir -p $(PREFIX_DIR)
+
+	# ======================================
+	# (1) 生成证书签名请求 (CSR)
+	# ======================================
+	# CertificationRequestInfo ::= SEQUENCE {
+	#   version       INTEGER { v1(0) },
+	#   subject       Name,
+	#   subjectPKInfo SubjectPublicKeyInfo,
+	#   attributes    [0] IMPLICIT Attributes OPTIONAL
+	# }
+	openssl req -new \
+		-key $(PREFIX_DIR)/$(KEY_ID)_private_key.pem \
+		-subj "/C=CN/O=Demo/CN=rsa4096-test" \
+		-out $(PREFIX_DIR)/$(KEY_ID)_cert.csr
+	openssl asn1parse -dump -in $(PREFIX_DIR)/$(KEY_ID)_cert.csr
+
+	# ======================================
+	# (2) 用私钥自签名 CSR, 生成 X.509 证书
+	# ======================================
+	# TBSCertificate ::= SEQUENCE {
+	#   version         [0] EXPLICIT Version DEFAULT v1,
+	#   serialNumber     CertificateSerialNumber,
+	#   signature        AlgorithmIdentifier,
+	#   issuer           Name,
+	#   validity         Validity,
+	#   subject          Name,
+	#   subjectPublicKeyInfo SubjectPublicKeyInfo,
+	#   ...
+	# }
+	openssl x509 -req \
+		-in $(PREFIX_DIR)/$(KEY_ID)_cert.csr \
+		-signkey $(PREFIX_DIR)/$(KEY_ID)_private_key.pem \
+		-days 365 \
+		-out $(PREFIX_DIR)/$(KEY_ID)_cert.pem
+	openssl asn1parse -dump -in $(PREFIX_DIR)/$(KEY_ID)_cert.pem
+	openssl x509 -in $(PREFIX_DIR)/$(KEY_ID)_cert.pem -noout -text
+
+	# ======================================
+	# (3) 从证书提取公钥 (用于后续验证)
+	# ======================================
+	openssl x509 -in $(PREFIX_DIR)/$(KEY_ID)_cert.pem -noout -pubkey > \
+		$(PREFIX_DIR)/$(KEY_ID)_cert_pubkey.pem
+
 ALL_KEYS := $(KEYGEN) $(KEYS)
 
 # =======================================
@@ -169,7 +222,7 @@ $(PREFIX_DIR)/data.rsa.sig3: $(DATAS) $(KEYS)
 	xxd -l 64 $@
 
 # =======================================
-verify: $(SIGNATURES) $(DATAS) $(KEYS)
+verify: $(SIGNATURES) $(DATAS) $(KEYS) $(CERTS)
 	# ======================================
 	# 校验方式1: dgst -verify (对应签名方式1)
 	# ======================================
@@ -201,3 +254,22 @@ verify: $(SIGNATURES) $(DATAS) $(KEYS)
 		-pkeyopt digest:sha256 \
 		-pkeyopt rsa_padding_mode:pss \
 		-pkeyopt rsa_pss_saltlen:32
+
+	# ======================================
+	# 证书验证
+	# ======================================
+	# (1) 验证证书与私钥匹配 (modulus 一致性)
+	@echo "[Cert modulus MD5]"
+	openssl x509 -noout -modulus -in $(PREFIX_DIR)/$(KEY_ID)_cert.pem | openssl md5
+	@echo "[Key modulus MD5]"
+	openssl rsa -noout -modulus -in $(PREFIX_DIR)/$(KEY_ID)_private_key.pem | openssl md5
+
+	# (2) 从证书提取的公钥与独立公钥二进制对比
+	cmp -s $(PREFIX_DIR)/$(KEY_ID)_public_key.pem \
+		$(PREFIX_DIR)/$(KEY_ID)_cert_pubkey.pem && \
+		echo "[Cert pubkey == Standalone pubkey]: OK" || \
+		echo "[Cert pubkey == Standalone pubkey]: MISMATCH"
+
+	# (3) 验证证书签名的有效性 (自签名证书自己验证自己)
+	openssl verify -CAfile $(PREFIX_DIR)/$(KEY_ID)_cert.pem \
+		$(PREFIX_DIR)/$(KEY_ID)_cert.pem
