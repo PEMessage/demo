@@ -10,5 +10,15 @@
 //     id("org.gradle.toolchains.foojay-resolver-convention") version "0.10.0"
 // }
 
-rootProject.name = "helloworld"
+rootProject.name = "multi-project"
 include("app")
+
+val projects = listOf(
+    "helloworld" to "app/helloworld/",
+)
+
+// See: https://docs.gradle.org/8.14.2/userguide/multi_project_builds.html#multi_project_layout
+projects.forEach { (name, path) ->
+    include(":$name")
+    project(":$name").projectDir = File(path)
+}
