@@ -18,7 +18,9 @@ KEYS :=  $(PREFIX_DIR)/$(KEY_ID)_private_key_pkcs1.der \
 
 # =======================================
 CERTS := $(PREFIX_DIR)/$(KEY_ID)_cert.csr \
-		 $(PREFIX_DIR)/$(KEY_ID)_cert.pem \
+		 $(PREFIX_DIR)/$(KEY_ID)_cert_v1.pem \
+		 $(PREFIX_DIR)/$(KEY_ID)_cert_v3.pem \
+		 $(PREFIX_DIR)/$(KEY_ID)_cert_v3_ext.conf \
 		 $(PREFIX_DIR)/$(KEY_ID)_cert_pubkey.pem
 
 # =======================================
@@ -144,8 +146,9 @@ $(CERTS): $(KEYGEN)
 	openssl asn1parse -dump -in $(PREFIX_DIR)/$(KEY_ID)_cert.csr
 
 	# ======================================
-	# (2) 用私钥自签名 CSR, 生成 X.509 证书
+	# (2) 用同一个 CSR 签出 X.509 v1 证书
 	# ======================================
+	# v1 是 X.509 原始版本, TBSCertificate 中无 Extensions 字段:
 	# TBSCertificate ::= SEQUENCE {
 	#   version         [0] EXPLICIT Version DEFAULT v1,
 	#   serialNumber     CertificateSerialNumber,
@@ -154,20 +157,45 @@ $(CERTS): $(KEYGEN)
 	#   validity         Validity,
 	#   subject          Name,
 	#   subjectPublicKeyInfo SubjectPublicKeyInfo,
-	#   ...
+	#   issuerUniqueID  [1] IMPLICIT UniqueIdentifier OPTIONAL,
+	#   subjectUniqueID [2] IMPLICIT UniqueIdentifier OPTIONAL,
+	#   -- 注意: v1/v2 到此结束, v3 才继续有 extensions
+	#   extensions      [3] EXPLICIT Extensions OPTIONAL  -- v3 only
 	# }
 	openssl x509 -req \
 		-in $(PREFIX_DIR)/$(KEY_ID)_cert.csr \
 		-signkey $(PREFIX_DIR)/$(KEY_ID)_private_key.pem \
 		-days 365 \
-		-out $(PREFIX_DIR)/$(KEY_ID)_cert.pem
-	openssl asn1parse -dump -in $(PREFIX_DIR)/$(KEY_ID)_cert.pem
-	openssl x509 -in $(PREFIX_DIR)/$(KEY_ID)_cert.pem -noout -text
+		-set_serial 1 \
+		-clrext \
+		-out $(PREFIX_DIR)/$(KEY_ID)_cert_v1.pem
+	openssl asn1parse -dump -in $(PREFIX_DIR)/$(KEY_ID)_cert_v1.pem
+	openssl x509 -in $(PREFIX_DIR)/$(KEY_ID)_cert_v1.pem -noout -text
 
 	# ======================================
-	# (3) 从证书提取公钥 (用于后续验证)
+	# (3) 用同一个 CSR 签出 X.509 v3 证书
 	# ======================================
-	openssl x509 -in $(PREFIX_DIR)/$(KEY_ID)_cert.pem -noout -pubkey > \
+	# v3 在 TBSCertificate 尾部增加了 extensions 字段:
+	#   extensions      [3] EXPLICIT Extensions OPTIONAL
+	# 常用扩展: subjectKeyIdentifier, authorityKeyIdentifier,
+	#           basicConstraints, subjectAltName 等
+	printf '[v3_ext]\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid:always,issuer\nbasicConstraints=critical,CA:TRUE\nsubjectAltName=DNS:rsa4096.demo.local, DNS:www.rsa4096.demo.local\n' > \
+		$(PREFIX_DIR)/$(KEY_ID)_cert_v3_ext.conf
+	openssl x509 -req \
+		-in $(PREFIX_DIR)/$(KEY_ID)_cert.csr \
+		-signkey $(PREFIX_DIR)/$(KEY_ID)_private_key.pem \
+		-days 365 \
+		-set_serial 2 \
+		-extfile $(PREFIX_DIR)/$(KEY_ID)_cert_v3_ext.conf \
+		-extensions v3_ext \
+		-out $(PREFIX_DIR)/$(KEY_ID)_cert_v3.pem
+	openssl asn1parse -dump -in $(PREFIX_DIR)/$(KEY_ID)_cert_v3.pem
+	openssl x509 -in $(PREFIX_DIR)/$(KEY_ID)_cert_v3.pem -noout -text
+
+	# ======================================
+	# (4) 从 v3 证书提取公钥 (用于后续验证)
+	# ======================================
+	openssl x509 -in $(PREFIX_DIR)/$(KEY_ID)_cert_v3.pem -noout -pubkey > \
 		$(PREFIX_DIR)/$(KEY_ID)_cert_pubkey.pem
 
 ALL_KEYS := $(KEYGEN) $(KEYS)
@@ -186,7 +214,7 @@ SIGNATURES := \
 			  $(PREFIX_DIR)/data.rsa.sig2 \
 			  $(PREFIX_DIR)/data.rsa.sig3
 
-$(PREFIX_DIR)/data.rsa.sig1: $(DATAS) $(KEYS)
+$(PREFIX_DIR)/data.rsa.sig1: $(DATAS) $(KEYS) $(CERTS)
 	# ======================================
 	# 签名方式1: dgst -sign (自动hash+PKCS#1 v1.5 padding)
 	# ======================================
@@ -195,7 +223,7 @@ $(PREFIX_DIR)/data.rsa.sig1: $(DATAS) $(KEYS)
 	# RSA签名是原始大整数(512字节), 不是ASN.1结构, 用xxd查看
 	xxd -l 64 $@
 
-$(PREFIX_DIR)/data.rsa.sig2: $(DATAS) $(KEYS)
+$(PREFIX_DIR)/data.rsa.sig2: $(DATAS) $(KEYS) $(CERTS)
 	# ======================================
 	# 签名方式2: 先hash, 再pkeyutl -sign (PKCS#1 v1.5 + DigestInfo)
 	# ======================================
@@ -208,7 +236,7 @@ $(PREFIX_DIR)/data.rsa.sig2: $(DATAS) $(KEYS)
 		-pkeyopt digest:sha256
 	xxd -l 64 $@
 
-$(PREFIX_DIR)/data.rsa.sig3: $(DATAS) $(KEYS)
+$(PREFIX_DIR)/data.rsa.sig3: $(DATAS) $(KEYS) $(CERTS)
 	# ======================================
 	# 签名方式3: pkeyutl -sign (PSS padding, 更现代更安全)
 	# ======================================
@@ -259,17 +287,27 @@ verify: $(SIGNATURES) $(DATAS) $(KEYS) $(CERTS)
 	# 证书验证
 	# ======================================
 	# (1) 验证证书与私钥匹配 (modulus 一致性)
-	@echo "[Cert modulus MD5]"
-	openssl x509 -noout -modulus -in $(PREFIX_DIR)/$(KEY_ID)_cert.pem | openssl md5
+	@echo "[v1 Cert modulus MD5]"
+	openssl x509 -noout -modulus -in $(PREFIX_DIR)/$(KEY_ID)_cert_v1.pem | openssl md5
+	@echo "[v3 Cert modulus MD5]"
+	openssl x509 -noout -modulus -in $(PREFIX_DIR)/$(KEY_ID)_cert_v3.pem | openssl md5
 	@echo "[Key modulus MD5]"
 	openssl rsa -noout -modulus -in $(PREFIX_DIR)/$(KEY_ID)_private_key.pem | openssl md5
 
-	# (2) 从证书提取的公钥与独立公钥二进制对比
+	# (2) 验证版本号差异
+	@echo "[v1 Version check]"
+	openssl x509 -in $(PREFIX_DIR)/$(KEY_ID)_cert_v1.pem -noout -text | grep "Version"
+	@echo "[v3 Version check]"
+	openssl x509 -in $(PREFIX_DIR)/$(KEY_ID)_cert_v3.pem -noout -text | grep "Version"
+
+	# (3) 从证书提取的公钥与独立公钥二进制对比
 	cmp -s $(PREFIX_DIR)/$(KEY_ID)_public_key.pem \
 		$(PREFIX_DIR)/$(KEY_ID)_cert_pubkey.pem && \
 		echo "[Cert pubkey == Standalone pubkey]: OK" || \
 		echo "[Cert pubkey == Standalone pubkey]: MISMATCH"
 
-	# (3) 验证证书签名的有效性 (自签名证书自己验证自己)
-	openssl verify -CAfile $(PREFIX_DIR)/$(KEY_ID)_cert.pem \
-		$(PREFIX_DIR)/$(KEY_ID)_cert.pem
+	# (4) 验证证书签名的有效性 (自签名证书自己验证自己)
+	openssl verify -CAfile $(PREFIX_DIR)/$(KEY_ID)_cert_v1.pem \
+		$(PREFIX_DIR)/$(KEY_ID)_cert_v1.pem
+	openssl verify -CAfile $(PREFIX_DIR)/$(KEY_ID)_cert_v3.pem \
+		$(PREFIX_DIR)/$(KEY_ID)_cert_v3.pem
