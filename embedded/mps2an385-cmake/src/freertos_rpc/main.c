@@ -35,31 +35,20 @@ static QueueHandle_t xRequestQueue = NULL;
 static QueueHandle_t xResponseQueue = NULL;
 
 // ================================================
-int my_handler(Message *input, Message *output) {
+int echo_handler(Message *input, Message *output) {
     if (!input || !output || !input->data || !output->data) {
         return -1;
     }
 
-    const char *prefix = "Reply: ";
-    uint32_t prefix_len = (uint32_t)strlen(prefix);
-    uint32_t avail = output->len;  // 缓冲区大小
-
-    if (avail < prefix_len + 1) {
-        output->len = 0;
-        output->data[0] = '\0';
-        return -1;
-    }
-
-    memcpy(output->data, prefix, prefix_len);
-
+    uint32_t avail = output->len;
     uint32_t copy_len = input->len;
-    if (prefix_len + copy_len > avail - 1) {
-        copy_len = avail - 1 - prefix_len;
+    if (copy_len >= avail) {
+        copy_len = avail - 1;
     }
 
-    memcpy(output->data + prefix_len, input->data, copy_len);
-    output->data[prefix_len + copy_len] = '\0';
-    output->len = prefix_len + copy_len;
+    memcpy(output->data, input->data, copy_len);
+    output->data[copy_len] = '\0';
+    output->len = copy_len;
 
     return 0;
 }
@@ -69,15 +58,30 @@ typedef struct {
     Message *input;
     Message *output;
     Func     func;
+    int      ret;
 } RpcRequest;
+
+int rpc_call(Func func, Message *input, Message *output) {
+    RpcRequest req = {
+        .input  = input,
+        .output = output,
+        .func   = func,
+        .ret    = 0,
+    };
+    uint32_t done;
+
+    xQueueSend(xRequestQueue, &req, portMAX_DELAY);
+    xQueueReceive(xResponseQueue, &done, portMAX_DELAY);
+    return req.ret;
+}
+// ================================================
+
 
 void TaskSend(void *pvParameters) {
     (void)pvParameters;
     Message input;
     Message output;
-    RpcRequest req;
     uint32_t counter = 0;
-    uint32_t done;
 
     for (;;) {
         input.data = pvPortMalloc(MESSAGE_MAX_LEN);
@@ -94,18 +98,13 @@ void TaskSend(void *pvParameters) {
                              "Req #%lu from Send", counter++);
         output.len = MESSAGE_MAX_LEN;  // 告知缓冲区大小
 
-        req.input  = &input;
-        req.output = &output;
-        req.func   = my_handler;
-
         printf("[TaskSend] --> RPC request: len=%lu, data=%s\n",
                input.len, input.data);
 
-        xQueueSend(xRequestQueue, &req, portMAX_DELAY);
-        xQueueReceive(xResponseQueue, &done, portMAX_DELAY);
+        int ret = rpc_call(echo_handler, &input, &output);
 
-        printf("[TaskSend] <-- RPC response: len=%lu, data=%.*s\n",
-               output.len, (int)output.len, output.data);
+        printf("[TaskSend] <-- RPC response: ret=%d, len=%lu, data=%.*s\n",
+               ret, output.len, (int)output.len, output.data);
 
         vPortFree(input.data);
         vPortFree(output.data);
@@ -124,9 +123,9 @@ void TaskRecv(void *pvParameters) {
             printf("[TaskRecv] Processing: len=%lu, data=%.*s\n",
                    req.input->len, (int)req.input->len, req.input->data);
 
-            req.func(req.input, req.output);
+            req.ret = req.func(req.input, req.output);
 
-            printf("[TaskRecv] RPC done, reply back\n");
+            printf("[TaskRecv] RPC done, ret=%d, reply back\n", req.ret);
             xQueueSend(xResponseQueue, &done, portMAX_DELAY);
         }
     }
