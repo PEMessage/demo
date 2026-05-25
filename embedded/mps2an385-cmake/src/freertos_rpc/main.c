@@ -42,12 +42,11 @@ int echo_handler(Message *input, Message *output) {
 
     uint32_t avail = output->len;
     uint32_t copy_len = input->len;
-    if (copy_len >= avail) {
-        copy_len = avail - 1;
+    if (copy_len > avail) {
+        copy_len = avail;
     }
 
     memcpy(output->data, input->data, copy_len);
-    output->data[copy_len] = '\0';
     output->len = copy_len;
 
     return 0;
@@ -74,60 +73,70 @@ int rpc_call(Func func, Message *input, Message *output) {
     xQueueReceive(xResponseQueue, &done, portMAX_DELAY);
     return req.ret;
 }
+
+void rpc_dispatch(void) {
+    RpcRequest req;
+    uint32_t done = 1;
+
+    xQueueReceive(xRequestQueue, &req, portMAX_DELAY);
+
+    printf("[rpc_dispatch] Processing: len=%lu, first2byte=[%02X %02X]\n",
+           req.input->len,
+           (unsigned char)req.input->data[0],
+           (unsigned char)req.input->data[1]);
+
+    req.ret = req.func(req.input, req.output);
+
+    printf("[rpc_dispatch] RPC done, ret=%d, reply back\n", req.ret);
+    xQueueSend(xResponseQueue, &done, portMAX_DELAY);
+}
+
+
+// ================================================
+// tasks
 // ================================================
 
+static void fill_input(char *data, uint32_t len, uint32_t seed) {
+    for (uint32_t i = 0; i < len; i++) {
+        data[i] = (char)(seed + i);
+    }
+}
 
 void TaskSend(void *pvParameters) {
     (void)pvParameters;
-    Message input;
-    Message output;
     uint32_t counter = 0;
 
     for (;;) {
-        input.data = pvPortMalloc(MESSAGE_MAX_LEN);
-        output.data = pvPortMalloc(MESSAGE_MAX_LEN);
-        if (input.data == NULL || output.data == NULL) {
-            printf("[TaskSend] malloc failed\n");
-            if (input.data)  vPortFree(input.data);
-            if (output.data) vPortFree(output.data);
-            vTaskDelay(pdMS_TO_TICKS(1000));
-            continue;
-        }
+        char input_buf[MESSAGE_MAX_LEN];
+        char output_buf[MESSAGE_MAX_LEN];
+        uint32_t send_len = sizeof(input_buf);
 
-        input.len = snprintf(input.data, MESSAGE_MAX_LEN,
-                             "Req #%lu from Send", counter++);
-        output.len = MESSAGE_MAX_LEN;  // 告知缓冲区大小
+        fill_input(input_buf, send_len, counter);
+        memset(output_buf, 0xAC, sizeof(output_buf));
 
-        printf("[TaskSend] --> RPC request: len=%lu, data=%s\n",
-               input.len, input.data);
+        Message input  = { .len = send_len, .data = input_buf };
+        Message output = { .len = sizeof(output_buf), .data = output_buf };
+
+        printf("[TaskSend] --> RPC multi request (%lu bytes), seed=%lu\n",
+               input.len, counter);
 
         int ret = rpc_call(echo_handler, &input, &output);
 
-        printf("[TaskSend] <-- RPC response: ret=%d, len=%lu, data=%.*s\n",
-               ret, output.len, (int)output.len, output.data);
+        int ok = (ret == 0 && output.len == input.len &&
+                  memcmp(input.data, output.data, input.len) == 0);
+        printf("[TaskSend] <-- RPC multi response: ret=%d, recv_len=%lu, match=%s\n",
+               ret, output.len, ok ? "PASS" : "FAIL");
 
-        vPortFree(input.data);
-        vPortFree(output.data);
-
+        counter++;
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 
+
 void TaskRecv(void *pvParameters) {
     (void)pvParameters;
-    RpcRequest req;
-    uint32_t done = 1;
-
     for (;;) {
-        if (xQueueReceive(xRequestQueue, &req, portMAX_DELAY) == pdPASS) {
-            printf("[TaskRecv] Processing: len=%lu, data=%.*s\n",
-                   req.input->len, (int)req.input->len, req.input->data);
-
-            req.ret = req.func(req.input, req.output);
-
-            printf("[TaskRecv] RPC done, ret=%d, reply back\n", req.ret);
-            xQueueSend(xResponseQueue, &done, portMAX_DELAY);
-        }
+        rpc_dispatch();
     }
 }
 
