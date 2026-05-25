@@ -98,8 +98,13 @@ void rpc_dispatch(void) {
 #define FRAG_FLAG_FIRST (1 << 0)
 #define FRAG_FLAG_LAST  (1 << 1)
 #define FRAG_FLAG_POLL  (1 << 2)
-#define FRAG_HDR_SIZE   2
 #define MULTI_MESSAGE_MAX_LEN 256
+
+typedef struct {
+    uint8_t flags;
+    uint8_t seq;
+    Func    handler;
+} FragHeader;
 
 typedef enum {
     MULTI_IDLE,
@@ -114,89 +119,97 @@ typedef struct {
     char     tx_buf[MULTI_MESSAGE_MAX_LEN];
     uint32_t tx_len;
     uint32_t tx_offset;
-    Func     target_handler;
 } MultiCtx;
 
-static MultiCtx g_multi_ctx;
-
-static int multi_send_next_fragment(Message *output) {
-    if (g_multi_ctx.state != MULTI_TX) {
+static int multi_send_next_fragment(MultiCtx *ctx, Message *output) {
+    if (ctx->state != MULTI_TX) {
         output->data[0] = FRAG_FLAG_LAST;
         output->data[1] = 0;
-        memcpy(output->data + FRAG_HDR_SIZE, "ERR", 4);
-        output->len = FRAG_HDR_SIZE + 4;
+        memcpy(output->data + sizeof(FragHeader), "ERR", 4);
+        output->len = sizeof(FragHeader) + 4;
         return -1;
     }
 
-    uint32_t remain = g_multi_ctx.tx_len - g_multi_ctx.tx_offset;
-    uint32_t payload_len = remain > (MESSAGE_MAX_LEN - FRAG_HDR_SIZE)
-                           ? (MESSAGE_MAX_LEN - FRAG_HDR_SIZE)
+    uint32_t remain = ctx->tx_len - ctx->tx_offset;
+    uint32_t payload_len = remain > (MESSAGE_MAX_LEN - sizeof(FragHeader))
+                           ? (MESSAGE_MAX_LEN - sizeof(FragHeader))
                            : remain;
 
-    output->data[0] = (remain <= (MESSAGE_MAX_LEN - FRAG_HDR_SIZE)) ? FRAG_FLAG_LAST : 0;
-    output->data[1] = 0;
-    memcpy(output->data + FRAG_HDR_SIZE, g_multi_ctx.tx_buf + g_multi_ctx.tx_offset, payload_len);
-    output->len = FRAG_HDR_SIZE + payload_len;
+    FragHeader hdr = {
+        .flags = (remain <= (MESSAGE_MAX_LEN - sizeof(FragHeader))) ? FRAG_FLAG_LAST : 0,
+        .seq   = 0,
+        .handler = NULL,
+    };
+    memcpy(output->data, &hdr, sizeof(hdr));
+    memcpy(output->data + sizeof(hdr), ctx->tx_buf + ctx->tx_offset, payload_len);
+    output->len = sizeof(hdr) + payload_len;
 
-    g_multi_ctx.tx_offset += payload_len;
-    if (g_multi_ctx.tx_offset >= g_multi_ctx.tx_len) {
-        g_multi_ctx.state = MULTI_IDLE;
+    ctx->tx_offset += payload_len;
+    if (ctx->tx_offset >= ctx->tx_len) {
+        ctx->state = MULTI_IDLE;
     }
     return 0;
 }
 
-int multi_handler(Message *input, Message *output) {
-    uint8_t flags = (uint8_t)input->data[0];
-    uint8_t seq   = (uint8_t)input->data[1];
-    (void)seq;
+static int multi_handler_internal(MultiCtx *ctx, Message *input, Message *output) {
+    FragHeader hdr;
+    if (input->len < sizeof(hdr)) {
+        return -1;
+    }
+    memcpy(&hdr, input->data, sizeof(hdr));
 
-    if (flags & FRAG_FLAG_POLL) {
-        return multi_send_next_fragment(output);
+    if (hdr.flags & FRAG_FLAG_POLL) {
+        return multi_send_next_fragment(ctx, output);
     }
 
-    if (flags & FRAG_FLAG_FIRST) {
-        g_multi_ctx.state = MULTI_RX;
-        g_multi_ctx.rx_len = 0;
+    if (hdr.flags & FRAG_FLAG_FIRST) {
+        ctx->state = MULTI_RX;
+        ctx->rx_len = 0;
     }
 
-    if (g_multi_ctx.state != MULTI_RX) {
-        output->data[0] = FRAG_FLAG_LAST;
-        output->data[1] = 0;
-        memcpy(output->data + FRAG_HDR_SIZE, "NACK", 5);
-        output->len = FRAG_HDR_SIZE + 5;
+    if (ctx->state != MULTI_RX) {
+        FragHeader err_hdr = { .flags = FRAG_FLAG_LAST, .seq = 0, .handler = NULL };
+        memcpy(output->data, &err_hdr, sizeof(err_hdr));
+        memcpy(output->data + sizeof(err_hdr), "NACK", 5);
+        output->len = sizeof(err_hdr) + 5;
         return -1;
     }
 
-    uint32_t payload_len = input->len > FRAG_HDR_SIZE ? input->len - FRAG_HDR_SIZE : 0;
-    if (g_multi_ctx.rx_len + payload_len > sizeof(g_multi_ctx.rx_buf)) {
-        g_multi_ctx.state = MULTI_IDLE;
-        output->data[0] = FRAG_FLAG_LAST;
-        output->data[1] = 0;
-        memcpy(output->data + FRAG_HDR_SIZE, "OVFL", 5);
-        output->len = FRAG_HDR_SIZE + 5;
+    uint32_t payload_len = input->len - sizeof(hdr);
+    if (ctx->rx_len + payload_len > sizeof(ctx->rx_buf)) {
+        ctx->state = MULTI_IDLE;
+        FragHeader err_hdr = { .flags = FRAG_FLAG_LAST, .seq = 0, .handler = NULL };
+        memcpy(output->data, &err_hdr, sizeof(err_hdr));
+        memcpy(output->data + sizeof(err_hdr), "OVFL", 5);
+        output->len = sizeof(err_hdr) + 5;
         return -1;
     }
 
-    memcpy(g_multi_ctx.rx_buf + g_multi_ctx.rx_len, input->data + FRAG_HDR_SIZE, payload_len);
-    g_multi_ctx.rx_len += payload_len;
+    memcpy(ctx->rx_buf + ctx->rx_len, input->data + sizeof(hdr), payload_len);
+    ctx->rx_len += payload_len;
 
-    if (flags & FRAG_FLAG_LAST) {
-        Message echo_in  = { .len = g_multi_ctx.rx_len, .data = g_multi_ctx.rx_buf };
-        Message echo_out = { .len = sizeof(g_multi_ctx.tx_buf), .data = g_multi_ctx.tx_buf };
-        g_multi_ctx.target_handler(&echo_in, &echo_out);
+    if (hdr.flags & FRAG_FLAG_LAST) {
+        Message echo_in  = { .len = ctx->rx_len, .data = ctx->rx_buf };
+        Message echo_out = { .len = sizeof(ctx->tx_buf), .data = ctx->tx_buf };
+        hdr.handler(&echo_in, &echo_out);
 
-        g_multi_ctx.tx_len    = echo_out.len;
-        g_multi_ctx.tx_offset = 0;
-        g_multi_ctx.state     = MULTI_TX;
+        ctx->tx_len    = echo_out.len;
+        ctx->tx_offset = 0;
+        ctx->state     = MULTI_TX;
 
-        return multi_send_next_fragment(output);
+        return multi_send_next_fragment(ctx, output);
     }
 
-    output->data[0] = FRAG_FLAG_LAST;
-    output->data[1] = 0;
-    memcpy(output->data + FRAG_HDR_SIZE, "ACK", 4);
-    output->len = FRAG_HDR_SIZE + 4;
+    FragHeader ack_hdr = { .flags = FRAG_FLAG_LAST, .seq = 0, .handler = NULL };
+    memcpy(output->data, &ack_hdr, sizeof(ack_hdr));
+    memcpy(output->data + sizeof(ack_hdr), "ACK", 4);
+    output->len = sizeof(ack_hdr) + 4;
     return 0;
+}
+
+int multi_handler(Message *input, Message *output) {
+    static MultiCtx ctx;
+    return multi_handler_internal(&ctx, input, output);
 }
 
 int rpc_call_multi(Func func, Message *input, Message *output) {
@@ -210,19 +223,22 @@ int rpc_call_multi(Func func, Message *input, Message *output) {
     uint8_t msg_id = 0;
     uint32_t recv_max = output->len;
 
-    g_multi_ctx.target_handler = func;
-
     while (send_offset < send_len) {
-        uint32_t payload_len = (send_len - send_offset) > (MESSAGE_MAX_LEN - FRAG_HDR_SIZE)
-                               ? (MESSAGE_MAX_LEN - FRAG_HDR_SIZE)
+        uint32_t payload_len = (send_len - send_offset) > (MESSAGE_MAX_LEN - sizeof(FragHeader))
+                               ? (MESSAGE_MAX_LEN - sizeof(FragHeader))
                                : (send_len - send_offset);
 
-        in_data[0] = 0;
-        if (send_offset == 0) in_data[0] |= FRAG_FLAG_FIRST;
-        if (send_offset + payload_len >= send_len) in_data[0] |= FRAG_FLAG_LAST;
-        in_data[1] = msg_id;
-        memcpy(in_data + FRAG_HDR_SIZE, input->data + send_offset, payload_len);
-        in.len = FRAG_HDR_SIZE + payload_len;
+        FragHeader hdr = {
+            .flags   = 0,
+            .seq     = msg_id,
+            .handler = func,
+        };
+        if (send_offset == 0) hdr.flags |= FRAG_FLAG_FIRST;
+        if (send_offset + payload_len >= send_len) hdr.flags |= FRAG_FLAG_LAST;
+
+        memcpy(in_data, &hdr, sizeof(hdr));
+        memcpy(in_data + sizeof(hdr), input->data + send_offset, payload_len);
+        in.len = sizeof(hdr) + payload_len;
         out.len = MESSAGE_MAX_LEN;
 
         int ret = rpc_call(multi_handler, &in, &out);
@@ -230,26 +246,31 @@ int rpc_call_multi(Func func, Message *input, Message *output) {
 
         if (send_offset + payload_len >= send_len) {
             uint32_t recv_offset = 0;
-            uint8_t resp_flags = (uint8_t)out_data[0];
+            FragHeader resp_hdr;
+            memcpy(&resp_hdr, out_data, sizeof(resp_hdr));
 
             while (1) {
-                uint32_t resp_payload = out.len > FRAG_HDR_SIZE ? out.len - FRAG_HDR_SIZE : 0;
+                uint32_t resp_payload = out.len > sizeof(FragHeader) ? out.len - sizeof(FragHeader) : 0;
                 if (recv_offset + resp_payload > recv_max) {
                     resp_payload = recv_max - recv_offset;
                 }
-                memcpy(output->data + recv_offset, out_data + FRAG_HDR_SIZE, resp_payload);
+                memcpy(output->data + recv_offset, out_data + sizeof(FragHeader), resp_payload);
                 recv_offset += resp_payload;
 
-                if (resp_flags & FRAG_FLAG_LAST) break;
+                if (resp_hdr.flags & FRAG_FLAG_LAST) break;
 
-                in_data[0] = FRAG_FLAG_POLL;
-                in_data[1] = msg_id;
-                in.len = FRAG_HDR_SIZE;
+                FragHeader poll_hdr = {
+                    .flags   = FRAG_FLAG_POLL,
+                    .seq     = msg_id,
+                    .handler = func,
+                };
+                memcpy(in_data, &poll_hdr, sizeof(poll_hdr));
+                in.len = sizeof(poll_hdr);
                 out.len = MESSAGE_MAX_LEN;
 
                 ret = rpc_call(multi_handler, &in, &out);
                 if (ret != 0) return ret;
-                resp_flags = (uint8_t)out_data[0];
+                memcpy(&resp_hdr, out_data, sizeof(resp_hdr));
             }
 
             output->len = recv_offset;
