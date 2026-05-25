@@ -1,6 +1,6 @@
 #!/bin/bash
 
-THISFILE="$(readlink -f "$1")"
+THISFILE="$(readlink -f "$0")"
 THISDIR="$(dirname "$THISFILE")"
 NAME="$(basename "$THISDIR")"
 
