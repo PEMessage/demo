@@ -123,7 +123,7 @@ void rpc_dispatch(void) {
 // multi RPC extension
 // ================================================
 
-#define MULTI_CAP 256
+#define MULTI_CAP 1024
 #define MULTI_REPLY_UNKNOWN UINT32_MAX  // sentinel: server hasn't determined reply length yet
 
 // --- Coroutine primitives (Duff's device style) ---
@@ -131,7 +131,7 @@ void rpc_dispatch(void) {
     int line
 
 #define CR_START(ctx)     switch((ctx)->line) { case 0:
-#define CR_YIELD(ctx, rv) do { (ctx)->line = __LINE__; return (rv); case __LINE__:; } while(0)
+#define CR_YIELD(ctx) do { (ctx)->line = __LINE__; return (0); case __LINE__:; } while(0)
 #define CR_RESET(ctx)     do { (ctx)->line = 0; } while(0)
 #define CR_END(ctx)       } (ctx)->line = 0;
 
@@ -202,22 +202,52 @@ static void reply(Message *output, RecvHdr *rh, const char *payload, uint32_t pl
     output->len = sizeof(*rh) + plen;
 }
 
+static int parseSendHdr(Message *input, SendHdr *sh) {
+    if (input->len < sizeof(*sh)) {
+        return MULTI_ERR_SHORT;
+    }
+    memcpy(sh, input->data, sizeof(*sh));
+    if (sh->magic != MULTI_MAGIC) {
+        return MULTI_ERR_MAGIC;
+    }
+    return 0;
+}
+
 // --- Server coroutine body ---
 static int multi_handler_cr(MultiCr *cr, Message *input, Message *output)
 {
     SendHdr sh;
     RecvHdr rh;
 
-    if (CrCreateBuffer(cr) != MULTI_OK) return MULTI_ERR_NOMEM;
+    int ret = parseSendHdr(input, &sh);
+    if(ret) {
+        CrDeleteBuffer(cr);
+        cr->line = 0;
+        return ret;
+    }
+    // Allow Sender force reset state
+    if (sh.offset == 0 && sh.total != 0) {
+        cr->line = 0;
+    }
+
     CR_START(cr);
+
+    /* -------- init -------- */
+    cr->tx_total = 0;
+    cr->tx_pos = 0;
+    if (CrCreateBuffer(cr) != MULTI_OK) {
+        CrDeleteBuffer(cr);
+        CR_RESET(cr);
+        return MULTI_ERR_NOMEM;
+    }
 
     /* -------- receive all fragments -------- */
     for (;;) {
-        if (input->len < sizeof(SendHdr)) return MULTI_ERR_SHORT;
-        memcpy(&sh, input->data, sizeof(sh));
-        if (sh.magic != MULTI_MAGIC) return MULTI_ERR_MAGIC;
-
-        if (sh.total > cr->rx.len) return MULTI_ERR_OVERSIZE;
+        if (sh.total > cr->rx.len) {
+            CrDeleteBuffer(cr);
+            CR_RESET(cr);
+            return MULTI_ERR_OVERSIZE;
+        }
 
         if (sh.offset == 0 && sh.total > 0) {
             cr->handler = sh.handler;
@@ -230,7 +260,7 @@ static int multi_handler_cr(MultiCr *cr, Message *input, Message *output)
 
         rh = (RecvHdr){ .magic = MULTI_MAGIC, .offset = 0, .total = MULTI_REPLY_UNKNOWN, .status = 0 };
         reply(output, &rh, NULL, 0);
-        CR_YIELD(cr, 0);
+        CR_YIELD(cr);
     }
 
     /* -------- run user handler -------- */
@@ -253,16 +283,18 @@ static int multi_handler_cr(MultiCr *cr, Message *input, Message *output)
         cr->tx_pos += chunk;
 
         if (cr->tx_pos >= cr->tx_total) {
-            CR_RESET(cr);
             CrDeleteBuffer(cr);
+            CR_RESET(cr);
             return 0;
         }
-        CR_YIELD(cr, 0);
+        CR_YIELD(cr);
     }
 
-    CR_END(cr);
+    // should not get here if all success
     CrDeleteBuffer(cr);
-    return MULTI_ERR_MAGIC;
+    CR_END(cr);
+
+    return 0;
 }
 
 // --- Public server entry ---
@@ -291,7 +323,9 @@ int rpc_call_multi(Func func, Message *input, Message *output)
 
         Message sm = { sizeof(sh) + n, s };
         Message rm = { MESSAGE_MAX_LEN, r };
-        if (rpc_call(multi_handler, &sm, &rm) != 0) return -1;
+        int ret = rpc_call(multi_handler, &sm, &rm);
+        if (ret) return ret;
+
 
         if (rm.len < sizeof(RecvHdr)) return MULTI_ERR_RESP_HDR;
         RecvHdr rh;
@@ -325,7 +359,8 @@ void TaskSend(void *pvParameters) {
     uint32_t counter = 0;
 
     for (;;) {
-        Message *input  = MessageCreate(200);
+        Message *input  = MessageCreate(1024); // Should Success
+        // Message *input  = MessageCreate(1025); // Should Fail
         Message *output = MessageCreate(MULTI_CAP);
         if (!input || !output) {
             printf("[TaskSend] malloc failed\n");
