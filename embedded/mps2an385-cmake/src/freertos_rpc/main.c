@@ -123,204 +123,180 @@ void rpc_dispatch(void) {
 // multi RPC extension
 // ================================================
 
-#define FRAG_FLAG_FIRST (1 << 0)
-#define FRAG_FLAG_LAST  (1 << 1)
-#define FRAG_FLAG_POLL  (1 << 2)
-#define MULTI_MESSAGE_MAX_LEN 256
+#define MULTI_CAP 256
+
+// --- Coroutine primitives (Duff's device style) ---
+#define CR_FIELD \
+    int line
+
+#define CR_START(ctx)     switch((ctx)->line) { case 0:
+#define CR_YIELD(ctx, rv) do { (ctx)->line = __LINE__; return (rv); case __LINE__:; } while(0)
+#define CR_RESET(ctx)     do { (ctx)->line = 0; } while(0)
+#define CR_END(ctx)       } (ctx)->line = 0;
+
+// --- Protocol headers ---
+typedef struct {
+    uint32_t offset;   // payload offset in total message
+    uint32_t total;    // total message length
+    Func     handler;  // target handler (valid on first fragment)
+} SendHdr;
 
 typedef struct {
-    uint8_t flags;
-    uint8_t seq;
-    Func    handler;
-} FragHeader;
+    uint32_t offset;   // payload offset in total reply
+    uint32_t total;    // total reply length; (uint32_t)-1 = not ready
+    int32_t  status;   // 0 = OK, <0 = error
+} RecvHdr;
 
-typedef enum {
-    MULTI_IDLE,
-    MULTI_RX,
-    MULTI_TX
-} MultiState;
-
+// --- Server coroutine context ---
 typedef struct {
-    MultiState state;
-    Message  rx;      // len = capacity, data = rx_buf
-    Message  tx;      // len = capacity 或 handler 设置的实际长度
-    uint32_t rx_pos;
-    uint32_t tx_pos;
-} MultiCtx;
+    CR_FIELD;
+    Func     handler;   // cached user handler
+    uint32_t tx_total;  // reply total length after handler runs
+    uint32_t tx_pos;    // bytes already sent in reply
+} MultiCr;
 
-static int multi_send_next_fragment(MultiCtx *ctx, Message *output) {
-    if (ctx->state != MULTI_TX) {
-        FragHeader hdr = { .flags = FRAG_FLAG_LAST, .seq = 0, .handler = NULL };
-        Message hdr_msg = { .len = sizeof(hdr), .data = (char*)&hdr };
-        Message err = { .len = 4, .data = "ERR" };
-        MessageCopy(output, 0, &hdr_msg, 0, sizeof(hdr));
-        MessageCopy(output, sizeof(hdr), &err, 0, 4);
-        output->len = sizeof(hdr) + 4;
-        return -1;
+// --- Server static buffers ---
+static char    rx_buf[MULTI_CAP];
+static char    tx_buf[MULTI_CAP];
+static MultiCr mcr   = {0};
+
+// --- Helper: assemble RecvHdr + optional payload into output Message ---
+static void reply(Message *output, RecvHdr *rh, const Message *payload)
+{
+    Message hdr = { .data = (char*)rh, .len = sizeof(*rh) };
+    uint32_t copied = MessageCopy(output, 0, &hdr, 0, sizeof(*rh));
+    if (payload && payload->len) {
+        copied += MessageCopy(output, sizeof(*rh), payload, 0, payload->len);
     }
-
-    uint32_t remain = ctx->tx.len - ctx->tx_pos;
-    uint32_t payload_len = remain > (MESSAGE_MAX_LEN - sizeof(FragHeader))
-                           ? (MESSAGE_MAX_LEN - sizeof(FragHeader))
-                           : remain;
-
-    FragHeader hdr = {
-        .flags = (remain <= (MESSAGE_MAX_LEN - sizeof(FragHeader))) ? FRAG_FLAG_LAST : 0,
-        .seq   = 0,
-        .handler = NULL,
-    };
-    Message hdr_msg = { .len = sizeof(hdr), .data = (char*)&hdr };
-    MessageCopy(output, 0, &hdr_msg, 0, sizeof(hdr));
-    MessageCopy(output, sizeof(hdr), &ctx->tx, ctx->tx_pos, payload_len);
-    output->len = sizeof(hdr) + payload_len;
-
-    ctx->tx_pos += payload_len;
-    if (ctx->tx_pos >= ctx->tx.len) {
-        ctx->state = MULTI_IDLE;
-    }
-    return 0;
+    output->len = copied;
 }
 
-static int multi_handler_internal(MultiCtx *ctx, Message *input, Message *output) {
-    FragHeader hdr;
-    if (input->len < sizeof(hdr)) {
-        return -1;
-    }
-    memcpy(&hdr, input->data, sizeof(hdr));
+// --- Server coroutine body ---
+static int multi_handler_cr(MultiCr *cr, Message *input, Message *output)
+{
+    SendHdr sh;
+    RecvHdr rh;
 
-    if (hdr.flags & FRAG_FLAG_POLL) {
-        return multi_send_next_fragment(ctx, output);
-    }
+    CR_START(cr);
 
-    if (hdr.flags & FRAG_FLAG_FIRST) {
-        ctx->state = MULTI_RX;
-        ctx->rx_pos = 0;
-    }
+    /* -------- receive all fragments -------- */
+    for (;;) {
+        if (input->len < sizeof(SendHdr)) return -1;
+        memcpy(&sh, input->data, sizeof(sh));
 
-    if (ctx->state != MULTI_RX) {
-        FragHeader err_hdr = { .flags = FRAG_FLAG_LAST, .seq = 0, .handler = NULL };
-        Message hdr_msg = { .len = sizeof(err_hdr), .data = (char*)&err_hdr };
-        Message nack = { .len = 5, .data = "NACK" };
-        MessageCopy(output, 0, &hdr_msg, 0, sizeof(err_hdr));
-        MessageCopy(output, sizeof(err_hdr), &nack, 0, 5);
-        output->len = sizeof(err_hdr) + 5;
-        return -1;
-    }
+        if (sh.total > MULTI_CAP) return -1;
 
-    Message src = { .len = input->len, .data = input->data };
-    uint32_t copied = MessageCopy(&ctx->rx, ctx->rx_pos, &src, sizeof(hdr), input->len - sizeof(hdr));
-    ctx->rx_pos += copied;
-    if (ctx->rx_pos > MULTI_MESSAGE_MAX_LEN) {
-        ctx->state = MULTI_IDLE;
-        FragHeader err_hdr = { .flags = FRAG_FLAG_LAST, .seq = 0, .handler = NULL };
-        Message hdr_msg = { .len = sizeof(err_hdr), .data = (char*)&err_hdr };
-        Message ovfl = { .len = 5, .data = "OVFL" };
-        MessageCopy(output, 0, &hdr_msg, 0, sizeof(err_hdr));
-        MessageCopy(output, sizeof(err_hdr), &ovfl, 0, 5);
-        output->len = sizeof(err_hdr) + 5;
-        return -1;
-    }
-
-    if (hdr.flags & FRAG_FLAG_LAST) {
-        Message echo_in = { .len = ctx->rx_pos, .data = ctx->rx.data };
-        ctx->tx.len = MULTI_MESSAGE_MAX_LEN; // 重置 capacity
-        hdr.handler(&echo_in, &ctx->tx);
-
-        ctx->tx_pos = 0;
-        ctx->state  = MULTI_TX;
-
-        return multi_send_next_fragment(ctx, output);
-    }
-
-    FragHeader ack_hdr = { .flags = FRAG_FLAG_LAST, .seq = 0, .handler = NULL };
-    Message hdr_msg = { .len = sizeof(ack_hdr), .data = (char*)&ack_hdr };
-    Message ack = { .len = 4, .data = "ACK" };
-    MessageCopy(output, 0, &hdr_msg, 0, sizeof(ack_hdr));
-    MessageCopy(output, sizeof(ack_hdr), &ack, 0, 4);
-    output->len = sizeof(ack_hdr) + 4;
-    return 0;
-}
-
-int multi_handler(Message *input, Message *output) {
-    static char rx_buf[MULTI_MESSAGE_MAX_LEN];
-    static char tx_buf[MULTI_MESSAGE_MAX_LEN];
-    static MultiCtx ctx;
-    if (ctx.rx.data == NULL) {
-        ctx.rx.data = rx_buf;
-        ctx.rx.len  = MULTI_MESSAGE_MAX_LEN;
-        ctx.tx.data = tx_buf;
-        ctx.tx.len  = MULTI_MESSAGE_MAX_LEN;
-    }
-    return multi_handler_internal(&ctx, input, output);
-}
-
-int rpc_call_multi(Func func, Message *input, Message *output) {
-    char in_data[MESSAGE_MAX_LEN];
-    char out_data[MESSAGE_MAX_LEN];
-    Message in  = { .len = MESSAGE_MAX_LEN, .data = in_data };
-    Message out = { .len = MESSAGE_MAX_LEN, .data = out_data };
-
-    uint32_t send_len = input->len;
-    uint32_t send_offset = 0;
-    uint8_t msg_id = 0;
-
-    while (send_offset < send_len) {
-        uint32_t payload_len = (send_len - send_offset) > (MESSAGE_MAX_LEN - sizeof(FragHeader))
-                               ? (MESSAGE_MAX_LEN - sizeof(FragHeader))
-                               : (send_len - send_offset);
-
-        FragHeader hdr = {
-            .flags   = 0,
-            .seq     = msg_id,
-            .handler = func,
-        };
-        if (send_offset == 0) hdr.flags |= FRAG_FLAG_FIRST;
-        if (send_offset + payload_len >= send_len) hdr.flags |= FRAG_FLAG_LAST;
-
-        Message hdr_msg = { .len = sizeof(hdr), .data = (char*)&hdr };
-        in.len = MESSAGE_MAX_LEN;
-        MessageCopy(&in, 0, &hdr_msg, 0, sizeof(hdr));
-        MessageCopy(&in, sizeof(hdr), input, send_offset, payload_len);
-        in.len = sizeof(hdr) + payload_len;
-        out.len = MESSAGE_MAX_LEN;
-
-        int ret = rpc_call(multi_handler, &in, &out);
-        if (ret != 0) return ret;
-
-        if (send_offset + payload_len >= send_len) {
-            uint32_t recv_offset = 0;
-            FragHeader resp_hdr;
-            memcpy(&resp_hdr, out_data, sizeof(resp_hdr));
-
-            while (1) {
-                uint32_t copied = MessageCopy(output, recv_offset, &out, sizeof(FragHeader), out.len);
-                recv_offset += copied;
-
-                if (resp_hdr.flags & FRAG_FLAG_LAST) break;
-
-                FragHeader poll_hdr = {
-                    .flags   = FRAG_FLAG_POLL,
-                    .seq     = msg_id,
-                    .handler = func,
-                };
-                Message poll_msg = { .len = sizeof(poll_hdr), .data = (char*)&poll_hdr };
-                in.len = MESSAGE_MAX_LEN;
-                MessageCopy(&in, 0, &poll_msg, 0, sizeof(poll_hdr));
-                in.len = sizeof(poll_hdr);
-                out.len = MESSAGE_MAX_LEN;
-
-                ret = rpc_call(multi_handler, &in, &out);
-                if (ret != 0) return ret;
-                memcpy(&resp_hdr, out_data, sizeof(resp_hdr));
-            }
-
-            output->len = recv_offset;
-            return 0;
+        if (sh.offset == 0 && sh.total > 0) {
+            cr->handler = sh.handler;
         }
 
-        send_offset += payload_len;
+        uint32_t plen = (input->len > sizeof(SendHdr)) ? (input->len - sizeof(SendHdr)) : 0;
+        if (plen) {
+            Message src = { .data = input->data, .len = input->len };
+            Message dst = { .data = rx_buf, .len = MULTI_CAP };
+            MessageCopy(&dst, sh.offset, &src, sizeof(SendHdr), plen);
+        }
+
+        if (sh.offset + plen >= sh.total) break;
+
+        rh = (RecvHdr){ .offset = 0, .total = (uint32_t)-1, .status = 0 };
+        reply(output, &rh, NULL);
+        CR_YIELD(cr, 0);
     }
 
+    /* -------- run user handler -------- */
+    {
+        Message req  = { .data = rx_buf, .len = sh.total };
+        Message resp = { .data = tx_buf, .len = MULTI_CAP };
+        cr->handler(&req, &resp);
+        cr->tx_total = resp.len;
+        cr->tx_pos   = 0;
+    }
+
+    /* -------- transmit all reply fragments -------- */
+    for (;;) {
+        uint32_t remain = cr->tx_total - cr->tx_pos;
+        uint32_t room   = MESSAGE_MAX_LEN - sizeof(RecvHdr);
+        uint32_t chunk  = (remain > room) ? room : remain;
+
+        rh = (RecvHdr){ .offset = cr->tx_pos, .total = cr->tx_total, .status = 0 };
+        Message payload = { .data = tx_buf + cr->tx_pos, .len = chunk };
+        reply(output, &rh, &payload);
+        cr->tx_pos += chunk;
+
+        if (cr->tx_pos >= cr->tx_total) {
+            CR_RESET(cr);
+            return 0;
+        }
+        CR_YIELD(cr, 0);
+    }
+
+    CR_END(cr);
+    return -1;
+}
+
+// --- Public server entry ---
+int multi_handler(Message *input, Message *output)
+{
+    return multi_handler_cr(&mcr, input, output);
+}
+
+// --- Client: symmetric multi RPC ---
+int rpc_call_multi(Func func, Message *input, Message *output)
+{
+    char in_buf[MESSAGE_MAX_LEN];
+    char out_buf[MESSAGE_MAX_LEN];
+
+    uint32_t send_off = 0;
+    uint32_t send_tot = input->len;
+    uint32_t recv_off = 0;
+    uint32_t recv_tot = (uint32_t)-1;
+    int      result   = 0;
+
+    Message in  = { .data = in_buf,  .len = MESSAGE_MAX_LEN };
+    Message out = { .data = out_buf, .len = MESSAGE_MAX_LEN };
+
+    while (send_off < send_tot || recv_off < recv_tot) {
+        /* assemble SendHdr + payload */
+        SendHdr sh = { .offset = send_off, .total = send_tot, .handler = func };
+        uint32_t max_pl = MESSAGE_MAX_LEN - sizeof(SendHdr);
+        uint32_t plen   = 0;
+
+        if (send_off < send_tot) {
+            plen = send_tot - send_off;
+            if (plen > max_pl) plen = max_pl;
+        }
+
+        Message hdr_msg = { .data = (char*)&sh, .len = sizeof(sh) };
+        in.len = MESSAGE_MAX_LEN;
+        MessageCopy(&in, 0, &hdr_msg, 0, sizeof(sh));
+        if (plen) {
+            MessageCopy(&in, sizeof(sh), input, send_off, plen);
+        }
+        in.len = sizeof(sh) + plen;
+
+        /* swap */
+        out.len = MESSAGE_MAX_LEN;
+        result = rpc_call(multi_handler, &in, &out);
+        if (result != 0) return result;
+
+        /* parse RecvHdr */
+        RecvHdr rh;
+        if (out.len < sizeof(rh)) return -1;
+        memcpy(&rh, out.data, sizeof(rh));
+        if (rh.status != 0) return rh.status;
+        if (rh.total != (uint32_t)-1) recv_tot = rh.total;
+
+        /* copy any payload to output (invariant 3) */
+        uint32_t rplen = (out.len > sizeof(rh)) ? (out.len - sizeof(rh)) : 0;
+        if (rplen) {
+            recv_off += MessageCopy(output, recv_off, &out, sizeof(rh), rplen);
+        }
+
+        send_off += plen;
+    }
+
+    output->len = recv_off;
     return 0;
 }
 
@@ -340,7 +316,7 @@ void TaskSend(void *pvParameters) {
 
     for (;;) {
         Message *input  = MessageCreate(200);
-        Message *output = MessageCreate(MULTI_MESSAGE_MAX_LEN);
+        Message *output = MessageCreate(MULTI_CAP);
         if (!input || !output) {
             printf("[TaskSend] malloc failed\n");
             MessageDelete(input);
