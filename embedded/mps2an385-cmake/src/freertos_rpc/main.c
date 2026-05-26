@@ -158,12 +158,32 @@ typedef struct {
     Func     handler;   // cached user handler
     uint32_t tx_total;  // reply total length after handler runs
     uint32_t tx_pos;    // bytes already sent in reply
+    Message  rx;        // .data allocated on first use, .len = cap
+    Message  tx;        // .data allocated on first use, .len = cap
 } MultiCr;
 
-// --- Server static buffers ---
-static char    rx_buf[MULTI_CAP];
-static char    tx_buf[MULTI_CAP];
-static MultiCr mcr   = {0};
+static MultiCr mcr = {0};
+
+static int CrCreateBuffer(MultiCr *cr)
+{
+    if (!cr->rx.data) {
+        cr->rx.data = pvPortMalloc(MULTI_CAP);
+        if (!cr->rx.data) return -1;
+        cr->rx.len = MULTI_CAP;
+    }
+    if (!cr->tx.data) {
+        cr->tx.data = pvPortMalloc(MULTI_CAP);
+        if (!cr->tx.data) return -1;
+        cr->tx.len = MULTI_CAP;
+    }
+    return 0;
+}
+
+static void CrDeleteBuffer(MultiCr *cr)
+{
+    if (cr->rx.data) { vPortFree(cr->rx.data); cr->rx.data = NULL; cr->rx.len = 0; }
+    if (cr->tx.data) { vPortFree(cr->tx.data); cr->tx.data = NULL; cr->tx.len = 0; }
+}
 
 // --- Helper: assemble RecvHdr + optional payload into output Message ---
 static void reply(Message *output, RecvHdr *rh, const char *payload, uint32_t plen)
@@ -179,6 +199,7 @@ static int multi_handler_cr(MultiCr *cr, Message *input, Message *output)
     SendHdr sh;
     RecvHdr rh;
 
+    if (CrCreateBuffer(cr) != 0) return -1;
     CR_START(cr);
 
     /* -------- receive all fragments -------- */
@@ -187,14 +208,14 @@ static int multi_handler_cr(MultiCr *cr, Message *input, Message *output)
         memcpy(&sh, input->data, sizeof(sh));
         if (sh.magic != MULTI_MAGIC) return -1;
 
-        if (sh.total > MULTI_CAP) return -1;
+        if (sh.total > cr->rx.len) return -1;
 
         if (sh.offset == 0 && sh.total > 0) {
             cr->handler = sh.handler;
         }
 
         uint32_t plen = (input->len > sizeof(SendHdr)) ? (input->len - sizeof(SendHdr)) : 0;
-        if (plen) memcpy(rx_buf + sh.offset, input->data + sizeof(SendHdr), plen);
+        if (plen) memcpy(cr->rx.data + sh.offset, input->data + sizeof(SendHdr), plen);
 
         if (sh.offset + plen >= sh.total) break;
 
@@ -205,8 +226,8 @@ static int multi_handler_cr(MultiCr *cr, Message *input, Message *output)
 
     /* -------- run user handler -------- */
     {
-        Message req  = { .data = rx_buf, .len = sh.total };
-        Message resp = { .data = tx_buf, .len = MULTI_CAP };
+        Message req  = { .data = cr->rx.data, .len = sh.total };
+        Message resp = { .data = cr->tx.data, .len = cr->tx.len };
         cr->handler(&req, &resp);
         cr->tx_total = resp.len;
         cr->tx_pos   = 0;
@@ -219,17 +240,19 @@ static int multi_handler_cr(MultiCr *cr, Message *input, Message *output)
         uint32_t chunk  = (remain > room) ? room : remain;
 
         rh = (RecvHdr){ .magic = MULTI_MAGIC, .offset = cr->tx_pos, .total = cr->tx_total, .status = 0 };
-        reply(output, &rh, tx_buf + cr->tx_pos, chunk);
+        reply(output, &rh, cr->tx.data + cr->tx_pos, chunk);
         cr->tx_pos += chunk;
 
         if (cr->tx_pos >= cr->tx_total) {
             CR_RESET(cr);
+            CrDeleteBuffer(cr);
             return 0;
         }
         CR_YIELD(cr, 0);
     }
 
     CR_END(cr);
+    CrDeleteBuffer(cr);
     return -1;
 }
 
@@ -260,6 +283,7 @@ int rpc_call_multi(Func func, Message *input, Message *output)
         Message rm = { MESSAGE_MAX_LEN, r };
         if (rpc_call(multi_handler, &sm, &rm) != 0) return -1;
 
+        if (rm.len < sizeof(RecvHdr)) return -1;
         RecvHdr rh;
         memcpy(&rh, r, sizeof(rh));
         if (rh.magic != MULTI_MAGIC) return -1;
