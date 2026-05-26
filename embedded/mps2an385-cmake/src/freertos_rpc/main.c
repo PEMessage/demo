@@ -21,6 +21,40 @@ void setup() {
 }
 
 // ================================================
+void printHeapAndStack(int line) {
+    // 获取堆信息
+    size_t totalHeap = configTOTAL_HEAP_SIZE;
+    size_t freeHeap = xPortGetFreeHeapSize();
+    size_t minFreeHeap = xPortGetMinimumEverFreeHeapSize();
+
+    // 获取当前任务句柄和名称
+    TaskHandle_t currentTask = xTaskGetCurrentTaskHandle();
+    const char* taskName = (currentTask != NULL) ? pcTaskGetName(currentTask) : "NotInTask";
+
+    if (currentTask != NULL) {
+        // 任务上下文：获取剩余栈（高水位线转字节）
+        UBaseType_t hwm = uxTaskGetStackHighWaterMark(currentTask);
+        size_t stackRemaining = (size_t)hwm * sizeof(StackType_t);
+        printf("[%s %d]: TotalHeap=%u, FreeHeap=%u, MinFreeHeap=%u, TaskStackRemaining=%u\n",
+               taskName,
+               line,
+               (unsigned int)totalHeap,
+               (unsigned int)freeHeap,
+               (unsigned int)minFreeHeap,
+               (unsigned int)stackRemaining);
+    } else {
+        // 非任务上下文（如调度器未启动、中断内等）
+        printf("[%s %d]: TotalHeap=%u, FreeHeap=%u, MinFreeHeap=%u\n",
+               taskName,
+               line,
+               (unsigned int)totalHeap,
+               (unsigned int)freeHeap,
+               (unsigned int)minFreeHeap);
+    }
+}
+
+
+// ================================================
 #define QUEUE_LENGTH 5
 #define MESSAGE_MAX_LEN 64
 
@@ -358,7 +392,9 @@ void TaskSend(void *pvParameters) {
     (void)pvParameters;
     uint32_t counter = 0;
 
+    printHeapAndStack(__LINE__);
     for (;;) {
+        printHeapAndStack(__LINE__);
         Message *input  = MessageCreate(1024); // Should Success
         // Message *input  = MessageCreate(1025); // Should Fail
         Message *output = MessageCreate(MULTI_CAP);
@@ -388,6 +424,7 @@ void TaskSend(void *pvParameters) {
 
         counter++;
         vTaskDelay(pdMS_TO_TICKS(1000));
+        printHeapAndStack(__LINE__);
     }
 }
 
@@ -410,15 +447,16 @@ int main() {
         while (1);
     }
 
+    printHeapAndStack(__LINE__);
     xTaskCreate(TaskSend,
                 "TaskSend",
-                configMINIMAL_STACK_SIZE + 512,
+                configMINIMAL_STACK_SIZE * 2,
                 NULL,
                 (tskIDLE_PRIORITY + 1),
                 NULL);
     xTaskCreate(TaskRecv,
                 "TaskRecv",
-                configMINIMAL_STACK_SIZE + 512,
+                configMINIMAL_STACK_SIZE * 2,
                 NULL,
                 (tskIDLE_PRIORITY + 1),
                 NULL);
