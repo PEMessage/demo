@@ -124,6 +124,7 @@ void rpc_dispatch(void) {
 // ================================================
 
 #define MULTI_CAP 256
+#define MULTI_REPLY_UNKNOWN UINT32_MAX  // sentinel: server hasn't determined reply length yet
 
 // --- Coroutine primitives (Duff's device style) ---
 #define CR_FIELD \
@@ -135,15 +136,19 @@ void rpc_dispatch(void) {
 #define CR_END(ctx)       } (ctx)->line = 0;
 
 // --- Protocol headers ---
+#define MULTI_MAGIC 0xDEC0
+
 typedef struct {
+    uint16_t magic;    // must be MULTI_MAGIC
     uint32_t offset;   // payload offset in total message
     uint32_t total;    // total message length
     Func     handler;  // target handler (valid on first fragment)
 } SendHdr;
 
 typedef struct {
+    uint16_t magic;    // must be MULTI_MAGIC
     uint32_t offset;   // payload offset in total reply
-    uint32_t total;    // total reply length; (uint32_t)-1 = not ready
+    uint32_t total;    // total reply length; MULTI_REPLY_UNKNOWN = not ready yet
     int32_t  status;   // 0 = OK, <0 = error
 } RecvHdr;
 
@@ -161,14 +166,11 @@ static char    tx_buf[MULTI_CAP];
 static MultiCr mcr   = {0};
 
 // --- Helper: assemble RecvHdr + optional payload into output Message ---
-static void reply(Message *output, RecvHdr *rh, const Message *payload)
+static void reply(Message *output, RecvHdr *rh, const char *payload, uint32_t plen)
 {
-    Message hdr = { .data = (char*)rh, .len = sizeof(*rh) };
-    uint32_t copied = MessageCopy(output, 0, &hdr, 0, sizeof(*rh));
-    if (payload && payload->len) {
-        copied += MessageCopy(output, sizeof(*rh), payload, 0, payload->len);
-    }
-    output->len = copied;
+    memcpy(output->data, rh, sizeof(*rh));
+    if (plen) memcpy(output->data + sizeof(*rh), payload, plen);
+    output->len = sizeof(*rh) + plen;
 }
 
 // --- Server coroutine body ---
@@ -183,6 +185,7 @@ static int multi_handler_cr(MultiCr *cr, Message *input, Message *output)
     for (;;) {
         if (input->len < sizeof(SendHdr)) return -1;
         memcpy(&sh, input->data, sizeof(sh));
+        if (sh.magic != MULTI_MAGIC) return -1;
 
         if (sh.total > MULTI_CAP) return -1;
 
@@ -191,16 +194,12 @@ static int multi_handler_cr(MultiCr *cr, Message *input, Message *output)
         }
 
         uint32_t plen = (input->len > sizeof(SendHdr)) ? (input->len - sizeof(SendHdr)) : 0;
-        if (plen) {
-            Message src = { .data = input->data, .len = input->len };
-            Message dst = { .data = rx_buf, .len = MULTI_CAP };
-            MessageCopy(&dst, sh.offset, &src, sizeof(SendHdr), plen);
-        }
+        if (plen) memcpy(rx_buf + sh.offset, input->data + sizeof(SendHdr), plen);
 
         if (sh.offset + plen >= sh.total) break;
 
-        rh = (RecvHdr){ .offset = 0, .total = (uint32_t)-1, .status = 0 };
-        reply(output, &rh, NULL);
+        rh = (RecvHdr){ .magic = MULTI_MAGIC, .offset = 0, .total = MULTI_REPLY_UNKNOWN, .status = 0 };
+        reply(output, &rh, NULL, 0);
         CR_YIELD(cr, 0);
     }
 
@@ -219,9 +218,8 @@ static int multi_handler_cr(MultiCr *cr, Message *input, Message *output)
         uint32_t room   = MESSAGE_MAX_LEN - sizeof(RecvHdr);
         uint32_t chunk  = (remain > room) ? room : remain;
 
-        rh = (RecvHdr){ .offset = cr->tx_pos, .total = cr->tx_total, .status = 0 };
-        Message payload = { .data = tx_buf + cr->tx_pos, .len = chunk };
-        reply(output, &rh, &payload);
+        rh = (RecvHdr){ .magic = MULTI_MAGIC, .offset = cr->tx_pos, .total = cr->tx_total, .status = 0 };
+        reply(output, &rh, tx_buf + cr->tx_pos, chunk);
         cr->tx_pos += chunk;
 
         if (cr->tx_pos >= cr->tx_total) {
@@ -244,59 +242,37 @@ int multi_handler(Message *input, Message *output)
 // --- Client: symmetric multi RPC ---
 int rpc_call_multi(Func func, Message *input, Message *output)
 {
-    char in_buf[MESSAGE_MAX_LEN];
-    char out_buf[MESSAGE_MAX_LEN];
+    char s[MESSAGE_MAX_LEN];
+    char r[MESSAGE_MAX_LEN];
 
-    uint32_t send_off = 0;
-    uint32_t send_tot = input->len;
-    uint32_t recv_off = 0;
-    uint32_t recv_tot = (uint32_t)-1;
-    int      result   = 0;
+    uint32_t tx = 0, rx = 0, rx_need = MULTI_REPLY_UNKNOWN;
 
-    Message in  = { .data = in_buf,  .len = MESSAGE_MAX_LEN };
-    Message out = { .data = out_buf, .len = MESSAGE_MAX_LEN };
+    while (tx < input->len || rx < rx_need) {
+        uint32_t room = MESSAGE_MAX_LEN - sizeof(SendHdr);
+        uint32_t n = input->len - tx;
+        if (n > room) n = room;
 
-    while (send_off < send_tot || recv_off < recv_tot) {
-        /* assemble SendHdr + payload */
-        SendHdr sh = { .offset = send_off, .total = send_tot, .handler = func };
-        uint32_t max_pl = MESSAGE_MAX_LEN - sizeof(SendHdr);
-        uint32_t plen   = 0;
+        SendHdr sh = { .magic = MULTI_MAGIC, .offset = tx, .total = input->len, .handler = func };
+        memcpy(s, &sh, sizeof(sh));
+        if (n) memcpy(s + sizeof(sh), input->data + tx, n);
 
-        if (send_off < send_tot) {
-            plen = send_tot - send_off;
-            if (plen > max_pl) plen = max_pl;
-        }
+        Message sm = { sizeof(sh) + n, s };
+        Message rm = { MESSAGE_MAX_LEN, r };
+        if (rpc_call(multi_handler, &sm, &rm) != 0) return -1;
 
-        Message hdr_msg = { .data = (char*)&sh, .len = sizeof(sh) };
-        in.len = MESSAGE_MAX_LEN;
-        MessageCopy(&in, 0, &hdr_msg, 0, sizeof(sh));
-        if (plen) {
-            MessageCopy(&in, sizeof(sh), input, send_off, plen);
-        }
-        in.len = sizeof(sh) + plen;
-
-        /* swap */
-        out.len = MESSAGE_MAX_LEN;
-        result = rpc_call(multi_handler, &in, &out);
-        if (result != 0) return result;
-
-        /* parse RecvHdr */
         RecvHdr rh;
-        if (out.len < sizeof(rh)) return -1;
-        memcpy(&rh, out.data, sizeof(rh));
+        memcpy(&rh, r, sizeof(rh));
+        if (rh.magic != MULTI_MAGIC) return -1;
         if (rh.status != 0) return rh.status;
-        if (rh.total != (uint32_t)-1) recv_tot = rh.total;
+        if (rh.total != MULTI_REPLY_UNKNOWN) rx_need = rh.total;
 
-        /* copy any payload to output (invariant 3) */
-        uint32_t rplen = (out.len > sizeof(rh)) ? (out.len - sizeof(rh)) : 0;
-        if (rplen) {
-            recv_off += MessageCopy(output, recv_off, &out, sizeof(rh), rplen);
-        }
-
-        send_off += plen;
+        uint32_t m = rm.len - sizeof(rh);
+        if (m) memcpy(output->data + rx, r + sizeof(rh), m);
+        rx += m;
+        tx += n;
     }
 
-    output->len = recv_off;
+    output->len = rx;
     return 0;
 }
 
