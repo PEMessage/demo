@@ -35,20 +35,48 @@ static QueueHandle_t xRequestQueue = NULL;
 static QueueHandle_t xResponseQueue = NULL;
 
 // ================================================
+Message *MessageCreate(uint32_t size) {
+    Message *msg = pvPortMalloc(sizeof(Message));
+    if (!msg) return NULL;
+    msg->data = pvPortMalloc(size);
+    if (!msg->data) {
+        vPortFree(msg);
+        return NULL;
+    }
+    msg->len = size;
+    return msg;
+}
+
+void MessageDelete(Message *message) {
+    if (!message) return;
+    if (message->data) {
+        vPortFree(message->data);
+    }
+    vPortFree(message);
+}
+
+uint32_t MessageCopy(Message *dest, uint32_t destpos,
+                     const Message *src, uint32_t srcpos,
+                     uint32_t size) {
+    if (!dest || !src || !dest->data || !src->data) return 0;
+    if (destpos >= dest->len || srcpos >= src->len) return 0;
+
+    uint32_t avail_src  = src->len - srcpos;
+    uint32_t avail_dest = dest->len - destpos;
+    uint32_t copy_len   = size;
+    if (copy_len > avail_src)  copy_len = avail_src;
+    if (copy_len > avail_dest) copy_len = avail_dest;
+
+    memcpy(dest->data + destpos, src->data + srcpos, copy_len);
+    return copy_len;
+}
+
+// ================================================
 int echo_handler(Message *input, Message *output) {
     if (!input || !output || !input->data || !output->data) {
         return -1;
     }
-
-    uint32_t avail = output->len;
-    uint32_t copy_len = input->len;
-    if (copy_len > avail) {
-        copy_len = avail;
-    }
-
-    memcpy(output->data, input->data, copy_len);
-    output->len = copy_len;
-
+    output->len = MessageCopy(output, 0, input, 0, input->len);
     return 0;
 }
 
@@ -114,23 +142,24 @@ typedef enum {
 
 typedef struct {
     MultiState state;
-    char     rx_buf[MULTI_MESSAGE_MAX_LEN];
-    uint32_t rx_len;
-    char     tx_buf[MULTI_MESSAGE_MAX_LEN];
-    uint32_t tx_len;
-    uint32_t tx_offset;
+    Message  rx;      // len = capacity, data = rx_buf
+    Message  tx;      // len = capacity 或 handler 设置的实际长度
+    uint32_t rx_pos;
+    uint32_t tx_pos;
 } MultiCtx;
 
 static int multi_send_next_fragment(MultiCtx *ctx, Message *output) {
     if (ctx->state != MULTI_TX) {
-        output->data[0] = FRAG_FLAG_LAST;
-        output->data[1] = 0;
-        memcpy(output->data + sizeof(FragHeader), "ERR", 4);
-        output->len = sizeof(FragHeader) + 4;
+        FragHeader hdr = { .flags = FRAG_FLAG_LAST, .seq = 0, .handler = NULL };
+        Message hdr_msg = { .len = sizeof(hdr), .data = (char*)&hdr };
+        Message err = { .len = 4, .data = "ERR" };
+        MessageCopy(output, 0, &hdr_msg, 0, sizeof(hdr));
+        MessageCopy(output, sizeof(hdr), &err, 0, 4);
+        output->len = sizeof(hdr) + 4;
         return -1;
     }
 
-    uint32_t remain = ctx->tx_len - ctx->tx_offset;
+    uint32_t remain = ctx->tx.len - ctx->tx_pos;
     uint32_t payload_len = remain > (MESSAGE_MAX_LEN - sizeof(FragHeader))
                            ? (MESSAGE_MAX_LEN - sizeof(FragHeader))
                            : remain;
@@ -140,12 +169,13 @@ static int multi_send_next_fragment(MultiCtx *ctx, Message *output) {
         .seq   = 0,
         .handler = NULL,
     };
-    memcpy(output->data, &hdr, sizeof(hdr));
-    memcpy(output->data + sizeof(hdr), ctx->tx_buf + ctx->tx_offset, payload_len);
+    Message hdr_msg = { .len = sizeof(hdr), .data = (char*)&hdr };
+    MessageCopy(output, 0, &hdr_msg, 0, sizeof(hdr));
+    MessageCopy(output, sizeof(hdr), &ctx->tx, ctx->tx_pos, payload_len);
     output->len = sizeof(hdr) + payload_len;
 
-    ctx->tx_offset += payload_len;
-    if (ctx->tx_offset >= ctx->tx_len) {
+    ctx->tx_pos += payload_len;
+    if (ctx->tx_pos >= ctx->tx.len) {
         ctx->state = MULTI_IDLE;
     }
     return 0;
@@ -164,64 +194,75 @@ static int multi_handler_internal(MultiCtx *ctx, Message *input, Message *output
 
     if (hdr.flags & FRAG_FLAG_FIRST) {
         ctx->state = MULTI_RX;
-        ctx->rx_len = 0;
+        ctx->rx_pos = 0;
     }
 
     if (ctx->state != MULTI_RX) {
         FragHeader err_hdr = { .flags = FRAG_FLAG_LAST, .seq = 0, .handler = NULL };
-        memcpy(output->data, &err_hdr, sizeof(err_hdr));
-        memcpy(output->data + sizeof(err_hdr), "NACK", 5);
+        Message hdr_msg = { .len = sizeof(err_hdr), .data = (char*)&err_hdr };
+        Message nack = { .len = 5, .data = "NACK" };
+        MessageCopy(output, 0, &hdr_msg, 0, sizeof(err_hdr));
+        MessageCopy(output, sizeof(err_hdr), &nack, 0, 5);
         output->len = sizeof(err_hdr) + 5;
         return -1;
     }
 
-    uint32_t payload_len = input->len - sizeof(hdr);
-    if (ctx->rx_len + payload_len > sizeof(ctx->rx_buf)) {
+    Message src = { .len = input->len, .data = input->data };
+    uint32_t copied = MessageCopy(&ctx->rx, ctx->rx_pos, &src, sizeof(hdr), input->len - sizeof(hdr));
+    ctx->rx_pos += copied;
+    if (ctx->rx_pos > MULTI_MESSAGE_MAX_LEN) {
         ctx->state = MULTI_IDLE;
         FragHeader err_hdr = { .flags = FRAG_FLAG_LAST, .seq = 0, .handler = NULL };
-        memcpy(output->data, &err_hdr, sizeof(err_hdr));
-        memcpy(output->data + sizeof(err_hdr), "OVFL", 5);
+        Message hdr_msg = { .len = sizeof(err_hdr), .data = (char*)&err_hdr };
+        Message ovfl = { .len = 5, .data = "OVFL" };
+        MessageCopy(output, 0, &hdr_msg, 0, sizeof(err_hdr));
+        MessageCopy(output, sizeof(err_hdr), &ovfl, 0, 5);
         output->len = sizeof(err_hdr) + 5;
         return -1;
     }
 
-    memcpy(ctx->rx_buf + ctx->rx_len, input->data + sizeof(hdr), payload_len);
-    ctx->rx_len += payload_len;
-
     if (hdr.flags & FRAG_FLAG_LAST) {
-        Message echo_in  = { .len = ctx->rx_len, .data = ctx->rx_buf };
-        Message echo_out = { .len = sizeof(ctx->tx_buf), .data = ctx->tx_buf };
-        hdr.handler(&echo_in, &echo_out);
+        Message echo_in = { .len = ctx->rx_pos, .data = ctx->rx.data };
+        ctx->tx.len = MULTI_MESSAGE_MAX_LEN; // 重置 capacity
+        hdr.handler(&echo_in, &ctx->tx);
 
-        ctx->tx_len    = echo_out.len;
-        ctx->tx_offset = 0;
-        ctx->state     = MULTI_TX;
+        ctx->tx_pos = 0;
+        ctx->state  = MULTI_TX;
 
         return multi_send_next_fragment(ctx, output);
     }
 
     FragHeader ack_hdr = { .flags = FRAG_FLAG_LAST, .seq = 0, .handler = NULL };
-    memcpy(output->data, &ack_hdr, sizeof(ack_hdr));
-    memcpy(output->data + sizeof(ack_hdr), "ACK", 4);
+    Message hdr_msg = { .len = sizeof(ack_hdr), .data = (char*)&ack_hdr };
+    Message ack = { .len = 4, .data = "ACK" };
+    MessageCopy(output, 0, &hdr_msg, 0, sizeof(ack_hdr));
+    MessageCopy(output, sizeof(ack_hdr), &ack, 0, 4);
     output->len = sizeof(ack_hdr) + 4;
     return 0;
 }
 
 int multi_handler(Message *input, Message *output) {
+    static char rx_buf[MULTI_MESSAGE_MAX_LEN];
+    static char tx_buf[MULTI_MESSAGE_MAX_LEN];
     static MultiCtx ctx;
+    if (ctx.rx.data == NULL) {
+        ctx.rx.data = rx_buf;
+        ctx.rx.len  = MULTI_MESSAGE_MAX_LEN;
+        ctx.tx.data = tx_buf;
+        ctx.tx.len  = MULTI_MESSAGE_MAX_LEN;
+    }
     return multi_handler_internal(&ctx, input, output);
 }
 
 int rpc_call_multi(Func func, Message *input, Message *output) {
     char in_data[MESSAGE_MAX_LEN];
     char out_data[MESSAGE_MAX_LEN];
-    Message in = { .data = in_data };
-    Message out = { .data = out_data };
+    Message in  = { .len = MESSAGE_MAX_LEN, .data = in_data };
+    Message out = { .len = MESSAGE_MAX_LEN, .data = out_data };
 
     uint32_t send_len = input->len;
     uint32_t send_offset = 0;
     uint8_t msg_id = 0;
-    uint32_t recv_max = output->len;
 
     while (send_offset < send_len) {
         uint32_t payload_len = (send_len - send_offset) > (MESSAGE_MAX_LEN - sizeof(FragHeader))
@@ -236,8 +277,10 @@ int rpc_call_multi(Func func, Message *input, Message *output) {
         if (send_offset == 0) hdr.flags |= FRAG_FLAG_FIRST;
         if (send_offset + payload_len >= send_len) hdr.flags |= FRAG_FLAG_LAST;
 
-        memcpy(in_data, &hdr, sizeof(hdr));
-        memcpy(in_data + sizeof(hdr), input->data + send_offset, payload_len);
+        Message hdr_msg = { .len = sizeof(hdr), .data = (char*)&hdr };
+        in.len = MESSAGE_MAX_LEN;
+        MessageCopy(&in, 0, &hdr_msg, 0, sizeof(hdr));
+        MessageCopy(&in, sizeof(hdr), input, send_offset, payload_len);
         in.len = sizeof(hdr) + payload_len;
         out.len = MESSAGE_MAX_LEN;
 
@@ -250,12 +293,8 @@ int rpc_call_multi(Func func, Message *input, Message *output) {
             memcpy(&resp_hdr, out_data, sizeof(resp_hdr));
 
             while (1) {
-                uint32_t resp_payload = out.len > sizeof(FragHeader) ? out.len - sizeof(FragHeader) : 0;
-                if (recv_offset + resp_payload > recv_max) {
-                    resp_payload = recv_max - recv_offset;
-                }
-                memcpy(output->data + recv_offset, out_data + sizeof(FragHeader), resp_payload);
-                recv_offset += resp_payload;
+                uint32_t copied = MessageCopy(output, recv_offset, &out, sizeof(FragHeader), out.len);
+                recv_offset += copied;
 
                 if (resp_hdr.flags & FRAG_FLAG_LAST) break;
 
@@ -264,7 +303,9 @@ int rpc_call_multi(Func func, Message *input, Message *output) {
                     .seq     = msg_id,
                     .handler = func,
                 };
-                memcpy(in_data, &poll_hdr, sizeof(poll_hdr));
+                Message poll_msg = { .len = sizeof(poll_hdr), .data = (char*)&poll_hdr };
+                in.len = MESSAGE_MAX_LEN;
+                MessageCopy(&in, 0, &poll_msg, 0, sizeof(poll_hdr));
                 in.len = sizeof(poll_hdr);
                 out.len = MESSAGE_MAX_LEN;
 
@@ -298,25 +339,31 @@ void TaskSend(void *pvParameters) {
     uint32_t counter = 0;
 
     for (;;) {
-        char input_buf[200];
-        char output_buf[MULTI_MESSAGE_MAX_LEN];
-        uint32_t send_len = sizeof(input_buf);
+        Message *input  = MessageCreate(200);
+        Message *output = MessageCreate(MULTI_MESSAGE_MAX_LEN);
+        if (!input || !output) {
+            printf("[TaskSend] malloc failed\n");
+            MessageDelete(input);
+            MessageDelete(output);
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            continue;
+        }
 
-        fill_input(input_buf, send_len, counter);
-        memset(output_buf, 0xAC, sizeof(output_buf));
-
-        Message input  = { .len = send_len, .data = input_buf };
-        Message output = { .len = sizeof(output_buf), .data = output_buf };
+        fill_input(input->data, input->len, counter);
+        memset(output->data, 0xAC, output->len);
 
         printf("[TaskSend] --> RPC multi request (%lu bytes), seed=%lu\n",
-               input.len, counter);
+               input->len, counter);
 
-        int ret = rpc_call_multi(echo_handler, &input, &output);
+        int ret = rpc_call_multi(echo_handler, input, output);
 
-        int ok = (ret == 0 && output.len == input.len &&
-                  memcmp(input.data, output.data, input.len) == 0);
+        int ok = (ret == 0 && output->len == input->len &&
+                  memcmp(input->data, output->data, input->len) == 0);
         printf("[TaskSend] <-- RPC multi response: ret=%d, recv_len=%lu, match=%s\n",
-               ret, output.len, ok ? "PASS" : "FAIL");
+               ret, output->len, ok ? "PASS" : "FAIL");
+
+        MessageDelete(input);
+        MessageDelete(output);
 
         counter++;
         vTaskDelay(pdMS_TO_TICKS(1000));
