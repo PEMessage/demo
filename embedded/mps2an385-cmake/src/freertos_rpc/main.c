@@ -142,14 +142,14 @@ void rpc_dispatch(void) {
 
     xQueueReceive(xRequestQueue, &req, portMAX_DELAY);
 
-    printf("[rpc_dispatch] Processing: len=%lu, first2byte=[%02X %02X]\n",
-           req.input->len,
-           (unsigned char)req.input->data[0],
-           (unsigned char)req.input->data[1]);
+    // printf("[rpc_dispatch] Processing: len=%lu, first2byte=[%02X %02X]\n",
+    //        req.input->len,
+    //        (unsigned char)req.input->data[0],
+    //        (unsigned char)req.input->data[1]);
 
     req.ret = req.func(req.input, req.output);
 
-    printf("[rpc_dispatch] RPC done, ret=%d, reply back\n", req.ret);
+    // printf("[rpc_dispatch] RPC done, ret=%d, reply back\n", req.ret);
     xQueueSend(xResponseQueue, &done, portMAX_DELAY);
 }
 
@@ -270,6 +270,7 @@ static int multi_handler_cr(MultiCr *cr, Message *input, Message *output)
     /* -------- init -------- */
     cr->tx_total = 0;
     cr->tx_pos = 0;
+    cr->handler = sh.handler;
     if (CrCreateBuffer(cr) != MULTI_OK) {
         CrDeleteBuffer(cr);
         CR_RESET(cr);
@@ -282,10 +283,6 @@ static int multi_handler_cr(MultiCr *cr, Message *input, Message *output)
             CrDeleteBuffer(cr);
             CR_RESET(cr);
             return MULTI_ERR_OVERSIZE;
-        }
-
-        if (sh.offset == 0 && sh.total > 0) {
-            cr->handler = sh.handler;
         }
 
         uint32_t plen = (input->len > sizeof(SendHdr)) ? (input->len - sizeof(SendHdr)) : 0;
@@ -425,16 +422,40 @@ void TaskSend(void *pvParameters) {
 
     printHeapAndStack(__LINE__);
     for (;;) {
-        printHeapAndStack(__LINE__);
+        // printHeapAndStack(__LINE__);
 
-        test_echo(1024, MULTI_CAP, counter);  // parametric: in_len, out_len, seed
+        int ret;
+
+        /* 0-byte payload */
+        ret = test_echo(0, MULTI_CAP, counter);
+        printf("[TaskSend] test 0: ret=%d (expect 0)\n\n", ret);
+
+        /* MULTI_CAP - 1 */
+        ret = test_echo(MULTI_CAP - 1, MULTI_CAP, counter);
+        printf("[TaskSend] test MULTI_CAP-1: ret=%d (expect 0)\n\n", ret);
+
+        /* MULTI_CAP */
+        ret = test_echo(MULTI_CAP, MULTI_CAP, counter);
+        printf("[TaskSend] test MULTI_CAP: ret=%d (expect 0)\n\n", ret);
+
+        /* MULTI_CAP + 1 -> server rejects as oversize */
+        ret = test_echo(MULTI_CAP + 1, MULTI_CAP, counter);
+        printf("[TaskSend] test MULTI_CAP+1: ret=%d (expect %d)\n\n",
+               ret, MULTI_ERR_OVERSIZE);
+
+        /* output buffer too small -> client rejects as resp oversize */
+        ret = test_echo(MULTI_CAP, 512, counter);
+        printf("[TaskSend] test out=512: ret=%d (expect %d)\n\n",
+               ret, MULTI_ERR_RESP_OVERSIZE);
+
 
         counter++;
         vTaskDelay(pdMS_TO_TICKS(1000));
-        printHeapAndStack(__LINE__);
+        while(1);
+
+        // printHeapAndStack(__LINE__);
     }
 }
-
 
 void TaskRecv(void *pvParameters) {
     (void)pvParameters;
