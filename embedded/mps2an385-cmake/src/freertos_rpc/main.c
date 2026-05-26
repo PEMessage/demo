@@ -181,6 +181,7 @@ void rpc_dispatch(void) {
 #define MULTI_ERR_NOMEM     (MULTI_ERR_BASE - 4)  // buffer allocation failed
 #define MULTI_ERR_RESP_HDR  (MULTI_ERR_BASE - 5)  // response too short for RecvHdr
 #define MULTI_ERR_RESP_MAGIC (MULTI_ERR_BASE - 6) // response magic mismatch
+#define MULTI_ERR_RESP_OVERSIZE (MULTI_ERR_BASE - 7) // response payload exceeds output buffer
 
 typedef struct {
     uint16_t magic;    // must be MULTI_MAGIC
@@ -369,6 +370,7 @@ int rpc_call_multi(Func func, Message *input, Message *output)
         if (rh.total != MULTI_REPLY_UNKNOWN) rx_need = rh.total;
 
         uint32_t m = rm.len - sizeof(rh);
+        if (rx + m > output->len) return MULTI_ERR_RESP_OVERSIZE;
         if (m) memcpy(output->data + rx, r + sizeof(rh), m);
         rx += m;
         tx += n;
@@ -388,6 +390,35 @@ static void fill_input(char *data, uint32_t len, uint32_t seed) {
     }
 }
 
+static int test_echo(uint32_t input_len, uint32_t output_len, uint32_t seed) {
+    Message *input  = MessageCreate(input_len);
+    Message *output = MessageCreate(output_len);
+    if (!input || !output) {
+        printf("[test_echo] malloc failed for len=%lu\n", (unsigned long)input_len);
+        MessageDelete(input);
+        MessageDelete(output);
+        return -1;
+    }
+
+    fill_input(input->data, input->len, seed);
+    memset(output->data, 0xAC, output->len);
+
+    printf("[test_echo] --> RPC multi request (%lu bytes), seed=%lu\n",
+           (unsigned long)input->len, (unsigned long)seed);
+
+    int ret = rpc_call_multi(echo_handler, input, output);
+
+    int ok = (ret == 0 && output->len == input->len &&
+              memcmp(input->data, output->data, input->len) == 0);
+    printf("[test_echo] <-- RPC multi response: ret=%d, recv_len=%lu, match=%s\n",
+           ret, (unsigned long)output->len, ok ? "PASS" : "FAIL");
+
+    MessageDelete(input);
+    MessageDelete(output);
+
+    return ok ? 0 : (ret ? ret : -1);
+}
+
 void TaskSend(void *pvParameters) {
     (void)pvParameters;
     uint32_t counter = 0;
@@ -395,32 +426,8 @@ void TaskSend(void *pvParameters) {
     printHeapAndStack(__LINE__);
     for (;;) {
         printHeapAndStack(__LINE__);
-        Message *input  = MessageCreate(1024); // Should Success
-        // Message *input  = MessageCreate(1025); // Should Fail
-        Message *output = MessageCreate(MULTI_CAP);
-        if (!input || !output) {
-            printf("[TaskSend] malloc failed\n");
-            MessageDelete(input);
-            MessageDelete(output);
-            vTaskDelay(pdMS_TO_TICKS(1000));
-            continue;
-        }
 
-        fill_input(input->data, input->len, counter);
-        memset(output->data, 0xAC, output->len);
-
-        printf("[TaskSend] --> RPC multi request (%lu bytes), seed=%lu\n",
-               input->len, counter);
-
-        int ret = rpc_call_multi(echo_handler, input, output);
-
-        int ok = (ret == 0 && output->len == input->len &&
-                  memcmp(input->data, output->data, input->len) == 0);
-        printf("[TaskSend] <-- RPC multi response: ret=%d, recv_len=%lu, match=%s\n",
-               ret, output->len, ok ? "PASS" : "FAIL");
-
-        MessageDelete(input);
-        MessageDelete(output);
+        test_echo(1024, MULTI_CAP, counter);  // parametric: in_len, out_len, seed
 
         counter++;
         vTaskDelay(pdMS_TO_TICKS(1000));
