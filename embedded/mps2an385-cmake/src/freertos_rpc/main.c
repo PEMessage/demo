@@ -119,7 +119,6 @@ typedef struct {
     Message *input;
     Message *output;
     Func     func;
-    int      ret;
 } RpcRequest;
 
 int rpc_call(Func func, Message *input, Message *output) {
@@ -127,18 +126,16 @@ int rpc_call(Func func, Message *input, Message *output) {
         .input  = input,
         .output = output,
         .func   = func,
-        .ret    = 0,
     };
-    uint32_t done;
+    int ret;
 
     xQueueSend(xRequestQueue, &req, portMAX_DELAY);
-    xQueueReceive(xResponseQueue, &done, portMAX_DELAY);
-    return req.ret;
+    xQueueReceive(xResponseQueue, &ret, portMAX_DELAY);
+    return ret;
 }
 
 void rpc_dispatch(void) {
     RpcRequest req;
-    uint32_t done = 1;
 
     xQueueReceive(xRequestQueue, &req, portMAX_DELAY);
 
@@ -147,10 +144,10 @@ void rpc_dispatch(void) {
     //        (unsigned char)req.input->data[0],
     //        (unsigned char)req.input->data[1]);
 
-    req.ret = req.func(req.input, req.output);
+    int ret = req.func(req.input, req.output);
 
-    // printf("[rpc_dispatch] RPC done, ret=%d, reply back\n", req.ret);
-    xQueueSend(xResponseQueue, &done, portMAX_DELAY);
+    // printf("[rpc_dispatch] RPC done, ret=%d, reply back\n", ret);
+    xQueueSend(xResponseQueue, &ret, portMAX_DELAY);
 }
 
 // ================================================
@@ -469,7 +466,7 @@ int main() {
     printf("Init complete\n");
 
     xRequestQueue  = xQueueCreate(QUEUE_LENGTH, sizeof(RpcRequest));
-    xResponseQueue = xQueueCreate(QUEUE_LENGTH, sizeof(uint32_t));
+    xResponseQueue = xQueueCreate(QUEUE_LENGTH, sizeof(int));
     if (xRequestQueue == NULL || xResponseQueue == NULL) {
         printf("Queue creation failed!\n");
         while (1);
