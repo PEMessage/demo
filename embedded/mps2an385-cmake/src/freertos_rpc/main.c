@@ -72,6 +72,13 @@ static QueueHandle_t xResponseQueue = NULL;
 Message *MessageCreate(uint32_t size) {
     Message *msg = pvPortMalloc(sizeof(Message));
     if (!msg) return NULL;
+
+    if (size == 0) {
+        msg->data = NULL;
+        msg->len = 0;
+        return msg;
+    }
+
     msg->data = pvPortMalloc(size);
     if (!msg->data) {
         vPortFree(msg);
