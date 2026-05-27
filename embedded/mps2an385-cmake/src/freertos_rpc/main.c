@@ -115,9 +115,13 @@ uint32_t MessageCopy(Message *dest, uint32_t destpos,
 // ================================================
 int echo_handler(Message *input, Message *output) {
     if (!input || !output || !input->data || !output->data) {
-        return -1;
+        printf("[echo_handler] empty input->data, ret -1200\n");
+        return -1200;
     }
+    int output_len = output->len;
     output->len = MessageCopy(output, 0, input, 0, input->len);
+    printf("[echo_handler] input->len: %d, output->len: %d -> %d\n", input->len, output_len, output->len);
+
     return 0;
 }
 
@@ -205,6 +209,7 @@ typedef struct {
 typedef struct {
     CR_FIELD;
     Func     handler;   // cached user handler
+    int      handler_ret; // handler return value, preserved across yields
     uint32_t tx_total;  // reply total length after handler runs
     uint32_t tx_pos;    // bytes already sent in reply
     Message  rx;        // .data allocated on first use, .len = cap
@@ -301,10 +306,15 @@ static int multi_handler_cr(MultiCr *cr, Message *input, Message *output)
 
     /* -------- run user handler -------- */
     {
-        Message req  = { .data = cr->rx.data, .len = sh.total };
+        // Optional 1: if size is 0, input should be null. (recommand this to expose more bug)
+        Message req  = { .data = (sh.total == 0) ? NULL : cr->rx.data, .len = sh.total };
+        // Optional 2: if size is 0, input can not be null
+        // Message req  = { .data = cr->rx.data, .len = sh.total };
+
         Message resp = { .data = cr->tx.data, .len = cr->tx.len };
-        cr->handler(&req, &resp);
-        cr->tx_total = resp.len;
+
+        cr->handler_ret = cr->handler(&req, &resp);
+        cr->tx_total = (cr->handler_ret == 0) ? resp.len : 0;
         cr->tx_pos   = 0;
     }
 
@@ -314,7 +324,7 @@ static int multi_handler_cr(MultiCr *cr, Message *input, Message *output)
         uint32_t room   = MESSAGE_MAX_LEN - sizeof(RecvHdr);
         uint32_t chunk  = (remain > room) ? room : remain;
 
-        rh = (RecvHdr){ .magic = MULTI_MAGIC, .offset = cr->tx_pos, .total = cr->tx_total, .status = 0 };
+        rh = (RecvHdr){ .magic = MULTI_MAGIC, .offset = cr->tx_pos, .total = cr->tx_total, .status = cr->handler_ret };
         reply(output, &rh, cr->tx.data + cr->tx_pos, chunk);
         cr->tx_pos += chunk;
 
@@ -432,7 +442,7 @@ void TaskSend(void *pvParameters) {
 
         /* 0-byte payload */
         ret = test_echo(0, MULTI_CAP, counter);
-        printf("[TaskSend] test 0: ret=%d (expect 0)\n\n", ret);
+        printf("[TaskSend] test 0: ret=%d (expect -1200)\n\n", ret);
 
         /* MULTI_CAP - 1 */
         ret = test_echo(MULTI_CAP - 1, MULTI_CAP, counter);
