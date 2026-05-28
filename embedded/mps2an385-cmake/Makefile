@@ -102,9 +102,9 @@ $(1):
 	@echo "=================================="
 	@echo "build module \"$(PRIVATE_M)\""
 	@echo "=================================="
-	mkdir -p $(OUT)/$(PRIVATE_M)
-	cmake -B $(OUT)/$(PRIVATE_M) -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-	cmake --build $(OUT)/$(PRIVATE_M) -- $(PRIVATE_M) -j4 && \
+	mkdir -p $(PRIVATE_OUT)
+	cmake -B $(PRIVATE_OUT) -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+	cmake --build $(PRIVATE_OUT) -- $(PRIVATE_M) -j4 && \
 		rm -rf compile_commands.json && \
 		ln -s $(PRIVATE_OUT)/compile_commands.json compile_commands.json
 
@@ -141,7 +141,7 @@ debug-$(1):
 		-nographic -serial stdio \
 		-s -S
 clean-$(1):
-	cmake --build $(OUT)/$(PRIVATE_M) -- clean
+	cmake --build $(PRIVATE_OUT) -- clean
 endef
 
 # ====================================================
