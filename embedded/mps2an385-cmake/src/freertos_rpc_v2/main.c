@@ -208,6 +208,7 @@ void rpc_dispatch(void) {
 // ================================================
 
 #define MULTI_CAP 1024
+#define HANDLER_RET_SIZE 4
 #define MULTI_REPLY_UNKNOWN UINT32_MAX  // sentinel: server hasn't determined reply length yet
 
 // ================================================
@@ -303,6 +304,7 @@ typedef struct {
 typedef struct {
     CR_FIELD;
     Message *rx;
+    uint32_t max_total;
 } RecvCtx;
 
 typedef struct {
@@ -443,7 +445,7 @@ int CoRecv(RecvCtx *ctx, Data *data) {
 
 
     // Start Stage
-    if (ihdr->sh.as.start.total > MULTI_CAP) {
+    if (ihdr->sh.as.start.total > ctx->max_total) {
         resp(data, MULTI_ERR_OVERSIZE);
         CONTAINER_OF(ctx, MultiSession, recv_ctx)->error = MULTI_ERR_OVERSIZE;
         RecvCtxReset(ctx);
@@ -498,21 +500,25 @@ int CoRecv(RecvCtx *ctx, Data *data) {
 int CoHandler(HandlerCtx *ctx, Data *data) {
     CR_START_UNTIL(ctx, ctx->in != NULL);
 
-    Message *out = MessageCreate(MULTI_CAP);
-    int ret = echo_handler(ctx->in, out);
-    if (ret != 0) {
-        CONTAINER_OF(ctx, MultiSession, handler_ctx)->error = ret;
-        resp(data, ret);
-        MessageDelete(out);
-        MessageDelete(ctx->in);
-        ctx->in = NULL;
-        ctx->line = 0;
-        return 0;
-    }
+    Message *out = MessageCreate(MULTI_CAP + HANDLER_RET_SIZE);
+
+    Message handler_input = {
+        .data = ctx->in->data,
+        .len  = ctx->in->len,
+    };
+    Message handler_output = {
+        .data = out->data + HANDLER_RET_SIZE,
+        .len  = (out->len > HANDLER_RET_SIZE) ? out->len - HANDLER_RET_SIZE : 0,
+    };
+    int ret = echo_handler(&handler_input, &handler_output);
+
+    *(int32_t *)(out->data) = ret;
+    out->len = HANDLER_RET_SIZE + handler_output.len;
+
     MessageDelete(ctx->in);
     ctx->in = NULL;
 
-    MessageMove(&CONTAINER_OF(ctx, MultiSession, handler_ctx)->send_ctx.tx , &out);
+    MessageMove(&CONTAINER_OF(ctx, MultiSession, handler_ctx)->send_ctx.tx, &out);
     CR_END(ctx);
     return 0;
 
@@ -609,6 +615,7 @@ int multi_handler(Message *input, Message *output)
     if (srv_session.send_ctx.reset == NULL) {
         srv_session.send_ctx.reset = SendCtxResetFree;
         srv_session.recv_ctx.reset = RecvCtxReset;
+        srv_session.recv_ctx.max_total = MULTI_CAP;
     }
 
     StepMultiSession(&srv_session, input, output);
@@ -634,6 +641,7 @@ int rpc_call_multi(Func func, Message *input, Message *output)
     session.send_ctx.tx = input;
     session.send_ctx.reset = SendCtxResetNoFree;
     session.recv_ctx.reset = RecvCtxReset;
+    session.recv_ctx.max_total = MULTI_CAP + HANDLER_RET_SIZE;
 
     char swap_ibuffer[MESSAGE_MAX_LEN] = {0};
     char swap_obuffer[MESSAGE_MAX_LEN] = {0};
@@ -668,12 +676,28 @@ int rpc_call_multi(Func func, Message *input, Message *output)
     }
 
     if (session.handler_ctx.in != NULL) {
-        if (session.handler_ctx.in->len > output->len) {
+        if (session.handler_ctx.in->len < HANDLER_RET_SIZE) {
+            MessageDelete(session.handler_ctx.in);
+            session.handler_ctx.in = NULL;
+            return 0;
+        }
+
+        int32_t handler_ret = *(int32_t *)session.handler_ctx.in->data;
+        uint32_t payload_len = session.handler_ctx.in->len - HANDLER_RET_SIZE;
+
+        if (handler_ret != 0) {
+            MessageDelete(session.handler_ctx.in);
+            session.handler_ctx.in = NULL;
+            return handler_ret;
+        }
+
+        if (payload_len > output->len) {
             MessageDelete(session.handler_ctx.in);
             session.handler_ctx.in = NULL;
             return MULTI_ERR_RESP_OVERSIZE;
         }
-        output->len = MessageCopy(output, 0, session.handler_ctx.in, 0, session.handler_ctx.in->len);
+
+        output->len = MessageCopy(output, 0, session.handler_ctx.in, HANDLER_RET_SIZE, payload_len);
         MessageDelete(session.handler_ctx.in);
         session.handler_ctx.in = NULL;
     }
