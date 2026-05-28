@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 #include "CMSDK_CM3.h" // for SystemCoreClock
 #include "FreeRTOS.h"
 #include "task.h"
@@ -19,6 +20,31 @@ void setup() {
     stdout_init();
     NVIC_Init();
 }
+
+// ================================================
+#define ARRAY_INDEX(ptr, array) ((size_t)((void *)(ptr) - (void *)(array)) / sizeof((array)[0]))
+
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+
+#define __same_type(a, b) __builtin_types_compatible_p(__typeof__(a), __typeof__(b))
+
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+    // C11 or later: use static_assert
+    #define ASSERT_STATIC(expr, msg) static_assert(expr, msg)
+#elif defined(__GNUC__) || defined(__clang__)
+    // GCC or Clang: use _Static_assert
+    #define ASSERT_STATIC(expr, msg) _Static_assert(expr, msg)
+#else
+    // Fallback for older compilers: use a hack with typedef and array size
+    #define ASSERT_STATIC(expr, msg) typedef char static_assert_##msg[(expr) ? 1 : -1]
+#endif
+
+#define CONTAINER_OF(ptr, type, member) ({				\
+	void *__mptr = (void *)(ptr);					\
+	ASSERT_STATIC(__same_type(*(ptr), ((type *)0)->member) ||	\
+		      __same_type(*(ptr), void),			\
+		      "pointer type mismatch in container_of()");	\
+	((type *)(__mptr - offsetof(type, member))); })
 
 // ================================================
 void printHeapAndStack(int line) {
@@ -51,6 +77,13 @@ void printHeapAndStack(int line) {
                (unsigned int)freeHeap,
                (unsigned int)minFreeHeap);
     }
+}
+
+const char *getTaskName() {
+    TaskHandle_t currentTask = xTaskGetCurrentTaskHandle();
+    const char* taskName = (currentTask != NULL) ? pcTaskGetName(currentTask) : "NotInTask";
+
+    return taskName;
 }
 
 
@@ -112,6 +145,15 @@ uint32_t MessageCopy(Message *dest, uint32_t destpos,
     return copy_len;
 }
 
+void MessageMove(Message **dest,Message **src) {
+    assert(dest && src);
+    assert(*dest == NULL && *src != NULL);
+
+    *dest = *src;
+    *src = NULL;
+    return;
+}
+
 // ================================================
 int echo_handler(Message *input, Message *output) {
     if (!input || !output || !input->data || !output->data) {
@@ -120,7 +162,7 @@ int echo_handler(Message *input, Message *output) {
     }
     int output_len = output->len;
     output->len = MessageCopy(output, 0, input, 0, input->len);
-    printf("[echo_handler] input->len: %d, output->len: %d -> %d\n", input->len, output_len, output->len);
+    printf("[echo_handler] input->len: %lu, output->len: %lu -> %lu\n", (unsigned long)input->len, (unsigned long)output_len, (unsigned long)output->len);
 
     return 0;
 }
@@ -168,226 +210,474 @@ void rpc_dispatch(void) {
 #define MULTI_CAP 1024
 #define MULTI_REPLY_UNKNOWN UINT32_MAX  // sentinel: server hasn't determined reply length yet
 
+// ================================================
 // --- Coroutine primitives (Duff's device style) ---
+// ================================================
+
+struct ctx_t;
+typedef void (*CtxResetFunc)(void *ctx);
+
+typedef struct ctx_t {
+    int line;
+    CtxResetFunc reset;
+} Ctx;
+
 #define CR_FIELD \
-    int line
+    int line; \
+    CtxResetFunc reset
+
 
 #define CR_START(ctx)     switch((ctx)->line) { case 0:
+#define CR_START_UNTIL(ctx, cond) switch((ctx)->line) { case 0: if(!(cond)) { ctx->line = 0; return 0; }
+#define CR_IS_STARTED(ctx) ((ctx)->line != 0)
+
 #define CR_YIELD(ctx) do { (ctx)->line = __LINE__; return (0); case __LINE__:; } while(0)
-#define CR_RESET(ctx)     do { (ctx)->line = 0; } while(0)
 #define CR_END(ctx)       } (ctx)->line = 0;
 
+#define CR_AWAIT(ctx, cond) \
+    while(!(cond)) { CR_YIELD(ctx); }
+
+#define CR_RESET(ctx, ret)     do { (ctx)->line = 0; if((ctx)->reset) ((ctx)->reset)(ctx); return ret; } while(0)
+// #define CR_RESET_IF(ctx, cond, ret)      do { if (cond)    { CR_RESET(ctx, ret); } } while (0)
+// #define CR_RESET_NOT_IF(ctx, cond, ret)  do { if (!(cond)) { CR_RESET(ctx, ret); } } while (0)
+// #define CR_RESET_ASSERT(ctx, cond, ret)  CR_RESET_NOT_IF(ctx, cond, ret)
+
+// ================================================
 // --- Protocol headers ---
+// ================================================
 #define MULTI_MAGIC 0xDEC0
 
 /* multi protocol error codes: negative = protocol error, 0 = OK, positive = handler error */
 #define MULTI_OK              0
+
 #define MULTI_ERR_BASE     -1100
 #define MULTI_ERR_MAGIC     (MULTI_ERR_BASE - 1)  // send hdr magic mismatch
 #define MULTI_ERR_SHORT     (MULTI_ERR_BASE - 2)  // input too short for SendHdr
 #define MULTI_ERR_OVERSIZE  (MULTI_ERR_BASE - 3)  // total > rx capacity
 #define MULTI_ERR_NOMEM     (MULTI_ERR_BASE - 4)  // buffer allocation failed
-#define MULTI_ERR_RESP_HDR  (MULTI_ERR_BASE - 5)  // response too short for RecvHdr
-#define MULTI_ERR_RESP_MAGIC (MULTI_ERR_BASE - 6) // response magic mismatch
-#define MULTI_ERR_RESP_OVERSIZE (MULTI_ERR_BASE - 7) // response payload exceeds output buffer
+#define MULTI_ERR_OUTOFSYNC     (MULTI_ERR_BASE - 5)
+                                                  //
+#define MULTI_ERR_RESP_HDR  (MULTI_ERR_BASE - 20)  // response too short for RecvHdr
+#define MULTI_ERR_RESP_MAGIC (MULTI_ERR_BASE - 21) // response magic mismatch
+#define MULTI_ERR_RESP_OVERSIZE (MULTI_ERR_BASE - 22) // response payload exceeds output buffer
+#define MULTI_ERR_RESP_UPDATE_ERR  (MULTI_ERR_BASE - 23)  // response update error
+#define MULTI_ERR_RESP_DONE_ERR  (MULTI_ERR_BASE - 24)  // response done error
+
+
+typedef enum {
+    SendInvalid = 0,
+    SendStart   = 1,
+    SendUpdate  = 2,
+    SendDone    = 3,
+} SendType;
 
 typedef struct {
-    uint16_t magic;    // must be MULTI_MAGIC
-    uint32_t offset;   // payload offset in total message
-    uint32_t total;    // total message length
-    Func     handler;  // target handler (valid on first fragment)
+    SendType  type;
+    union {
+        struct { uint32_t total;  } start;
+        struct { uint32_t offset; } update;
+        struct {} done;
+    } as;
 } SendHdr;
 
-typedef struct {
-    uint16_t magic;    // must be MULTI_MAGIC
-    uint32_t offset;   // payload offset in total reply
-    uint32_t total;    // total reply length; MULTI_REPLY_UNKNOWN = not ready yet
-    int32_t  status;   // 0 = OK, <0 = error
-} RecvHdr;
+typedef enum {
+    RespInvalid = 0,
+    RespOK      = 1,
+    RespErr     = 2,
+} RespType;
 
-// --- Server coroutine context ---
+typedef struct {
+    RespType  type;
+    union {
+        struct {} ok;
+        struct { int errcode; } err;
+    } as;
+} RespHdr;
+
+typedef struct {
+    uint16_t magic;
+    SendHdr  sh;
+    RespHdr  rh;
+} Hdr;
+
 typedef struct {
     CR_FIELD;
-    Func     handler;   // cached user handler
-    int      handler_ret; // handler return value, preserved across yields
-    uint32_t tx_total;  // reply total length after handler runs
-    uint32_t tx_pos;    // bytes already sent in reply
-    Message  rx;        // .data allocated on first use, .len = cap
-    Message  tx;        // .data allocated on first use, .len = cap
-} MultiCr;
+    Message *rx;
+} RecvCtx;
 
+typedef struct {
+    CR_FIELD;
+    Message *tx;
+    uint32_t pos;
+    uint32_t ret;
 
-static int CrCreateBuffer(MultiCr *cr)
-{
-    if (!cr->rx.data) {
-        cr->rx.data = pvPortMalloc(MULTI_CAP);
-        if (!cr->rx.data) return MULTI_ERR_NOMEM;
-        cr->rx.len = MULTI_CAP;
+} SendCtx;
+
+typedef struct {
+    CR_FIELD;
+    Message *in;
+} HandlerCtx;
+
+typedef struct {
+    RecvCtx recv_ctx;
+    SendCtx send_ctx;
+
+    HandlerCtx handler_ctx;
+    int error;
+} MultiSession;
+
+typedef struct data_t  {
+    // input
+    Message *input;
+    Hdr *ihdr;
+    char *idata;
+    uint32_t ilen;
+
+    // output
+    Message *output;
+    Hdr *ohdr;
+    char *odata;
+    uint32_t olen;
+
+} Data;
+
+// ================================================
+// Ctx reset helpers
+// ================================================
+static void RecvCtxReset(void *vctx) {
+    RecvCtx *ctx = (RecvCtx *)vctx;
+    if(ctx->rx) {
+        MessageDelete(ctx->rx);
+        ctx->rx = NULL;
     }
-    if (!cr->tx.data) {
-        cr->tx.data = pvPortMalloc(MULTI_CAP);
-        if (!cr->tx.data) return MULTI_ERR_NOMEM;
-        cr->tx.len = MULTI_CAP;
+}
+
+static void SendCtxResetNoFree(void *vctx) {
+    SendCtx *ctx = (SendCtx *)vctx;
+    ctx->tx = NULL;
+    ctx->pos = 0;
+    ctx->ret = 0;
+}
+
+static void SendCtxResetFree(void *vctx) {
+    SendCtx *ctx = (SendCtx *)vctx;
+    if (ctx->tx) {
+        MessageDelete(ctx->tx);
+        ctx->tx = NULL;
     }
-    return MULTI_OK;
+    ctx->pos = 0;
+    ctx->ret = 0;
 }
 
-static void CrDeleteBuffer(MultiCr *cr)
-{
-    if (cr->rx.data) { vPortFree(cr->rx.data); cr->rx.data = NULL; cr->rx.len = 0; }
-    if (cr->tx.data) { vPortFree(cr->tx.data); cr->tx.data = NULL; cr->tx.len = 0; }
-}
-
-// --- Helper: assemble RecvHdr + optional payload into output Message ---
-static void reply(Message *output, RecvHdr *rh, const char *payload, uint32_t plen)
-{
-    memcpy(output->data, rh, sizeof(*rh));
-    if (plen) memcpy(output->data + sizeof(*rh), payload, plen);
-    output->len = sizeof(*rh) + plen;
-}
-
-static int parseSendHdr(Message *input, SendHdr *sh) {
-    if (input->len < sizeof(*sh)) {
+// ================================================
+// Protocol Implment
+// ================================================
+static int StepMultiSession(MultiSession *s, Message *input, Message *output) {
+    if (!input || !output) {
         return MULTI_ERR_SHORT;
     }
-    memcpy(sh, input->data, sizeof(*sh));
-    if (sh->magic != MULTI_MAGIC) {
-        return MULTI_ERR_MAGIC;
+    if (input->len < sizeof(Hdr) || output->len < sizeof(Hdr)) {
+        return MULTI_ERR_SHORT;
     }
+
+    Data data = {
+        .input = input,
+        .ihdr = (Hdr *)input->data,
+        .idata = input->data + sizeof(Hdr),
+        .ilen = input->len - sizeof(Hdr),
+
+        .output = output,
+        .ohdr = (Hdr *)output->data,
+        .odata = output->data + sizeof(Hdr),
+        .olen = output->len - sizeof(Hdr),
+    };
+
+    if (data.ihdr->magic != MULTI_MAGIC) return MULTI_ERR_MAGIC;
+
+    data.ohdr->magic = MULTI_MAGIC;
+    data.ohdr->sh.type = SendInvalid;
+    data.ohdr->rh.type = RespInvalid;
+
+    int CoRecv(RecvCtx *ctx, Data *data);
+    CoRecv(&s->recv_ctx, &data);
+
+    if (strcmp(getTaskName(), "TaskRecv") == 0) {
+        // echo_handler()
+        int CoHandler(HandlerCtx *ctx, Data *data);
+        CoHandler(&s->handler_ctx, &data);
+    }
+
+    int CoSend(SendCtx *ctx, Data *data);
+    CoSend(&s->send_ctx, &data);
+
+    // fallbcak, if CoSend not being run, we
+    if ( data.ohdr->sh.type == SendInvalid) {
+        data.output->len = sizeof(Hdr);
+    }
+
     return 0;
 }
 
-// --- Server coroutine body ---
-static int multi_handler_cr(MultiCr *cr, Message *input, Message *output)
-{
-    SendHdr sh;
-    RecvHdr rh;
-
-    int ret = parseSendHdr(input, &sh);
-    if(ret) {
-        CrDeleteBuffer(cr);
-        cr->line = 0;
-        return ret;
+// ================================================
+// CoRecv
+// ================================================
+void resp(Data *data, int code) {
+    if (code == 0) {
+        data->ohdr->rh.type = RespOK;
+    } else {
+        data->ohdr->rh.type = RespErr;
+        data->ohdr->rh.as.err.errcode = code;
     }
-    // Allow Sender force reset state
-    if (sh.offset == 0 && sh.total != 0) {
-        cr->line = 0;
+}
+
+
+int CoRecv(RecvCtx *ctx, Data *data) {
+    Hdr *ihdr  = data->ihdr;
+
+    uint32_t ilen = data->ilen;
+
+    char* idata = data->idata;
+
+
+    CR_START_UNTIL(ctx, ihdr->sh.type == SendStart);
+
+
+    // Start Stage
+    if (ihdr->sh.as.start.total > MULTI_CAP) {
+        resp(data, MULTI_ERR_OVERSIZE);
+        CONTAINER_OF(ctx, MultiSession, recv_ctx)->error = MULTI_ERR_OVERSIZE;
+        RecvCtxReset(ctx);
+        CR_RESET(ctx, 0);
     }
 
-    CR_START(cr);
-
-    /* -------- init -------- */
-    cr->tx_total = 0;
-    cr->tx_pos = 0;
-    cr->handler = sh.handler;
-    if (CrCreateBuffer(cr) != MULTI_OK) {
-        CrDeleteBuffer(cr);
-        CR_RESET(cr);
-        return MULTI_ERR_NOMEM;
+    RecvCtxReset(ctx);
+    ctx->rx = MessageCreate(ihdr->sh.as.start.total);
+    if (ctx->rx == NULL) {
+        resp(data, MULTI_ERR_NOMEM);
+        CONTAINER_OF(ctx, MultiSession, recv_ctx)->error = MULTI_ERR_NOMEM;
+        RecvCtxReset(ctx);
+        CR_RESET(ctx, 0);
     }
+    memset(ctx->rx->data, 0, ctx->rx->len);
 
-    /* -------- receive all fragments -------- */
-    for (;;) {
-        if (sh.total > cr->rx.len) {
-            CrDeleteBuffer(cr);
-            CR_RESET(cr);
-            return MULTI_ERR_OVERSIZE;
+    // Update / Done Stage
+    while(1) {
+        resp(data, MULTI_OK);
+        CR_YIELD(ctx);
+        if(ihdr->sh.type != SendUpdate && ihdr->sh.type != SendDone) {
+            resp(data, MULTI_ERR_OUTOFSYNC);
+            CONTAINER_OF(ctx, MultiSession, recv_ctx)->error = MULTI_ERR_OUTOFSYNC;
+            CR_RESET(ctx, 0);
         }
 
-        uint32_t plen = (input->len > sizeof(SendHdr)) ? (input->len - sizeof(SendHdr)) : 0;
-        if (plen) memcpy(cr->rx.data + sh.offset, input->data + sizeof(SendHdr), plen);
-
-        if (sh.offset + plen >= sh.total) break;
-
-        rh = (RecvHdr){ .magic = MULTI_MAGIC, .offset = 0, .total = MULTI_REPLY_UNKNOWN, .status = 0 };
-        reply(output, &rh, NULL, 0);
-        CR_YIELD(cr);
-    }
-
-    /* -------- run user handler -------- */
-    {
-        // Optional 1: if size is 0, input should be null. (recommand this to expose more bug)
-        Message req  = { .data = (sh.total == 0) ? NULL : cr->rx.data, .len = sh.total };
-        // Optional 2: if size is 0, input can not be null
-        // Message req  = { .data = cr->rx.data, .len = sh.total };
-
-        Message resp = { .data = cr->tx.data, .len = cr->tx.len };
-
-        cr->handler_ret = cr->handler(&req, &resp);
-        cr->tx_total = (cr->handler_ret == 0) ? resp.len : 0;
-        cr->tx_pos   = 0;
-    }
-
-    /* -------- transmit all reply fragments -------- */
-    for (;;) {
-        uint32_t remain = cr->tx_total - cr->tx_pos;
-        uint32_t room   = MESSAGE_MAX_LEN - sizeof(RecvHdr);
-        uint32_t chunk  = (remain > room) ? room : remain;
-
-        rh = (RecvHdr){ .magic = MULTI_MAGIC, .offset = cr->tx_pos, .total = cr->tx_total, .status = cr->handler_ret };
-        reply(output, &rh, cr->tx.data + cr->tx_pos, chunk);
-        cr->tx_pos += chunk;
-
-        if (cr->tx_pos >= cr->tx_total) {
-            CrDeleteBuffer(cr);
-            CR_RESET(cr);
-            return 0;
+        if (ihdr->sh.type == SendDone) {
+            break;
         }
-        CR_YIELD(cr);
+        if(!(ihdr->sh.as.update.offset + ilen <= ctx->rx->len)) {
+            resp(data, MULTI_ERR_OVERSIZE);
+            CONTAINER_OF(ctx, MultiSession, recv_ctx)->error = MULTI_ERR_OVERSIZE;
+            RecvCtxReset(ctx);
+            CR_RESET(ctx, 0);
+        }
+        memcpy(ctx->rx->data + ihdr->sh.as.update.offset, idata, ilen);
     }
 
-    // should not get here if all success
-    CrDeleteBuffer(cr);
-    CR_END(cr);
+    MessageMove(&CONTAINER_OF(ctx, MultiSession, recv_ctx)->handler_ctx.in, &ctx->rx);
 
+    resp(data, MULTI_OK);
+    RecvCtxReset(ctx);
+    CR_RESET(ctx, 0);
+
+    CR_END(ctx);
     return 0;
 }
+
+// ================================================
+// CoHandler
+// ================================================
+int CoHandler(HandlerCtx *ctx, Data *data) {
+    CR_START_UNTIL(ctx, ctx->in != NULL);
+
+    Message *out = MessageCreate(MULTI_CAP);
+    int ret = echo_handler(ctx->in, out);
+    if (ret != 0) {
+        CONTAINER_OF(ctx, MultiSession, handler_ctx)->error = ret;
+        resp(data, ret);
+        MessageDelete(out);
+        MessageDelete(ctx->in);
+        ctx->in = NULL;
+        ctx->line = 0;
+        return 0;
+    }
+    MessageDelete(ctx->in);
+    ctx->in = NULL;
+
+    MessageMove(&CONTAINER_OF(ctx, MultiSession, handler_ctx)->send_ctx.tx , &out);
+    CR_END(ctx);
+    return 0;
+
+}
+
+
+
+
+// ================================================
+// CoSend
+// ================================================
+void send_start(Data *data, int total) {
+    data->ohdr->sh.type = SendStart;
+    data->ohdr->sh.as.start.total = total;
+    data->output->len = sizeof(Hdr);
+}
+
+void send_update(Data *data, int offset, char *src, uint32_t len) {
+    data->ohdr->sh.type = SendUpdate;
+    data->ohdr->sh.as.update.offset = offset;
+    memcpy(data->odata, src, len);
+    data->output->len = sizeof(Hdr) + len;
+}
+
+
+void send_done(Data *data) {
+    data->ohdr->sh.type = SendDone;
+    data->output->len = sizeof(Hdr);
+}
+
+int CoSend(SendCtx *ctx, Data *data) {
+    Hdr *ihdr  = data->ihdr;
+    uint32_t olen = data->olen;
+
+    CR_START_UNTIL(ctx, ctx->tx != NULL); // ctx->tx are manage outside of ctx
+
+    // Start
+    ctx->pos = 0;
+    ctx->ret = 0;
+
+    send_start(data, ctx->tx->len);
+    CR_YIELD(ctx);
+    if (ihdr->rh.type != RespOK) {
+        printf("[%s] S: Start error %d\n", getTaskName(), ihdr->rh.as.err.errcode);
+        CONTAINER_OF(ctx, MultiSession, send_ctx)->error = ihdr->rh.as.err.errcode;
+        CR_RESET(ctx, 0);
+    }
+
+
+    int chunk = 0;
+
+    while(1) {
+        // Update
+        chunk = ctx->tx->len - ctx->pos > olen ? olen : ctx->tx->len - ctx->pos;
+        if (chunk <= 0) {
+            break;
+        }
+
+        send_update(data, ctx->pos, ctx->tx->data + ctx->pos, chunk);
+        ctx->pos += chunk;
+        CR_YIELD(ctx);
+        if (ihdr->rh.type != RespOK) {
+            printf("[%s] S: Update error %d\n", getTaskName(), ihdr->rh.as.err.errcode);
+            CONTAINER_OF(ctx, MultiSession, send_ctx)->error = ihdr->rh.as.err.errcode;
+            CR_RESET(ctx, 0);
+        }
+    }
+
+
+    send_done(data);
+    CR_YIELD(ctx);
+    if (ihdr->rh.type != RespOK) {
+        printf("[%s] S: Done error %d\n", getTaskName(), ihdr->rh.as.err.errcode);
+        CONTAINER_OF(ctx, MultiSession, send_ctx)->error = ihdr->rh.as.err.errcode;
+        CR_RESET(ctx, 0);
+    }
+
+    CR_RESET(ctx, 0);
+
+    CR_END(ctx);
+    return 0;
+
+}
+
+// ================================================
+// Adapter layer for task
+// ================================================
 
 // --- Public server entry ---
 int multi_handler(Message *input, Message *output)
 {
-    static MultiCr mcr = {0};
-    return multi_handler_cr(&mcr, input, output);
+    static MultiSession srv_session;
+
+    if (srv_session.send_ctx.reset == NULL) {
+        srv_session.send_ctx.reset = SendCtxResetFree;
+        srv_session.recv_ctx.reset = RecvCtxReset;
+    }
+
+    StepMultiSession(&srv_session, input, output);
+
+    return 0;
 }
 
 // --- Client: symmetric multi RPC ---
+void SetMockInput(Message *message) {
+    Hdr *hdr = (Hdr *)message->data;
+    hdr->magic = MULTI_MAGIC;
+    hdr->sh.type = SendInvalid;
+    hdr->rh.type = RespInvalid;
+    message->len = sizeof(Hdr);
+}
+
+
+
 int rpc_call_multi(Func func, Message *input, Message *output)
 {
-    char s[MESSAGE_MAX_LEN];
-    char r[MESSAGE_MAX_LEN];
+    MultiSession session = {0};
 
-    uint32_t tx = 0, rx = 0, rx_need = MULTI_REPLY_UNKNOWN;
+    session.send_ctx.tx = input;
+    session.send_ctx.reset = SendCtxResetNoFree;
+    session.recv_ctx.reset = RecvCtxReset;
 
-    while (tx < input->len || rx < rx_need) {
-        uint32_t room = MESSAGE_MAX_LEN - sizeof(SendHdr);
-        uint32_t n = input->len - tx;
-        if (n > room) n = room;
-
-        SendHdr sh = { .magic = MULTI_MAGIC, .offset = tx, .total = input->len, .handler = func };
-        memcpy(s, &sh, sizeof(sh));
-        if (n) memcpy(s + sizeof(sh), input->data + tx, n);
-
-        Message sm = { sizeof(sh) + n, s };
-        Message rm = { MESSAGE_MAX_LEN, r };
-        int ret = rpc_call(multi_handler, &sm, &rm);
-        if (ret) return ret;
+    char swap_ibuffer[MESSAGE_MAX_LEN] = {0};
+    char swap_obuffer[MESSAGE_MAX_LEN] = {0};
 
 
-        if (rm.len < sizeof(RecvHdr)) return MULTI_ERR_RESP_HDR;
-        RecvHdr rh;
-        memcpy(&rh, r, sizeof(rh));
-        if (rh.magic != MULTI_MAGIC) return MULTI_ERR_RESP_MAGIC;
-        if (rh.status != 0) return rh.status;
-        if (rh.total != MULTI_REPLY_UNKNOWN) rx_need = rh.total;
+    Message swap_imessage = {
+        .len = sizeof(swap_ibuffer),
+        .data = swap_ibuffer,
+    };
+    Message swap_omessage = {
+        .len = sizeof(swap_obuffer),
+        .data = swap_obuffer,
+    };
+    SetMockInput(&swap_imessage); // mock input for first time to kick start
 
-        uint32_t m = rm.len - sizeof(rh);
-        if (rx + m > output->len) return MULTI_ERR_RESP_OVERSIZE;
-        if (m) memcpy(output->data + rx, r + sizeof(rh), m);
-        rx += m;
-        tx += n;
+    do {
+        swap_omessage.len = sizeof(swap_obuffer);
+        swap_omessage.data = swap_obuffer;
+        int step_ret = StepMultiSession(&session, &swap_imessage, &swap_omessage);
+        if (step_ret != 0) {
+            session.error = step_ret;
+        }
+
+        swap_imessage.len = sizeof(swap_ibuffer);
+        swap_imessage.data = swap_ibuffer;
+        rpc_call(multi_handler, &swap_omessage, &swap_imessage);
+
+    } while(CR_IS_STARTED(&session.send_ctx) || CR_IS_STARTED(&session.recv_ctx));
+
+    if (session.error != 0) {
+        return session.error;
     }
 
-    output->len = rx;
+    if (session.handler_ctx.in != NULL) {
+        if (session.handler_ctx.in->len > output->len) {
+            MessageDelete(session.handler_ctx.in);
+            session.handler_ctx.in = NULL;
+            return MULTI_ERR_RESP_OVERSIZE;
+        }
+        output->len = MessageCopy(output, 0, session.handler_ctx.in, 0, session.handler_ctx.in->len);
+        MessageDelete(session.handler_ctx.in);
+        session.handler_ctx.in = NULL;
+    }
+
     return 0;
 }
 
@@ -465,7 +755,6 @@ void TaskSend(void *pvParameters) {
 
         counter++;
         vTaskDelay(pdMS_TO_TICKS(1000));
-        while(1);
 
         // printHeapAndStack(__LINE__);
     }
@@ -492,13 +781,13 @@ int main() {
     printHeapAndStack(__LINE__);
     xTaskCreate(TaskSend,
                 "TaskSend",
-                configMINIMAL_STACK_SIZE * 2,
+                configMINIMAL_STACK_SIZE * 8,
                 NULL,
                 (tskIDLE_PRIORITY + 1),
                 NULL);
     xTaskCreate(TaskRecv,
                 "TaskRecv",
-                configMINIMAL_STACK_SIZE * 2,
+                configMINIMAL_STACK_SIZE * 4,
                 NULL,
                 (tskIDLE_PRIORITY + 1),
                 NULL);
