@@ -37,5 +37,5 @@ make src/freertos_rpc run
 ```
 
 ## Testing tip
-- `TaskSend` currently requests `MessageCreate(1024)` bytes and expects the echo to match.
+- `TaskClient` currently requests `MessageCreate(1024)` bytes and expects the echo to match.
 - Switch `MessageCreate(1025)` (exceeds `MULTI_CAP`) to verify oversize failure path.

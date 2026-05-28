@@ -403,7 +403,7 @@ static int StepMultiSession(MultiSession *s, Message *input, Message *output) {
     int CoRecv(RecvCtx *ctx, Data *data);
     CoRecv(&s->recv_ctx, &data);
 
-    if (strcmp(getTaskName(), "TaskRecv") == 0) {
+    if (strcmp(getTaskName(), "TaskServer") == 0) {
         // echo_handler()
         int CoHandler(HandlerCtx *ctx, Data *data);
         CoHandler(&s->handler_ctx, &data);
@@ -744,7 +744,7 @@ static int test_echo(uint32_t input_len, uint32_t output_len, uint32_t seed) {
     return ok ? 0 : (ret ? ret : -1);
 }
 
-void TaskSend(void *pvParameters) {
+void TaskClient(void *pvParameters) {
     (void)pvParameters;
     uint32_t counter = 0;
 
@@ -756,24 +756,24 @@ void TaskSend(void *pvParameters) {
 
         /* 0-byte payload */
         ret = test_echo(0, MULTI_CAP, counter);
-        printf("[TaskSend] test 0: ret=%d (expect -1200)\n\n", ret);
+        printf("[TaskClient] test 0: ret=%d (expect -1200)\n\n", ret);
 
         /* MULTI_CAP - 1 */
         ret = test_echo(MULTI_CAP - 1, MULTI_CAP, counter);
-        printf("[TaskSend] test MULTI_CAP-1: ret=%d (expect 0)\n\n", ret);
+        printf("[TaskClient] test MULTI_CAP-1: ret=%d (expect 0)\n\n", ret);
 
         /* MULTI_CAP */
         ret = test_echo(MULTI_CAP, MULTI_CAP, counter);
-        printf("[TaskSend] test MULTI_CAP: ret=%d (expect 0)\n\n", ret);
+        printf("[TaskClient] test MULTI_CAP: ret=%d (expect 0)\n\n", ret);
 
         /* MULTI_CAP + 1 -> server rejects as oversize */
         ret = test_echo(MULTI_CAP + 1, MULTI_CAP, counter);
-        printf("[TaskSend] test MULTI_CAP+1: ret=%d (expect %d)\n\n",
+        printf("[TaskClient] test MULTI_CAP+1: ret=%d (expect %d)\n\n",
                ret, MULTI_ERR_OVERSIZE);
 
         /* output buffer too small -> client rejects as resp oversize */
         ret = test_echo(MULTI_CAP, 512, counter);
-        printf("[TaskSend] test out=512: ret=%d (expect %d)\n\n",
+        printf("[TaskClient] test out=512: ret=%d (expect %d)\n\n",
                ret, MULTI_ERR_RESP_OVERSIZE);
 
 
@@ -784,7 +784,7 @@ void TaskSend(void *pvParameters) {
     }
 }
 
-void TaskRecv(void *pvParameters) {
+void TaskServer(void *pvParameters) {
     (void)pvParameters;
     for (;;) {
         rpc_dispatch();
@@ -803,14 +803,14 @@ int main() {
     }
 
     printHeapAndStack(__LINE__);
-    xTaskCreate(TaskSend,
-                "TaskSend",
+    xTaskCreate(TaskClient,
+                "TaskClient",
                 configMINIMAL_STACK_SIZE * 8,
                 NULL,
                 (tskIDLE_PRIORITY + 1),
                 NULL);
-    xTaskCreate(TaskRecv,
-                "TaskRecv",
+    xTaskCreate(TaskServer,
+                "TaskServer",
                 configMINIMAL_STACK_SIZE * 4,
                 NULL,
                 (tskIDLE_PRIORITY + 1),
