@@ -1,9 +1,9 @@
 # Hello World Module
 cmake_minimum_required(VERSION 3.12)
-project(freertos_rpc LANGUAGES C ASM)
+project(freertos_rpc_v2 LANGUAGES C ASM)
 
 # Set module name
-set(MODULE_NAME freertos_rpc)
+set(MODULE_NAME freertos_rpc_v2)
 
 # Source files
 file(GLOB SRCS *.c)
