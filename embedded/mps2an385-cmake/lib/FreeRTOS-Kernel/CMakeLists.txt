@@ -10,6 +10,8 @@ if(NOT EXISTS "${FREERTOS_KERNEL_SOURCE_DIR}")
     GIT_REPOSITORY https://github.com/FreeRTOS/FreeRTOS-Kernel.git
     GIT_TAG        V11.2.0
     SOURCE_DIR     "${FREERTOS_KERNEL_SOURCE_DIR}"
+    GIT_SHALLOW    TRUE
+    GIT_PROGRESS   TRUE
   )
 
   message(STATUS "Fetching FreeRTOS Kernel source into ${FREERTOS_KERNEL_SOURCE_DIR}")

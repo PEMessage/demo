@@ -18,6 +18,8 @@ if(NOT EXISTS "${LVGL_SOURCE_DIR}")
     GIT_REPOSITORY https://github.com/lvgl/lvgl.git
     GIT_TAG        v9.4.0
     SOURCE_DIR     "${LVGL_SOURCE_DIR}"
+    GIT_SHALLOW    TRUE
+    GIT_PROGRESS   TRUE
   )
 
   message(STATUS "Fetching LVGL source into ${LVGL_SOURCE_DIR}")
