@@ -207,7 +207,7 @@ void rpc_dispatch(void) {
 // multi RPC extension
 // ================================================
 
-#define MULTI_CAP 1024
+#define MULTI_CAP 128
 #define HANDLER_RET_SIZE 4
 #define MULTI_REPLY_UNKNOWN UINT32_MAX  // sentinel: server hasn't determined reply length yet
 
@@ -300,6 +300,38 @@ typedef struct {
     SendHdr  sh;
     RespHdr  rh;
 } Hdr;
+
+// ================================================
+// Protocol logging
+// ================================================
+static void logHdr(const char *prefix, Hdr *hdr) {
+    const char *st_str = "Inv";
+    switch (hdr->sh.type) {
+        case SendStart:  st_str = "Sta"; break;
+        case SendUpdate: st_str = "Upd"; break;
+        case SendDone:   st_str = "Don"; break;
+    }
+    const char *rt_str = "Inv";
+    switch (hdr->rh.type) {
+        case RespOK:  rt_str = "OK "; break;
+        case RespErr: rt_str = "Err"; break;
+    }
+
+    if (hdr->sh.type == SendStart) {
+        printf("[%s] %s: sh=%s(%lu) rh=%s\n",
+               getTaskName(), prefix, st_str,
+               (unsigned long)hdr->sh.as.start.total, rt_str);
+    } else if (hdr->sh.type == SendUpdate) {
+        printf("[%s] %s: sh=%s(%lu) rh=%s\n",
+               getTaskName(), prefix, st_str,
+               (unsigned long)hdr->sh.as.update.offset, rt_str);
+    } else {
+        printf("[%s] %s: sh=%s rh=%s\n",
+               getTaskName(), prefix, st_str, rt_str);
+    }
+}
+
+// ================================================
 
 typedef struct {
     CR_FIELD;
@@ -400,6 +432,8 @@ static int StepMultiSession(MultiSession *s, Message *input, Message *output) {
     data.ohdr->sh.type = SendInvalid;
     data.ohdr->rh.type = RespInvalid;
 
+    logHdr("IN ", data.ihdr);
+
     int CoRecv(RecvCtx *ctx, Data *data);
     CoRecv(&s->recv_ctx, &data);
 
@@ -417,6 +451,7 @@ static int StepMultiSession(MultiSession *s, Message *input, Message *output) {
         data.output->len = sizeof(Hdr);
     }
 
+    logHdr("OUT", data.ohdr);
     return 0;
 }
 
@@ -657,7 +692,11 @@ int rpc_call_multi(Func func, Message *input, Message *output)
     };
     SetMockInput(&swap_imessage); // mock input for first time to kick start
 
+    int round = 0;
     do {
+        round++;
+        printf("[%s] ===== ROUND %d =====\n", getTaskName(), round);
+
         swap_omessage.len = sizeof(swap_obuffer);
         swap_omessage.data = swap_obuffer;
         int step_ret = StepMultiSession(&session, &swap_imessage, &swap_omessage);
@@ -716,6 +755,9 @@ static void fill_input(char *data, uint32_t len, uint32_t seed) {
 }
 
 static int test_echo(uint32_t input_len, uint32_t output_len, uint32_t seed) {
+    printf("============================================\n");
+    printf("test_echo: input %u -> output %u, sedd %u\n", input_len, output_len, seed);
+    printf("============================================\n");
     Message *input  = MessageCreate(input_len);
     Message *output = MessageCreate(output_len);
     if (!input || !output) {
@@ -754,6 +796,10 @@ void TaskClient(void *pvParameters) {
 
         int ret;
 
+        /* 100-byte payload (table verification) */
+        ret = test_echo(100, 128, 999);
+        printf("[TaskClient] test 100: ret=%d (expect 0)\n\n", ret);
+
         /* 0-byte payload */
         ret = test_echo(0, MULTI_CAP, counter);
         printf("[TaskClient] test 0: ret=%d (expect -1200)\n\n", ret);
@@ -772,13 +818,15 @@ void TaskClient(void *pvParameters) {
                ret, MULTI_ERR_OVERSIZE);
 
         /* output buffer too small -> client rejects as resp oversize */
-        ret = test_echo(MULTI_CAP, 512, counter);
+        ret = test_echo(MULTI_CAP, MULTI_CAP / 2, counter);
         printf("[TaskClient] test out=512: ret=%d (expect %d)\n\n",
                ret, MULTI_ERR_RESP_OVERSIZE);
 
 
         counter++;
         vTaskDelay(pdMS_TO_TICKS(1000));
+
+        while(1);
 
         // printHeapAndStack(__LINE__);
     }
