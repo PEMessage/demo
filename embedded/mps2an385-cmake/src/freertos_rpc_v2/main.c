@@ -218,16 +218,13 @@ void rpc_dispatch(void) {
 // ================================================
 
 struct ctx_t;
-typedef void (*CtxResetFunc)(void *ctx);
 
 typedef struct ctx_t {
     int line;
-    CtxResetFunc reset;
 } Ctx;
 
 #define CR_FIELD \
-    int line; \
-    CtxResetFunc reset
+    int line
 
 
 #define CR_START(ctx)     switch((ctx)->line) { case 0:
@@ -240,7 +237,7 @@ typedef struct ctx_t {
 #define CR_AWAIT(ctx, cond) \
     while(!(cond)) { CR_YIELD(ctx); }
 
-#define CR_RESET(ctx, ret)     do { (ctx)->line = 0; if((ctx)->reset) ((ctx)->reset)(ctx); return ret; } while(0)
+#define CR_RESET(ctx, ret)     do { (ctx)->line = 0; return ret; } while(0)
 // #define CR_RESET_IF(ctx, cond, ret)      do { if (cond)    { CR_RESET(ctx, ret); } } while (0)
 // #define CR_RESET_NOT_IF(ctx, cond, ret)  do { if (!(cond)) { CR_RESET(ctx, ret); } } while (0)
 // #define CR_RESET_ASSERT(ctx, cond, ret)  CR_RESET_NOT_IF(ctx, cond, ret)
@@ -265,6 +262,10 @@ typedef struct ctx_t {
 #define MULTI_ERR_RESP_OVERSIZE (MULTI_ERR_BASE - 22) // response payload exceeds output buffer
 #define MULTI_ERR_RESP_UPDATE_ERR  (MULTI_ERR_BASE - 23)  // response update error
 #define MULTI_ERR_RESP_DONE_ERR  (MULTI_ERR_BASE - 24)  // response done error
+                                                        //
+#define MULTI_ERR_FMT_UNKNOW  (MULTI_ERR_BASE - 30)  // response too short for RecvHdr
+#define MULTI_ERR_FMT_TOOSHORT  (MULTI_ERR_BASE - 31)  // response too short for RecvHdr
+#define MULTI_ERR_FMT_TOOLONG  (MULTI_ERR_BASE - 32)  // response too short for RecvHdr
 
 
 typedef enum {
@@ -340,7 +341,6 @@ static void logHdr(const char *prefix, Hdr *hdr) {
 typedef struct {
     CR_FIELD;
     Message *rx;
-    uint32_t max_total;
 } RecvCtx;
 
 typedef struct {
@@ -352,14 +352,26 @@ typedef struct {
 
 typedef struct {
     CR_FIELD;
-    Message *in;
-} HandlerCtx;
+    Message *rx;
+    Message *tx;
+} ServerEventCtx;
+
+typedef struct {
+    CR_FIELD;
+    Message *rx;
+} ClientEventCtx;
+
+typedef struct {
+    ClientEventCtx client;
+    ServerEventCtx server;
+} EventCtx;
 
 typedef struct {
     RecvCtx recv_ctx;
     SendCtx send_ctx;
 
-    HandlerCtx handler_ctx;
+    EventCtx event_ctx;
+
     int error;
 } MultiSession;
 
@@ -377,6 +389,32 @@ typedef struct data_t  {
     uint32_t olen;
 
 } Data;
+
+
+
+typedef enum {
+    EvRecvStart,
+    EvRecvErr,
+    EvRecvDone,
+
+    EvSendStart,
+    EvSendErr,
+    EvSendDone,
+} EventType;
+
+typedef struct {
+    EventType type;
+    union {
+        struct {uint32_t total;} recv_start;
+        struct {} recv_err;
+        struct {} recv_done;
+
+        struct {} send_start;
+        struct {} send_err;
+        struct {} send_done;
+    } as;
+} Event;
+
 
 // ================================================
 // Protocol Implment
@@ -412,23 +450,20 @@ static int StepMultiSession(MultiSession *s, Message *input, Message *output) {
     int CoRecv(RecvCtx *ctx, Data *data);
     CoRecv(&s->recv_ctx, &data);
 
-    if (strcmp(getTaskName(), "TaskServer") == 0) {
-        // echo_handler()
-        int CoHandler(HandlerCtx *ctx, Data *data);
-        CoHandler(&s->handler_ctx, &data);
-    }
-
     int CoSend(SendCtx *ctx, Data *data);
     CoSend(&s->send_ctx, &data);
 
     // fallbcak, if CoSend not being run, we
-    if ( data.ohdr->sh.type == SendInvalid) {
+    if (data.ohdr->sh.type == SendInvalid) {
         data.output->len = sizeof(Hdr);
     }
 
     logHdr("OUT", data.ohdr);
     return 0;
 }
+
+void OnEvent(EventCtx *ctx, Event *ev);
+
 
 // ================================================
 // CoRecv
@@ -442,12 +477,31 @@ void resp(Data *data, int code) {
     }
 }
 
-static void RecvCtxReset(void *vctx) {
-    RecvCtx *ctx = (RecvCtx *)vctx;
-    if(ctx->rx) {
-        MessageDelete(ctx->rx);
-        ctx->rx = NULL;
-    }
+static void OnRecvStart(EventCtx *ctx, uint32_t total) {
+    Event ev = {
+        .type = EvRecvStart,
+        .as.recv_start.total = total,
+    };
+    OnEvent(ctx, &ev);
+
+}
+
+static void OnRecvErr(EventCtx *ctx) {
+    Event ev = {
+        .type = EvRecvErr,
+    };
+    OnEvent(ctx, &ev);
+}
+
+static void OnRecvDone(EventCtx *ctx) {
+    Event ev = {
+        .type = EvRecvDone,
+    };
+    OnEvent(ctx, &ev);
+}
+
+static void RecvReset(RecvCtx *recv) {
+    recv->rx = NULL;
 }
 
 int CoRecv(RecvCtx *ctx, Data *data) {
@@ -456,25 +510,19 @@ int CoRecv(RecvCtx *ctx, Data *data) {
     uint32_t ilen = data->ilen;
 
     char* idata = data->idata;
+    MultiSession *s = CONTAINER_OF(ctx, MultiSession, recv_ctx);
 
 
     CR_START_UNTIL(ctx, ihdr->sh.type == SendStart);
 
-
-    // Start Stage
-    if (ihdr->sh.as.start.total > ctx->max_total) {
-        resp(data, MULTI_ERR_OVERSIZE);
-        CONTAINER_OF(ctx, MultiSession, recv_ctx)->error = MULTI_ERR_OVERSIZE;
-        RecvCtxReset(ctx);
-        CR_RESET(ctx, 0);
-    }
-
-    RecvCtxReset(ctx);
-    ctx->rx = MessageCreate(ihdr->sh.as.start.total);
+    RecvReset(ctx);
+    OnRecvStart(&s->event_ctx, ihdr->sh.as.start.total);
     if (ctx->rx == NULL) {
         resp(data, MULTI_ERR_NOMEM);
+        OnRecvErr(&s->event_ctx);
+
         CONTAINER_OF(ctx, MultiSession, recv_ctx)->error = MULTI_ERR_NOMEM;
-        RecvCtxReset(ctx);
+        RecvReset(ctx);
         CR_RESET(ctx, 0);
     }
     memset(ctx->rx->data, 0, ctx->rx->len);
@@ -485,6 +533,8 @@ int CoRecv(RecvCtx *ctx, Data *data) {
         CR_YIELD(ctx);
         if(ihdr->sh.type != SendUpdate && ihdr->sh.type != SendDone) {
             resp(data, MULTI_ERR_OUTOFSYNC);
+            OnRecvErr(&s->event_ctx);
+
             CONTAINER_OF(ctx, MultiSession, recv_ctx)->error = MULTI_ERR_OUTOFSYNC;
             CR_RESET(ctx, 0);
         }
@@ -494,17 +544,19 @@ int CoRecv(RecvCtx *ctx, Data *data) {
         }
         if(!(ihdr->sh.as.update.offset + ilen <= ctx->rx->len)) {
             resp(data, MULTI_ERR_OVERSIZE);
+            OnRecvErr(&s->event_ctx);
+
             CONTAINER_OF(ctx, MultiSession, recv_ctx)->error = MULTI_ERR_OVERSIZE;
-            RecvCtxReset(ctx);
+            RecvReset(ctx);
             CR_RESET(ctx, 0);
         }
         memcpy(ctx->rx->data + ihdr->sh.as.update.offset, idata, ilen);
     }
 
-    MessageMove(&CONTAINER_OF(ctx, MultiSession, recv_ctx)->handler_ctx.in, &ctx->rx);
-
     resp(data, MULTI_OK);
-    RecvCtxReset(ctx);
+    OnRecvDone(&s->event_ctx);
+
+    RecvReset(ctx);
     CR_RESET(ctx, 0);
 
     CR_END(ctx);
@@ -514,32 +566,32 @@ int CoRecv(RecvCtx *ctx, Data *data) {
 // ================================================
 // CoHandler
 // ================================================
-int CoHandler(HandlerCtx *ctx, Data *data) {
-    CR_START_UNTIL(ctx, ctx->in != NULL);
-
-    Message *out = MessageCreate(MULTI_CAP + HANDLER_RET_SIZE);
-
-    Message handler_input = {
-        .data = ctx->in->data,
-        .len  = ctx->in->len,
-    };
-    Message handler_output = {
-        .data = out->data + HANDLER_RET_SIZE,
-        .len  = (out->len > HANDLER_RET_SIZE) ? out->len - HANDLER_RET_SIZE : 0,
-    };
-    int ret = echo_handler(&handler_input, &handler_output);
-
-    *(int32_t *)(out->data) = ret;
-    out->len = HANDLER_RET_SIZE + handler_output.len;
-
-    MessageDelete(ctx->in);
-    ctx->in = NULL;
-
-    MessageMove(&CONTAINER_OF(ctx, MultiSession, handler_ctx)->send_ctx.tx, &out);
-    CR_END(ctx);
-    return 0;
-
-}
+// int CoHandler(HandlerCtx *ctx, Data *data) {
+//     CR_START_UNTIL(ctx, ctx->in != NULL);
+//
+//     Message *out = MessageCreate(MULTI_CAP + HANDLER_RET_SIZE);
+//
+//     Message handler_input = {
+//         .data = ctx->in->data,
+//         .len  = ctx->in->len,
+//     };
+//     Message handler_output = {
+//         .data = out->data + HANDLER_RET_SIZE,
+//         .len  = (out->len > HANDLER_RET_SIZE) ? out->len - HANDLER_RET_SIZE : 0,
+//     };
+//     int ret = echo_handler(&handler_input, &handler_output);
+//
+//     *(int32_t *)(out->data) = ret;
+//     out->len = HANDLER_RET_SIZE + handler_output.len;
+//
+//     MessageDelete(ctx->in);
+//     ctx->in = NULL;
+//
+//     MessageMove(&CONTAINER_OF(ctx, MultiSession, handler_ctx)->send_ctx.tx, &out);
+//     CR_END(ctx);
+//     return 0;
+//
+// }
 
 
 
@@ -547,7 +599,7 @@ int CoHandler(HandlerCtx *ctx, Data *data) {
 // ================================================
 // CoSend
 // ================================================
-void send_start(Data *data, int total) {
+void send_start(Data *data, uint32_t total) {
     data->ohdr->sh.type = SendStart;
     data->ohdr->sh.as.start.total = total;
     data->output->len = sizeof(Hdr);
@@ -566,35 +618,49 @@ void send_done(Data *data) {
     data->output->len = sizeof(Hdr);
 }
 
-static void SendCtxResetNoFree(void *vctx) {
-    SendCtx *ctx = (SendCtx *)vctx;
-    ctx->tx = NULL;
-    ctx->pos = 0;
+static void OnSendStart(EventCtx *ctx) {
+    Event ev = {
+        .type = EvSendStart,
+    };
+    OnEvent(ctx, &ev);
 }
 
-static void SendCtxResetFree(void *vctx) {
-    SendCtx *ctx = (SendCtx *)vctx;
-    if (ctx->tx) {
-        MessageDelete(ctx->tx);
-        ctx->tx = NULL;
-    }
-    ctx->pos = 0;
+static void OnSendErr(EventCtx *ctx) {
+    Event ev = {
+        .type = EvSendErr,
+    };
+    OnEvent(ctx, &ev);
+}
+
+static void OnSendDone(EventCtx *ctx) {
+    Event ev = {
+        .type = EvSendDone,
+    };
+    OnEvent(ctx, &ev);
+}
+
+static void SendReset(SendCtx *send) {
+    send->pos = 0;
+    send->tx = NULL;
 }
 
 int CoSend(SendCtx *ctx, Data *data) {
     Hdr *ihdr  = data->ihdr;
     uint32_t olen = data->olen;
+    MultiSession *s = CONTAINER_OF(ctx, MultiSession, send_ctx);
 
     CR_START_UNTIL(ctx, ctx->tx != NULL); // ctx->tx are manage outside of ctx
 
-    // Start
-    ctx->pos = 0;
-
     send_start(data, ctx->tx->len);
+    OnSendStart(&s->event_ctx);
     CR_YIELD(ctx);
     if (ihdr->rh.type != RespOK) {
+        OnSendErr(&s->event_ctx);
+
         printf("[%s] S: Start error %d\n", getTaskName(), ihdr->rh.as.err.errcode);
         CONTAINER_OF(ctx, MultiSession, send_ctx)->error = ihdr->rh.as.err.errcode;
+
+        SendReset(ctx);
         CR_RESET(ctx, 0);
     }
 
@@ -612,26 +678,154 @@ int CoSend(SendCtx *ctx, Data *data) {
         ctx->pos += chunk;
         CR_YIELD(ctx);
         if (ihdr->rh.type != RespOK) {
+            OnSendErr(&s->event_ctx);
+
             printf("[%s] S: Update error %d\n", getTaskName(), ihdr->rh.as.err.errcode);
             CONTAINER_OF(ctx, MultiSession, send_ctx)->error = ihdr->rh.as.err.errcode;
+
+            SendReset(ctx);
             CR_RESET(ctx, 0);
         }
     }
 
-
     send_done(data);
     CR_YIELD(ctx);
     if (ihdr->rh.type != RespOK) {
+        OnSendErr(&s->event_ctx);
+
         printf("[%s] S: Done error %d\n", getTaskName(), ihdr->rh.as.err.errcode);
         CONTAINER_OF(ctx, MultiSession, send_ctx)->error = ihdr->rh.as.err.errcode;
+
+        SendReset(ctx);
         CR_RESET(ctx, 0);
     }
+    OnSendDone(&s->event_ctx);
 
     CR_RESET(ctx, 0);
 
     CR_END(ctx);
     return 0;
 
+}
+
+
+// ================================================
+// OnEvent
+// ================================================
+
+void OnEvent(EventCtx *ctx, Event *ev) {
+    MultiSession *s = CONTAINER_OF(ctx, MultiSession, event_ctx);
+    if (strcmp(getTaskName(), "TaskClient") == 0) {
+        int OnEventClient(ClientEventCtx *ctx, MultiSession *s, Event *ev);
+        OnEventClient(&ctx->client, s, ev);
+    } else {
+        int OnEventServer(ServerEventCtx *ctx, MultiSession *s, Event *ev);
+        OnEventServer(&ctx->server, s, ev);
+    }
+}
+
+
+
+void ServerEventReset(ServerEventCtx *server) {
+    MessageDelete(server->rx);
+    MessageDelete(server->tx);
+
+    server->rx = NULL;
+    server->tx = NULL;
+}
+
+#define CLIENT_MAX_CAP MULTI_CAP
+static_assert(MULTI_CAP >=  HANDLER_RET_SIZE, "Out of Sync");
+int OnEventServer(ServerEventCtx *ctx, MultiSession *s, Event *ev) {
+
+    if (ev->type == EvRecvStart && CR_IS_STARTED(ctx)) {
+        ServerEventReset(ctx);
+    }
+
+    CR_START_UNTIL(ctx, ev->type == EvRecvStart);
+    ServerEventReset(ctx);
+
+    if (ev->as.recv_start.total > CLIENT_MAX_CAP) {
+        ServerEventReset(ctx);
+        CR_RESET(ctx, 0);
+    }
+
+    ctx->rx = MessageCreate(ev->as.recv_start.total);
+    if (!ctx->rx) {
+        s->recv_ctx.rx = NULL;
+        ServerEventReset(ctx);
+        CR_RESET(ctx, 0);
+    }
+    s->recv_ctx.rx = ctx->rx;
+
+    CR_YIELD(ctx);
+    if (ev->type != EvRecvDone) {
+        ServerEventReset(ctx);
+        CR_RESET(ctx, 0);
+    }
+
+    ctx->tx = MessageCreate(MULTI_CAP);
+    Message output = {
+        .len = CLIENT_MAX_CAP - HANDLER_RET_SIZE,
+        .data = ctx->tx->data +  HANDLER_RET_SIZE
+    };
+    int ret = echo_handler(ctx->rx, &output);
+
+    MessageDelete(ctx->rx);
+    if (ret == 0) {
+        ctx->tx->len = output.len + HANDLER_RET_SIZE;
+    } else {
+        ctx->tx->len = HANDLER_RET_SIZE;
+    }
+    *(int *)ctx->tx->data = ret;
+
+    s->send_ctx.tx = ctx->tx;
+    CR_YIELD(ctx);
+
+    if (ev->type != EvSendStart) {
+        ServerEventReset(ctx);
+        CR_RESET(ctx, 0);
+    }
+    CR_YIELD(ctx);
+
+    if (ev->type != EvSendDone) {
+        ServerEventReset(ctx);
+        CR_RESET(ctx, 0);
+    }
+
+    ServerEventReset(ctx);
+    CR_RESET(ctx, 0);
+    CR_END(ctx);
+}
+
+
+int OnEventClient(ClientEventCtx *ctx, MultiSession *s, Event *ev) {
+    CR_START(ctx);
+    ctx->rx = NULL;
+
+    if (ev->type != EvSendStart) {
+        CR_RESET(ctx, 0);
+    }
+    CR_YIELD(ctx);
+
+    if (ev->type != EvSendDone) {
+        CR_RESET(ctx, 0);
+    }
+    CR_YIELD(ctx);
+
+    if (ev->type != EvRecvStart) {
+        CR_RESET(ctx, 0);
+    }
+    CR_YIELD(ctx);
+
+    if (ev->type != EvRecvDone) {
+        CR_RESET(ctx, 0);
+    }
+    ctx->rx = s->recv_ctx.rx;
+
+    CR_RESET(ctx, 0);
+
+    CR_END(ctx);
 }
 
 // ================================================
@@ -641,16 +835,8 @@ int CoSend(SendCtx *ctx, Data *data) {
 // --- Public server entry ---
 int multi_handler(Message *input, Message *output)
 {
-    static MultiSession srv_session;
-
-    if (srv_session.send_ctx.reset == NULL) {
-        srv_session.send_ctx.reset = SendCtxResetFree;
-        srv_session.recv_ctx.reset = RecvCtxReset;
-        srv_session.recv_ctx.max_total = MULTI_CAP;
-    }
-
+    static MultiSession srv_session = {0};
     StepMultiSession(&srv_session, input, output);
-
     return 0;
 }
 
@@ -669,10 +855,9 @@ int rpc_call_multi(Func func, Message *input, Message *output)
 {
     MultiSession session = {0};
 
+    Message *temp_output = MessageCreate(MULTI_CAP);
     session.send_ctx.tx = input;
-    session.send_ctx.reset = SendCtxResetNoFree;
-    session.recv_ctx.reset = RecvCtxReset;
-    session.recv_ctx.max_total = MULTI_CAP + HANDLER_RET_SIZE;
+    session.recv_ctx.rx = temp_output;
 
     char swap_ibuffer[MESSAGE_MAX_LEN] = {0};
     char swap_obuffer[MESSAGE_MAX_LEN] = {0};
@@ -688,56 +873,68 @@ int rpc_call_multi(Func func, Message *input, Message *output)
     };
     SetMockInput(&swap_imessage); // mock input for first time to kick start
 
+    int ret = 0;
+    int step_ret = 0;
+    int rpc_ret = 0;
     int round = 0;
+
     do {
         round++;
         printf("[%s] ===== ROUND %d =====\n", getTaskName(), round);
 
         swap_omessage.len = sizeof(swap_obuffer);
         swap_omessage.data = swap_obuffer;
-        int step_ret = StepMultiSession(&session, &swap_imessage, &swap_omessage);
-        if (step_ret != 0) {
-            session.error = step_ret;
-        }
+        step_ret = StepMultiSession(&session, &swap_imessage, &swap_omessage);
+        if (step_ret != 0) { break; }
+        if (session.error) { break; }
 
         swap_imessage.len = sizeof(swap_ibuffer);
         swap_imessage.data = swap_ibuffer;
-        rpc_call(multi_handler, &swap_omessage, &swap_imessage);
+        rpc_ret = rpc_call(multi_handler, &swap_omessage, &swap_imessage);
+        if (rpc_ret != 0) { break; }
 
     } while(CR_IS_STARTED(&session.send_ctx) || CR_IS_STARTED(&session.recv_ctx));
 
-    if (session.error != 0) {
-        return session.error;
+    if (session.error || step_ret || rpc_ret) {
+        printf("[rpc_call_multi] Err!! session.err %d, step_err %d, rpc_err %d\n", session.error, step_ret, rpc_ret);
+
+        ret = session.error ? session.error
+            : step_ret ? step_ret
+            : rpc_ret ?  rpc_ret
+            : 0;
+        goto EXIT;
     }
 
-    if (session.handler_ctx.in != NULL) {
-        if (session.handler_ctx.in->len < HANDLER_RET_SIZE) {
-            MessageDelete(session.handler_ctx.in);
-            session.handler_ctx.in = NULL;
-            return 0;
+    do {
+        if (session.event_ctx.server.rx == NULL) {
+            ret = MULTI_ERR_FMT_UNKNOW;
+            break;
+        }
+        if (session.event_ctx.server.rx->len < HANDLER_RET_SIZE) {
+            ret = MULTI_ERR_FMT_TOOSHORT;
+            break;
+
         }
 
-        int32_t handler_ret = *(int32_t *)session.handler_ctx.in->data;
-        uint32_t payload_len = session.handler_ctx.in->len - HANDLER_RET_SIZE;
+        int32_t handler_ret = *(int32_t *)session.event_ctx.server.rx->data;
+        uint32_t payload_len = session.event_ctx.server.rx->len - HANDLER_RET_SIZE;
 
         if (handler_ret != 0) {
-            MessageDelete(session.handler_ctx.in);
-            session.handler_ctx.in = NULL;
-            return handler_ret;
+            ret =  handler_ret;
+        } else {
+            ret = 0;
         }
 
         if (payload_len > output->len) {
-            MessageDelete(session.handler_ctx.in);
-            session.handler_ctx.in = NULL;
-            return MULTI_ERR_RESP_OVERSIZE;
+            ret = MULTI_ERR_FMT_TOOLONG;
+            break;
         }
 
-        output->len = MessageCopy(output, 0, session.handler_ctx.in, HANDLER_RET_SIZE, payload_len);
-        MessageDelete(session.handler_ctx.in);
-        session.handler_ctx.in = NULL;
-    }
-
-    return 0;
+        output->len = MessageCopy(output, 0, session.event_ctx.server.rx, HANDLER_RET_SIZE, payload_len);
+    } while(0);
+EXIT:
+    MessageDelete(temp_output);
+    return ret;
 }
 
 // ================================================
