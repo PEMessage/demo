@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <stdint.h>
+#include <inttypes.h>
 #include "CMSDK_CM3.h" // for SystemCoreClock
 #include "FreeRTOS.h"
 #include "task.h"
@@ -307,14 +309,16 @@ typedef struct {
 static void logHdr(const char *prefix, Hdr *hdr) {
     const char *st_str = "Inv";
     switch (hdr->sh.type) {
-        case SendStart:  st_str = "Sta"; break;
-        case SendUpdate: st_str = "Upd"; break;
-        case SendDone:   st_str = "Don"; break;
+        case SendStart:  st_str = "Start"; break;
+        case SendUpdate: st_str = "Update"; break;
+        case SendDone:   st_str = "Done"; break;
+        default:         st_str = "Invalid"; break;
     }
     const char *rt_str = "Inv";
     switch (hdr->rh.type) {
         case RespOK:  rt_str = "OK "; break;
         case RespErr: rt_str = "Err"; break;
+        default:      rt_str = "Invalid"; break;
     }
 
     if (hdr->sh.type == SendStart) {
@@ -343,7 +347,6 @@ typedef struct {
     CR_FIELD;
     Message *tx;
     uint32_t pos;
-    uint32_t ret;
 
 } SendCtx;
 
@@ -374,34 +377,6 @@ typedef struct data_t  {
     uint32_t olen;
 
 } Data;
-
-// ================================================
-// Ctx reset helpers
-// ================================================
-static void RecvCtxReset(void *vctx) {
-    RecvCtx *ctx = (RecvCtx *)vctx;
-    if(ctx->rx) {
-        MessageDelete(ctx->rx);
-        ctx->rx = NULL;
-    }
-}
-
-static void SendCtxResetNoFree(void *vctx) {
-    SendCtx *ctx = (SendCtx *)vctx;
-    ctx->tx = NULL;
-    ctx->pos = 0;
-    ctx->ret = 0;
-}
-
-static void SendCtxResetFree(void *vctx) {
-    SendCtx *ctx = (SendCtx *)vctx;
-    if (ctx->tx) {
-        MessageDelete(ctx->tx);
-        ctx->tx = NULL;
-    }
-    ctx->pos = 0;
-    ctx->ret = 0;
-}
 
 // ================================================
 // Protocol Implment
@@ -467,6 +442,13 @@ void resp(Data *data, int code) {
     }
 }
 
+static void RecvCtxReset(void *vctx) {
+    RecvCtx *ctx = (RecvCtx *)vctx;
+    if(ctx->rx) {
+        MessageDelete(ctx->rx);
+        ctx->rx = NULL;
+    }
+}
 
 int CoRecv(RecvCtx *ctx, Data *data) {
     Hdr *ihdr  = data->ihdr;
@@ -584,6 +566,21 @@ void send_done(Data *data) {
     data->output->len = sizeof(Hdr);
 }
 
+static void SendCtxResetNoFree(void *vctx) {
+    SendCtx *ctx = (SendCtx *)vctx;
+    ctx->tx = NULL;
+    ctx->pos = 0;
+}
+
+static void SendCtxResetFree(void *vctx) {
+    SendCtx *ctx = (SendCtx *)vctx;
+    if (ctx->tx) {
+        MessageDelete(ctx->tx);
+        ctx->tx = NULL;
+    }
+    ctx->pos = 0;
+}
+
 int CoSend(SendCtx *ctx, Data *data) {
     Hdr *ihdr  = data->ihdr;
     uint32_t olen = data->olen;
@@ -592,7 +589,6 @@ int CoSend(SendCtx *ctx, Data *data) {
 
     // Start
     ctx->pos = 0;
-    ctx->ret = 0;
 
     send_start(data, ctx->tx->len);
     CR_YIELD(ctx);
@@ -756,7 +752,7 @@ static void fill_input(char *data, uint32_t len, uint32_t seed) {
 
 static int test_echo(uint32_t input_len, uint32_t output_len, uint32_t seed) {
     printf("============================================\n");
-    printf("test_echo: input %u -> output %u, sedd %u\n", input_len, output_len, seed);
+    printf("test_echo: input %" PRIu32 " -> output %" PRIu32 ", sedd %" PRIu32 "\n", input_len, output_len, seed);
     printf("============================================\n");
     Message *input  = MessageCreate(input_len);
     Message *output = MessageCreate(output_len);
