@@ -358,6 +358,7 @@ typedef struct {
 
 typedef struct {
     CR_FIELD;
+    Message *rx_init;
     Message *rx;
 } ClientEventCtx;
 
@@ -689,9 +690,10 @@ int CoSend(SendCtx *ctx, Data *data) {
     }
 
     send_done(data);
+    OnSendDone(&s->event_ctx);
+
     CR_YIELD(ctx);
     if (ihdr->rh.type != RespOK) {
-        OnSendErr(&s->event_ctx);
 
         printf("[%s] S: Done error %d\n", getTaskName(), ihdr->rh.as.err.errcode);
         CONTAINER_OF(ctx, MultiSession, send_ctx)->error = ihdr->rh.as.err.errcode;
@@ -699,8 +701,8 @@ int CoSend(SendCtx *ctx, Data *data) {
         SendReset(ctx);
         CR_RESET(ctx, 0);
     }
-    OnSendDone(&s->event_ctx);
 
+    SendReset(ctx);
     CR_RESET(ctx, 0);
 
     CR_END(ctx);
@@ -772,6 +774,8 @@ int OnEventServer(ServerEventCtx *ctx, MultiSession *s, Event *ev) {
     int ret = echo_handler(ctx->rx, &output);
 
     MessageDelete(ctx->rx);
+    ctx->rx = NULL;
+
     if (ret == 0) {
         ctx->tx->len = output.len + HANDLER_RET_SIZE;
     } else {
@@ -802,6 +806,7 @@ int OnEventServer(ServerEventCtx *ctx, MultiSession *s, Event *ev) {
 int OnEventClient(ClientEventCtx *ctx, MultiSession *s, Event *ev) {
     CR_START(ctx);
     ctx->rx = NULL;
+    assert(ctx->rx_init != NULL);
 
     if (ev->type != EvSendStart) {
         CR_RESET(ctx, 0);
@@ -816,6 +821,7 @@ int OnEventClient(ClientEventCtx *ctx, MultiSession *s, Event *ev) {
     if (ev->type != EvRecvStart) {
         CR_RESET(ctx, 0);
     }
+    s->recv_ctx.rx = ctx->rx_init;
     CR_YIELD(ctx);
 
     if (ev->type != EvRecvDone) {
@@ -857,7 +863,7 @@ int rpc_call_multi(Func func, Message *input, Message *output)
 
     Message *temp_output = MessageCreate(MULTI_CAP);
     session.send_ctx.tx = input;
-    session.recv_ctx.rx = temp_output;
+    session.event_ctx.client.rx_init = temp_output;
 
     char swap_ibuffer[MESSAGE_MAX_LEN] = {0};
     char swap_obuffer[MESSAGE_MAX_LEN] = {0};
@@ -906,18 +912,18 @@ int rpc_call_multi(Func func, Message *input, Message *output)
     }
 
     do {
-        if (session.event_ctx.server.rx == NULL) {
+        if (session.event_ctx.client.rx == NULL) {
             ret = MULTI_ERR_FMT_UNKNOW;
             break;
         }
-        if (session.event_ctx.server.rx->len < HANDLER_RET_SIZE) {
+        if (session.event_ctx.client.rx->len < HANDLER_RET_SIZE) {
             ret = MULTI_ERR_FMT_TOOSHORT;
             break;
 
         }
 
-        int32_t handler_ret = *(int32_t *)session.event_ctx.server.rx->data;
-        uint32_t payload_len = session.event_ctx.server.rx->len - HANDLER_RET_SIZE;
+        int32_t handler_ret = *(int32_t *)session.event_ctx.client.rx->data;
+        uint32_t payload_len = session.event_ctx.client.rx->len - HANDLER_RET_SIZE;
 
         if (handler_ret != 0) {
             ret =  handler_ret;
@@ -930,7 +936,7 @@ int rpc_call_multi(Func func, Message *input, Message *output)
             break;
         }
 
-        output->len = MessageCopy(output, 0, session.event_ctx.server.rx, HANDLER_RET_SIZE, payload_len);
+        output->len = MessageCopy(output, 0, session.event_ctx.client.rx, HANDLER_RET_SIZE, payload_len);
     } while(0);
 EXIT:
     MessageDelete(temp_output);
