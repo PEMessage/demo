@@ -450,9 +450,12 @@ typedef struct {
 //  if session state not change for sure, could return other value
 static int StepMultiSession(MultiSession *s, Message *input, Message *output) {
     if (!input || !output) {
+        printf("[%s] ERR: StepMultiSession: NULL input/output\n", getTaskName());
         return MULTI_ERR_NULLINPUT;
     }
     if (input->len < sizeof(Hdr) || output->len < sizeof(Hdr)) {
+        printf("[%s] ERR: StepMultiSession: buffer too short (input=%lu, output=%lu, need=%zu)\n",
+               getTaskName(), (unsigned long)input->len, (unsigned long)output->len, sizeof(Hdr));
         return MULTI_ERR_SHORT;
     }
 
@@ -468,7 +471,11 @@ static int StepMultiSession(MultiSession *s, Message *input, Message *output) {
         .olen = output->len - sizeof(Hdr),
     };
 
-    if (data.ihdr->magic != MULTI_MAGIC) return MULTI_ERR_MAGIC;
+    if (data.ihdr->magic != MULTI_MAGIC) {
+        printf("[%s] ERR: StepMultiSession: magic mismatch (got=0x%04X, want=0x%04X)\n",
+               getTaskName(), (unsigned)data.ihdr->magic, (unsigned)MULTI_MAGIC);
+        return MULTI_ERR_MAGIC;
+    }
 
     data.ohdr->magic = MULTI_MAGIC;
     data.ohdr->sh.type = SendInvalid;
@@ -551,6 +558,7 @@ int CoRecv(RecvCtx *ctx, Data *data) {
     RecvReset(ctx);
     OnRecvStart(&s->event_ctx, ihdr->sh.as.start.total);
     if (ctx->rx == NULL) {
+        printf("[%s] ERR: CoRecv: rx buffer not allocated (NOMEM)\n", getTaskName());
         resp(data, MULTI_ERR_CORECV_NOMEM);
         OnRecvErr(&s->event_ctx);
 
@@ -564,6 +572,8 @@ int CoRecv(RecvCtx *ctx, Data *data) {
         resp(data, MULTI_OK);
         CR_YIELD(ctx);
         if(ihdr->sh.type != SendUpdate && ihdr->sh.type != SendDone) {
+            printf("[%s] ERR: CoRecv: out of sync (sh.type=%d, expected Update/Done)\n",
+                   getTaskName(), (int)ihdr->sh.type);
             resp(data, MULTI_ERR_CORECV_OUTOFSYNC);
             OnRecvErr(&s->event_ctx);
 
@@ -574,6 +584,9 @@ int CoRecv(RecvCtx *ctx, Data *data) {
             break;
         }
         if(!(ihdr->sh.as.update.offset + ilen <= ctx->rx->len)) {
+            printf("[%s] ERR: CoRecv: oversize (offset=%lu, ilen=%lu, rx_len=%lu)\n",
+                   getTaskName(), (unsigned long)ihdr->sh.as.update.offset,
+                   (unsigned long)ilen, (unsigned long)ctx->rx->len);
             resp(data, MULTI_ERR_CORECV_OVERSIZE);
             OnRecvErr(&s->event_ctx);
 
@@ -656,7 +669,7 @@ int CoSend(SendCtx *ctx, Data *data) {
     if (ihdr->rh.type != RespOK) {
         OnSendErr(&s->event_ctx);
 
-        printf("[%s] S: Start error %d\n", getTaskName(), ihdr->rh.as.err.errcode);
+        printf("[%s] ERR: CoSend: remote rejected start (rh.err=%d)\n", getTaskName(), ihdr->rh.as.err.errcode);
 
         SendReset(ctx);
         CR_RESET_WITH(ctx, MULTI_ERR_COSEND_START_ERR);
@@ -678,7 +691,7 @@ int CoSend(SendCtx *ctx, Data *data) {
         if (ihdr->rh.type != RespOK) {
             OnSendErr(&s->event_ctx);
 
-            printf("[%s] S: Update error %d\n", getTaskName(), ihdr->rh.as.err.errcode);
+            printf("[%s] ERR: CoSend: remote rejected update (rh.err=%d)\n", getTaskName(), ihdr->rh.as.err.errcode);
 
             SendReset(ctx);
             CR_RESET_WITH(ctx, MULTI_ERR_COSEND_UPDATE_ERR);
@@ -691,7 +704,7 @@ int CoSend(SendCtx *ctx, Data *data) {
     CR_YIELD(ctx);
     if (ihdr->rh.type != RespOK) {
 
-        printf("[%s] S: Done error %d\n", getTaskName(), ihdr->rh.as.err.errcode);
+        printf("[%s] ERR: CoSend: remote rejected done (rh.err=%d)\n", getTaskName(), ihdr->rh.as.err.errcode);
 
         SendReset(ctx);
         CR_RESET_WITH(ctx, MULTI_ERR_COSEND_DONE_ERR);
@@ -764,12 +777,16 @@ int OnEventServer(ServerEventCtx *ctx, MultiSession *s, Event *ev) {
     ServerEventReset(ctx);
 
     if (ev->as.recv_start.total > CLIENT_MAX_CAP) {
+        printf("[%s] ERR: OnEventServer: recv total exceeds cap (total=%lu, cap=%lu)\n",
+               getTaskName(), (unsigned long)ev->as.recv_start.total, (unsigned long)CLIENT_MAX_CAP);
         ServerEventReset(ctx);
         CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_SERVER_OVERSIZE);
     }
 
     ctx->rx = MessageCreate(ev->as.recv_start.total);
     if (!ctx->rx) {
+        printf("[%s] ERR: OnEventServer: MessageCreate failed for rx (total=%lu)\n",
+               getTaskName(), (unsigned long)ev->as.recv_start.total);
         s->recv_ctx.rx = NULL;
         ServerEventReset(ctx);
         CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_SERVER_NOMEM);
@@ -778,6 +795,8 @@ int OnEventServer(ServerEventCtx *ctx, MultiSession *s, Event *ev) {
 
     CR_YIELD(ctx);
     if (ev->type != EvRecvDone) {
+        printf("[%s] ERR: OnEventServer: expected EvRecvDone, got type=%d\n",
+               getTaskName(), (int)ev->type);
         ServerEventReset(ctx);
         CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_SERVER_RECV_ERR);
     }
@@ -803,12 +822,16 @@ int OnEventServer(ServerEventCtx *ctx, MultiSession *s, Event *ev) {
     CR_YIELD(ctx);
 
     if (ev->type != EvSendStart) {
+        printf("[%s] ERR: OnEventServer: expected EvSendStart, got type=%d\n",
+               getTaskName(), (int)ev->type);
         ServerEventReset(ctx);
         CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_SERVER_SEND_ERR);
     }
     CR_YIELD(ctx);
 
     if (ev->type != EvSendDone) {
+        printf("[%s] ERR: OnEventServer: expected EvSendDone, got type=%d\n",
+               getTaskName(), (int)ev->type);
         ServerEventReset(ctx);
         CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_SERVER_SEND_DONE_ERR);
     }
@@ -832,19 +855,27 @@ int OnEventClient(ClientEventCtx *ctx, MultiSession *s, Event *ev) {
     assert(ctx->rx_init != NULL);
 
     if (ev->type != EvSendStart) {
+        printf("[%s] ERR: OnEventClient: expected EvSendStart, got type=%d\n",
+               getTaskName(), (int)ev->type);
         CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_CLIENT_SEND_ERR);
     }
     CR_YIELD(ctx);
 
     if (ev->type != EvSendDone) {
+        printf("[%s] ERR: OnEventClient: expected EvSendDone, got type=%d\n",
+               getTaskName(), (int)ev->type);
         CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_CLIENT_SEND_DONE_ERR);
     }
     CR_YIELD(ctx);
 
     if (ev->type != EvRecvStart) {
+        printf("[%s] ERR: OnEventClient: expected EvRecvStart, got type=%d\n",
+               getTaskName(), (int)ev->type);
         CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_CLIENT_RECV_ERR);
     }
     if (ev->as.recv_start.total > ctx->rx_init->len) {
+        printf("[%s] ERR: OnEventClient: recv total exceeds rx_init (total=%lu, rx_init=%lu)\n",
+               getTaskName(), (unsigned long)ev->as.recv_start.total, (unsigned long)ctx->rx_init->len);
         CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_CLIENT_RECV_OVERSIZE);
     }
     ctx->rx_init->len = ev->as.recv_start.total;
@@ -852,13 +883,18 @@ int OnEventClient(ClientEventCtx *ctx, MultiSession *s, Event *ev) {
     CR_YIELD(ctx);
 
     if (ev->type != EvRecvDone) {
+        printf("[%s] ERR: OnEventClient: expected EvRecvDone, got type=%d\n",
+               getTaskName(), (int)ev->type);
         CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_CLIENT_RECV_ERR);
     }
 
     if (s->recv_ctx.rx == NULL) {
+        printf("[%s] ERR: OnEventClient: recv_ctx.rx is NULL (rx_done missing)\n", getTaskName());
         CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_CLIENT_FMT_UNKNOWN);
     }
     if (s->recv_ctx.rx->len < HANDLER_RET_SIZE) {
+        printf("[%s] ERR: OnEventClient: recv_ctx.rx->len too short (len=%lu, need=%u)\n",
+               getTaskName(), (unsigned long)s->recv_ctx.rx->len, (unsigned)HANDLER_RET_SIZE);
         CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_CLIENT_FMT_TOOSHORT);
     }
 
@@ -954,7 +990,8 @@ int rpc_call_multi(Func func, Message *input, Message *output)
     } while(CR_IS_STARTED(&session.send_ctx) || CR_IS_STARTED(&session.recv_ctx));
 
     if (session_ret || step_ret || rpc_ret) {
-        printf("[rpc_call_multi] Err!! session_ret %d, step_ret %d, rpc_ret %d\n", session_ret, step_ret, rpc_ret);
+        printf("[rpc_call_multi] error: session_ret=%d step_ret=%d rpc_ret=%d\n",
+               session_ret, step_ret, rpc_ret);
 
         ret = session_ret ? session_ret
             : step_ret ? step_ret
@@ -964,6 +1001,7 @@ int rpc_call_multi(Func func, Message *input, Message *output)
     }
 
     if (session.event_ctx.client.rx_done == NULL) {
+        printf("[rpc_call_multi] error: client.rx_done is NULL (incomplete exchange)\n");
         ret = MULTI_ERR_ONEVENT_CLIENT_FMT_UNKNOWN;
         goto EXIT;
     }
