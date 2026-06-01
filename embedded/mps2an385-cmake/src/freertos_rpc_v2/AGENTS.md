@@ -67,5 +67,5 @@ make src/freertos_rpc_v2 run
   2. `0`-byte payload (handler rejects empty input, expects `-1200`).
   3. `MULTI_CAP - 1` bytes (expect `0`).
   4. `MULTI_CAP` bytes (expect `0`).
-  5. `MULTI_CAP + 1` bytes (server rejects as oversize, expects `MULTI_ERR_NOMEM`).
-  6. `output buffer = MULTI_CAP / 2` bytes (client rejects as response oversize, expects `MULTI_ERR_NOMEM`).
+  5. `MULTI_CAP + 1` bytes (server rejects as oversize, expects `MULTI_ERR_COSEND_START_ERR`).
+  6. `output buffer = MULTI_CAP / 2` bytes (client rejects as response oversize, expects `MULTI_ERR_CORECV_NOMEM`).

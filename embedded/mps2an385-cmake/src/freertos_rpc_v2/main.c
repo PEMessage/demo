@@ -147,14 +147,6 @@ uint32_t MessageCopy(Message *dest, uint32_t destpos,
     return copy_len;
 }
 
-void MessageMove(Message **dest,Message **src) {
-    assert(dest && src);
-    assert(*dest == NULL && *src != NULL);
-
-    *dest = *src;
-    *src = NULL;
-    return;
-}
 
 // ================================================
 int echo_handler(Message *input, Message *output) {
@@ -226,6 +218,9 @@ typedef struct ctx_t {
 #define CR_FIELD \
     int line
 
+#define CR_FIELD_WITH_ERROR \
+    int line; \
+    int error
 
 #define CR_START(ctx)     switch((ctx)->line) { case 0:
 #define CR_START_UNTIL(ctx, cond) switch((ctx)->line) { case 0: if(!(cond)) { ctx->line = 0; return 0; }
@@ -237,7 +232,9 @@ typedef struct ctx_t {
 #define CR_AWAIT(ctx, cond) \
     while(!(cond)) { CR_YIELD(ctx); }
 
-#define CR_RESET(ctx, ret)     do { (ctx)->line = 0; return ret; } while(0)
+#define CR_RESET(ctx)     do { (ctx)->line = 0; return 0; } while(0)
+
+#define CR_RESET_WITH(ctx, err) do { (ctx)->line = 0; (ctx)->error = (err); return 0; } while(0)
 
 // ================================================
 // --- Protocol headers ---
@@ -247,27 +244,41 @@ typedef struct ctx_t {
 /* multi protocol error codes: negative = protocol error, 0 = OK, positive = handler error */
 #define MULTI_OK              0
 
-#define MULTI_ERR_BASE     -1100
+/* General / StepMultiSession errors: -1100 range */
+#define MULTI_ERR_BASE         -1100
+#define MULTI_ERR_MAGIC        (MULTI_ERR_BASE - 1)   /* magic mismatch */
+#define MULTI_ERR_SHORT        (MULTI_ERR_BASE - 2)   /* buffer too short for Hdr */
+#define MULTI_ERR_NULLINPUT    (MULTI_ERR_BASE - 3)   /* NULL input/output */
 
-#define MULTI_ERR_PREREQ_MAGICERR (MULTI_ERR_BASE - 1)
-#define MULTI_ERR_PREREQ_TOOSHORT (MULTI_ERR_BASE - 2)
-#define MULTI_ERR_PREREQ_NULLINPUT (MULTI_ERR_BASE - 3)
+/* CoRecv errors: -1200 range */
+#define MULTI_ERR_CORECV_BASE   -1200
+#define MULTI_ERR_CORECV_NOMEM       (MULTI_ERR_CORECV_BASE - 1)  /* buffer allocation failed */
+#define MULTI_ERR_CORECV_OUTOFSYNC   (MULTI_ERR_CORECV_BASE - 2)  /* unexpected send type */
+#define MULTI_ERR_CORECV_OVERSIZE    (MULTI_ERR_CORECV_BASE - 3)  /* offset+len > rx capacity */
 
-#define MULTI_ERR_MAGIC     (MULTI_ERR_BASE - 1)  // send hdr magic mismatch
-#define MULTI_ERR_SHORT     (MULTI_ERR_BASE - 2)  // input too short for SendHdr
-#define MULTI_ERR_OVERSIZE  (MULTI_ERR_BASE - 3)  // total > rx capacity
-#define MULTI_ERR_NOMEM     (MULTI_ERR_BASE - 4)  // buffer allocation failed
-#define MULTI_ERR_OUTOFSYNC     (MULTI_ERR_BASE - 5)
-                                                  //
-#define MULTI_ERR_RESP_HDR  (MULTI_ERR_BASE - 20)  // response too short for RecvHdr
-#define MULTI_ERR_RESP_MAGIC (MULTI_ERR_BASE - 21) // response magic mismatch
-#define MULTI_ERR_RESP_OVERSIZE (MULTI_ERR_BASE - 22) // response payload exceeds output buffer
-#define MULTI_ERR_RESP_UPDATE_ERR  (MULTI_ERR_BASE - 23)  // response update error
-#define MULTI_ERR_RESP_DONE_ERR  (MULTI_ERR_BASE - 24)  // response done error
-                                                        //
-#define MULTI_ERR_FMT_UNKNOW  (MULTI_ERR_BASE - 30)  // response too short for RecvHdr
-#define MULTI_ERR_FMT_TOOSHORT  (MULTI_ERR_BASE - 31)  // response too short for RecvHdr
-#define MULTI_ERR_FMT_TOOLONG  (MULTI_ERR_BASE - 32)  // response too short for RecvHdr
+/* CoSend errors: -1300 range */
+#define MULTI_ERR_COSEND_BASE   -1300
+#define MULTI_ERR_COSEND_START_ERR   (MULTI_ERR_COSEND_BASE - 1)  /* remote rejected start */
+#define MULTI_ERR_COSEND_UPDATE_ERR  (MULTI_ERR_COSEND_BASE - 2)  /* remote rejected update */
+#define MULTI_ERR_COSEND_DONE_ERR    (MULTI_ERR_COSEND_BASE - 3)  /* remote rejected done */
+
+/* ServerEvent (OnEventServer) errors: -1400 range */
+#define MULTI_ERR_ONEVENT_SERVER_BASE   -1400
+#define MULTI_ERR_ONEVENT_SERVER_OVERSIZE    (MULTI_ERR_ONEVENT_SERVER_BASE - 1)  /* total > CLIENT_MAX_CAP */
+#define MULTI_ERR_ONEVENT_SERVER_NOMEM       (MULTI_ERR_ONEVENT_SERVER_BASE - 2)  /* MessageCreate failed */
+#define MULTI_ERR_ONEVENT_SERVER_RECV_ERR    (MULTI_ERR_ONEVENT_SERVER_BASE - 3)  /* recv not done */
+#define MULTI_ERR_ONEVENT_SERVER_SEND_ERR    (MULTI_ERR_ONEVENT_SERVER_BASE - 4)  /* send not start */
+#define MULTI_ERR_ONEVENT_SERVER_SEND_DONE_ERR (MULTI_ERR_ONEVENT_SERVER_BASE - 5) /* send not done */
+
+/* ClientEvent (OnEventClient) errors: -1500 range */
+#define MULTI_ERR_ONEVENT_CLIENT_BASE   -1500
+#define MULTI_ERR_ONEVENT_CLIENT_SEND_ERR      (MULTI_ERR_ONEVENT_CLIENT_BASE - 1)  /* send not start */
+#define MULTI_ERR_ONEVENT_CLIENT_SEND_DONE_ERR (MULTI_ERR_ONEVENT_CLIENT_BASE - 2)  /* send not done */
+#define MULTI_ERR_ONEVENT_CLIENT_RECV_ERR      (MULTI_ERR_ONEVENT_CLIENT_BASE - 3)  /* recv not start */
+#define MULTI_ERR_ONEVENT_CLIENT_RECV_OVERSIZE (MULTI_ERR_ONEVENT_CLIENT_BASE - 4)  /* recv total > rx_init->len */
+#define MULTI_ERR_ONEVENT_CLIENT_FMT_UNKNOWN   (MULTI_ERR_ONEVENT_CLIENT_BASE - 5)  /* rx_done == NULL */
+#define MULTI_ERR_ONEVENT_CLIENT_FMT_TOOSHORT  (MULTI_ERR_ONEVENT_CLIENT_BASE - 6)  /* rx->len < HANDLER_RET_SIZE */
+#define MULTI_ERR_ONEVENT_CLIENT_FMT_TOOLONG   (MULTI_ERR_ONEVENT_CLIENT_BASE - 7)  /* rx_view.len > expected */
 
 
 typedef enum {
@@ -346,25 +357,25 @@ static void logHdr(const char *prefix, Hdr *hdr) {
 // ================================================
 
 typedef struct {
-    CR_FIELD;
+    CR_FIELD_WITH_ERROR;
     Message *rx;
 } RecvCtx;
 
 typedef struct {
-    CR_FIELD;
+    CR_FIELD_WITH_ERROR;
     Message *tx;
     uint32_t pos;
 
 } SendCtx;
 
 typedef struct {
-    CR_FIELD;
+    CR_FIELD_WITH_ERROR;
     Message *rx;
     Message *tx;
 } ServerEventCtx;
 
 typedef struct {
-    CR_FIELD;
+    CR_FIELD_WITH_ERROR;
     Message *rx_init;
     Message *rx_done;
 
@@ -384,7 +395,6 @@ typedef struct {
 
     EventCtx event_ctx;
 
-    int error;
 } MultiSession;
 
 typedef struct data_t  {
@@ -440,10 +450,10 @@ typedef struct {
 //  if session state not change for sure, could return other value
 static int StepMultiSession(MultiSession *s, Message *input, Message *output) {
     if (!input || !output) {
-        return MULTI_ERR_PREREQ_NULLINPUT;
+        return MULTI_ERR_NULLINPUT;
     }
     if (input->len < sizeof(Hdr) || output->len < sizeof(Hdr)) {
-        return MULTI_ERR_PREREQ_TOOSHORT;
+        return MULTI_ERR_SHORT;
     }
 
     Data data = {
@@ -458,7 +468,7 @@ static int StepMultiSession(MultiSession *s, Message *input, Message *output) {
         .olen = output->len - sizeof(Hdr),
     };
 
-    if (data.ihdr->magic != MULTI_MAGIC) return MULTI_ERR_PREREQ_MAGICERR;
+    if (data.ihdr->magic != MULTI_MAGIC) return MULTI_ERR_MAGIC;
 
     data.ohdr->magic = MULTI_MAGIC;
     data.ohdr->sh.type = SendInvalid;
@@ -541,12 +551,11 @@ int CoRecv(RecvCtx *ctx, Data *data) {
     RecvReset(ctx);
     OnRecvStart(&s->event_ctx, ihdr->sh.as.start.total);
     if (ctx->rx == NULL) {
-        resp(data, MULTI_ERR_NOMEM);
+        resp(data, MULTI_ERR_CORECV_NOMEM);
         OnRecvErr(&s->event_ctx);
 
-        CONTAINER_OF(ctx, MultiSession, recv_ctx)->error = MULTI_ERR_NOMEM;
         RecvReset(ctx);
-        CR_RESET(ctx, 0);
+        CR_RESET_WITH(ctx, MULTI_ERR_CORECV_NOMEM);
     }
     memset(ctx->rx->data, 0, ctx->rx->len);
 
@@ -555,23 +564,21 @@ int CoRecv(RecvCtx *ctx, Data *data) {
         resp(data, MULTI_OK);
         CR_YIELD(ctx);
         if(ihdr->sh.type != SendUpdate && ihdr->sh.type != SendDone) {
-            resp(data, MULTI_ERR_OUTOFSYNC);
+            resp(data, MULTI_ERR_CORECV_OUTOFSYNC);
             OnRecvErr(&s->event_ctx);
 
-            CONTAINER_OF(ctx, MultiSession, recv_ctx)->error = MULTI_ERR_OUTOFSYNC;
-            CR_RESET(ctx, 0);
+            CR_RESET_WITH(ctx, MULTI_ERR_CORECV_OUTOFSYNC);
         }
 
         if (ihdr->sh.type == SendDone) {
             break;
         }
         if(!(ihdr->sh.as.update.offset + ilen <= ctx->rx->len)) {
-            resp(data, MULTI_ERR_OVERSIZE);
+            resp(data, MULTI_ERR_CORECV_OVERSIZE);
             OnRecvErr(&s->event_ctx);
 
-            CONTAINER_OF(ctx, MultiSession, recv_ctx)->error = MULTI_ERR_OVERSIZE;
             RecvReset(ctx);
-            CR_RESET(ctx, 0);
+            CR_RESET_WITH(ctx, MULTI_ERR_CORECV_OVERSIZE);
         }
         memcpy(ctx->rx->data + ihdr->sh.as.update.offset, idata, ilen);
     }
@@ -580,7 +587,7 @@ int CoRecv(RecvCtx *ctx, Data *data) {
     OnRecvDone(&s->event_ctx);
 
     RecvReset(ctx);
-    CR_RESET(ctx, 0);
+    CR_RESET(ctx);
 
     CR_END(ctx);
     return 0;
@@ -650,10 +657,9 @@ int CoSend(SendCtx *ctx, Data *data) {
         OnSendErr(&s->event_ctx);
 
         printf("[%s] S: Start error %d\n", getTaskName(), ihdr->rh.as.err.errcode);
-        CONTAINER_OF(ctx, MultiSession, send_ctx)->error = ihdr->rh.as.err.errcode;
 
         SendReset(ctx);
-        CR_RESET(ctx, 0);
+        CR_RESET_WITH(ctx, MULTI_ERR_COSEND_START_ERR);
     }
 
 
@@ -673,10 +679,9 @@ int CoSend(SendCtx *ctx, Data *data) {
             OnSendErr(&s->event_ctx);
 
             printf("[%s] S: Update error %d\n", getTaskName(), ihdr->rh.as.err.errcode);
-            CONTAINER_OF(ctx, MultiSession, send_ctx)->error = ihdr->rh.as.err.errcode;
 
             SendReset(ctx);
-            CR_RESET(ctx, 0);
+            CR_RESET_WITH(ctx, MULTI_ERR_COSEND_UPDATE_ERR);
         }
     }
 
@@ -687,14 +692,13 @@ int CoSend(SendCtx *ctx, Data *data) {
     if (ihdr->rh.type != RespOK) {
 
         printf("[%s] S: Done error %d\n", getTaskName(), ihdr->rh.as.err.errcode);
-        CONTAINER_OF(ctx, MultiSession, send_ctx)->error = ihdr->rh.as.err.errcode;
 
         SendReset(ctx);
-        CR_RESET(ctx, 0);
+        CR_RESET_WITH(ctx, MULTI_ERR_COSEND_DONE_ERR);
     }
 
     SendReset(ctx);
-    CR_RESET(ctx, 0);
+    CR_RESET(ctx);
 
     CR_END(ctx);
     return 0;
@@ -761,21 +765,21 @@ int OnEventServer(ServerEventCtx *ctx, MultiSession *s, Event *ev) {
 
     if (ev->as.recv_start.total > CLIENT_MAX_CAP) {
         ServerEventReset(ctx);
-        CR_RESET(ctx, 0);
+        CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_SERVER_OVERSIZE);
     }
 
     ctx->rx = MessageCreate(ev->as.recv_start.total);
     if (!ctx->rx) {
         s->recv_ctx.rx = NULL;
         ServerEventReset(ctx);
-        CR_RESET(ctx, 0);
+        CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_SERVER_NOMEM);
     }
     s->recv_ctx.rx = ctx->rx;
 
     CR_YIELD(ctx);
     if (ev->type != EvRecvDone) {
         ServerEventReset(ctx);
-        CR_RESET(ctx, 0);
+        CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_SERVER_RECV_ERR);
     }
 
     ctx->tx = MessageCreate(CLIENT_MAX_CAP + HANDLER_RET_SIZE);
@@ -800,17 +804,17 @@ int OnEventServer(ServerEventCtx *ctx, MultiSession *s, Event *ev) {
 
     if (ev->type != EvSendStart) {
         ServerEventReset(ctx);
-        CR_RESET(ctx, 0);
+        CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_SERVER_SEND_ERR);
     }
     CR_YIELD(ctx);
 
     if (ev->type != EvSendDone) {
         ServerEventReset(ctx);
-        CR_RESET(ctx, 0);
+        CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_SERVER_SEND_DONE_ERR);
     }
 
     ServerEventReset(ctx);
-    CR_RESET(ctx, 0);
+    CR_RESET(ctx);
     CR_END(ctx);
     return 0;
 }
@@ -828,36 +832,34 @@ int OnEventClient(ClientEventCtx *ctx, MultiSession *s, Event *ev) {
     assert(ctx->rx_init != NULL);
 
     if (ev->type != EvSendStart) {
-        CR_RESET(ctx, 0);
+        CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_CLIENT_SEND_ERR);
     }
     CR_YIELD(ctx);
 
     if (ev->type != EvSendDone) {
-        CR_RESET(ctx, 0);
+        CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_CLIENT_SEND_DONE_ERR);
     }
     CR_YIELD(ctx);
 
     if (ev->type != EvRecvStart) {
-        CR_RESET(ctx, 0);
+        CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_CLIENT_RECV_ERR);
     }
     if (ev->as.recv_start.total > ctx->rx_init->len) {
-        CR_RESET(ctx, 0);
+        CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_CLIENT_RECV_OVERSIZE);
     }
     ctx->rx_init->len = ev->as.recv_start.total;
     s->recv_ctx.rx = ctx->rx_init;
     CR_YIELD(ctx);
 
     if (ev->type != EvRecvDone) {
-        CR_RESET(ctx, 0);
+        CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_CLIENT_RECV_ERR);
     }
 
     if (s->recv_ctx.rx == NULL) {
-        s->error = MULTI_ERR_FMT_UNKNOW;
-        CR_RESET(ctx, 0);
+        CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_CLIENT_FMT_UNKNOWN);
     }
     if (s->recv_ctx.rx->len < HANDLER_RET_SIZE) {
-        s->error = MULTI_ERR_FMT_TOOSHORT;
-        CR_RESET(ctx, 0);
+        CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_CLIENT_FMT_TOOSHORT);
     }
 
 
@@ -871,7 +873,7 @@ int OnEventClient(ClientEventCtx *ctx, MultiSession *s, Event *ev) {
 
     ctx->rx_done = s->recv_ctx.rx;
 
-    CR_RESET(ctx, 0);
+    CR_RESET(ctx);
 
     CR_END(ctx);
     return 0;
@@ -923,6 +925,8 @@ int rpc_call_multi(Func func, Message *input, Message *output)
     SetMockInput(&swap_imessage); // mock input for first time to kick start
 
     int ret = 0;
+
+    int session_ret = 0;
     int step_ret = 0;
     int rpc_ret = 0;
     int round = 0;
@@ -935,7 +939,12 @@ int rpc_call_multi(Func func, Message *input, Message *output)
         swap_omessage.data = swap_obuffer;
         step_ret = StepMultiSession(&session, &swap_imessage, &swap_omessage);
         if (step_ret != 0) { break; }
-        if (session.error) { break; }
+
+        session_ret = session.recv_ctx.error ? session.recv_ctx.error
+            : session.send_ctx.error ? session.send_ctx.error
+            : session.event_ctx.client.error ? session.event_ctx.client.error
+            : 0;
+        if (session_ret) { break; }
 
         swap_imessage.len = sizeof(swap_ibuffer);
         swap_imessage.data = swap_ibuffer;
@@ -944,10 +953,10 @@ int rpc_call_multi(Func func, Message *input, Message *output)
 
     } while(CR_IS_STARTED(&session.send_ctx) || CR_IS_STARTED(&session.recv_ctx));
 
-    if (session.error || step_ret || rpc_ret) {
-        printf("[rpc_call_multi] Err!! session.err %d, step_err %d, rpc_err %d\n", session.error, step_ret, rpc_ret);
+    if (session_ret || step_ret || rpc_ret) {
+        printf("[rpc_call_multi] Err!! session_ret %d, step_ret %d, rpc_ret %d\n", session_ret, step_ret, rpc_ret);
 
-        ret = session.error ? session.error
+        ret = session_ret ? session_ret
             : step_ret ? step_ret
             : rpc_ret ?  rpc_ret
             : 0;
@@ -955,7 +964,7 @@ int rpc_call_multi(Func func, Message *input, Message *output)
     }
 
     if (session.event_ctx.client.rx_done == NULL) {
-        ret = MULTI_ERR_FMT_UNKNOW;
+        ret = MULTI_ERR_ONEVENT_CLIENT_FMT_UNKNOWN;
         goto EXIT;
     }
 
@@ -1044,12 +1053,12 @@ void TaskClient(void *pvParameters) {
         /* MULTI_CAP + 1 -> server rejects as oversize */
         ret = test_echo(MULTI_CAP + 1, MULTI_CAP, counter);
         printf("[TaskClient] test MULTI_CAP+1: ret=%d (expect %d)\n\n",
-               ret, MULTI_ERR_NOMEM);
+               ret, MULTI_ERR_COSEND_START_ERR);
 
         /* output buffer too small -> client rejects as resp oversize */
         ret = test_echo(MULTI_CAP, MULTI_CAP / 2, counter);
         printf("[TaskClient] test in=MULTI_CAP out=MULTI_CAP/2: ret=%d (expect %d)\n\n",
-               ret, MULTI_ERR_NOMEM);
+               ret, MULTI_ERR_CORECV_NOMEM);
 
 
         counter++;
