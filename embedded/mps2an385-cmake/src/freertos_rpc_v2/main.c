@@ -403,6 +403,8 @@ typedef struct data_t  {
 
 
 typedef enum {
+    EvPreSendStart,
+
     EvRecvStart,
     EvRecvErr,
     EvRecvDone,
@@ -456,6 +458,9 @@ static int StepMultiSession(MultiSession *s, Message *input, Message *output) {
     data.ohdr->rh.type = RespInvalid;
 
     logHdr("IN ", data.ihdr);
+
+    int PreEvent(MultiSession *s, Data *data);
+    PreEvent(s, &data);
 
     int CoRecv(RecvCtx *ctx, Data *data);
     CoRecv(&s->recv_ctx, &data);
@@ -687,11 +692,24 @@ int CoSend(SendCtx *ctx, Data *data) {
 
 }
 
+// ================================================
+// PreEvent(run before any other event per loop)
+// ================================================
+int PreEvent(MultiSession *s, Data *data) {
+    if (data->ihdr->sh.type == SendStart) {
+        Event ev = {
+            .type = EvPreSendStart
+        };
+        OnEvent(&s->event_ctx, &ev);
+    }
+}
 
 // ================================================
-// OnEvent
+// Adapter event handler for client and server
 // ================================================
 
+// In realwork case it will split to two Implment.
+// Since this is a PoC, and we only have one src file. we maually dispatch
 void OnEvent(EventCtx *ctx, Event *ev) {
     MultiSession *s = CONTAINER_OF(ctx, MultiSession, event_ctx);
     if (strcmp(getTaskName(), "TaskClient") == 0) {
@@ -717,8 +735,13 @@ void ServerEventReset(ServerEventCtx *server) {
 static_assert(MULTI_CAP >=  HANDLER_RET_SIZE, "Out of Sync");
 int OnEventServer(ServerEventCtx *ctx, MultiSession *s, Event *ev) {
 
-    if (ev->type == EvRecvStart && CR_IS_STARTED(ctx)) {
+    // Some force reset way to allow recovery server.
+    // if pervious session not finish for better Robustness
+    //
+    // logical this part don't have to exist.
+    if (ev->type == EvPreSendStart) {
         ServerEventReset(ctx);
+        memset(s, 0 ,sizeof(*s)); // Yes, MultiSession is zero init safe by design
     }
 
     CR_START_UNTIL(ctx, ev->type == EvRecvStart);
@@ -782,6 +805,11 @@ int OnEventServer(ServerEventCtx *ctx, MultiSession *s, Event *ev) {
 
 
 int OnEventClient(ClientEventCtx *ctx, MultiSession *s, Event *ev) {
+    // Client dont subscript to EvPreSendStart
+    if (ev->type == EvPreSendStart) {
+        return 0;
+    }
+
     CR_START(ctx);
     ctx->rx_done = NULL;
     ctx->handler_ret = 0;
