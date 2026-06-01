@@ -238,9 +238,6 @@ typedef struct ctx_t {
     while(!(cond)) { CR_YIELD(ctx); }
 
 #define CR_RESET(ctx, ret)     do { (ctx)->line = 0; return ret; } while(0)
-// #define CR_RESET_IF(ctx, cond, ret)      do { if (cond)    { CR_RESET(ctx, ret); } } while (0)
-// #define CR_RESET_NOT_IF(ctx, cond, ret)  do { if (!(cond)) { CR_RESET(ctx, ret); } } while (0)
-// #define CR_RESET_ASSERT(ctx, cond, ret)  CR_RESET_NOT_IF(ctx, cond, ret)
 
 // ================================================
 // --- Protocol headers ---
@@ -251,6 +248,11 @@ typedef struct ctx_t {
 #define MULTI_OK              0
 
 #define MULTI_ERR_BASE     -1100
+
+#define MULTI_ERR_PREREQ_MAGICERR (MULTI_ERR_BASE - 1)
+#define MULTI_ERR_PREREQ_TOOSHORT (MULTI_ERR_BASE - 2)
+#define MULTI_ERR_PREREQ_NULLINPUT (MULTI_ERR_BASE - 3)
+
 #define MULTI_ERR_MAGIC     (MULTI_ERR_BASE - 1)  // send hdr magic mismatch
 #define MULTI_ERR_SHORT     (MULTI_ERR_BASE - 2)  // input too short for SendHdr
 #define MULTI_ERR_OVERSIZE  (MULTI_ERR_BASE - 3)  // total > rx capacity
@@ -417,6 +419,8 @@ typedef enum {
 typedef struct {
     EventType type;
     union {
+        struct {} pre_recv_start;
+
         struct {uint32_t total;} recv_start;
         struct {} recv_err;
         struct {} recv_done;
@@ -431,12 +435,15 @@ typedef struct {
 // ================================================
 // Protocol Implment
 // ================================================
+// Invariant:
+//  if session state might change, this function should always return 0.
+//  if session state not change for sure, could return other value
 static int StepMultiSession(MultiSession *s, Message *input, Message *output) {
     if (!input || !output) {
-        return MULTI_ERR_SHORT;
+        return MULTI_ERR_PREREQ_NULLINPUT;
     }
     if (input->len < sizeof(Hdr) || output->len < sizeof(Hdr)) {
-        return MULTI_ERR_SHORT;
+        return MULTI_ERR_PREREQ_TOOSHORT;
     }
 
     Data data = {
@@ -451,7 +458,7 @@ static int StepMultiSession(MultiSession *s, Message *input, Message *output) {
         .olen = output->len - sizeof(Hdr),
     };
 
-    if (data.ihdr->magic != MULTI_MAGIC) return MULTI_ERR_MAGIC;
+    if (data.ihdr->magic != MULTI_MAGIC) return MULTI_ERR_PREREQ_MAGICERR;
 
     data.ohdr->magic = MULTI_MAGIC;
     data.ohdr->sh.type = SendInvalid;
@@ -468,7 +475,7 @@ static int StepMultiSession(MultiSession *s, Message *input, Message *output) {
     int CoSend(SendCtx *ctx, Data *data);
     CoSend(&s->send_ctx, &data);
 
-    // fallbcak, if CoSend not being run, we
+    // fallbcak, if CoSend not being run, force set some return value
     if (data.ohdr->sh.type == SendInvalid) {
         data.output->len = sizeof(Hdr);
     }
@@ -483,6 +490,7 @@ void OnEvent(EventCtx *ctx, Event *ev);
 // ================================================
 // CoRecv
 // ================================================
+// Invariant: CoRecv should not alloc any memory
 void resp(Data *data, int code) {
     if (code == 0) {
         data->ohdr->rh.type = RespOK;
@@ -582,6 +590,7 @@ int CoRecv(RecvCtx *ctx, Data *data) {
 // ================================================
 // CoSend
 // ================================================
+// Invariant: CoSend should not alloc any memory
 void send_start(Data *data, uint32_t total) {
     data->ohdr->sh.type = SendStart;
     data->ohdr->sh.as.start.total = total;
@@ -702,13 +711,16 @@ int PreEvent(MultiSession *s, Data *data) {
         };
         OnEvent(&s->event_ctx, &ev);
     }
+    return 0;
 }
 
 // ================================================
 // Adapter event handler for client and server
 // ================================================
 
-// In realwork case it will split to two Implment.
+// It just a simplify of real world case
+// In real-world case it will split to two Implment in 2 src file. compile to 2 binary.
+//
 // Since this is a PoC, and we only have one src file. we maually dispatch
 void OnEvent(EventCtx *ctx, Event *ev) {
     MultiSession *s = CONTAINER_OF(ctx, MultiSession, event_ctx);
