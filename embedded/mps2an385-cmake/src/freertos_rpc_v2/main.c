@@ -161,6 +161,15 @@ int echo_handler(Message *input, Message *output) {
     return 0;
 }
 
+int only_return_handler(Message *input, Message *output) {
+    assert(input);
+    assert(output);
+
+    output->len = 0;
+    printf("[only_return_handler] called, input.len = %d\n", input->len);
+    return input->len;
+}
+
 // ================================================
 typedef struct {
     Message *input;
@@ -813,19 +822,18 @@ void ServerEventReset(ServerEventCtx *server) {
 static_assert(MULTI_CAP >=  HANDLER_RET_SIZE, "Out of Sync");
 int OnEventServer(ServerEventCtx *ctx, MultiSession *s, Event *ev) {
 
+    // we dont subscribe to EvPreOnFirstStep
+    if (ev->type == EvPreOnFirstStep) {
+        return 0;
+    }
+
     // Some force reset way to allow recovery server.
     // if pervious session not finish for better Robustness
     //
     // logical this part don't have to exist.
-    if (ev->type == EvPreOnFirstStep) {
-        ServerEventReset(ctx);
-        memset(&s->recv_ctx, 0, sizeof(s->recv_ctx));
-        memset(&s->send_ctx, 0, sizeof(s->send_ctx));
-        memset(&s->event_ctx, 0, sizeof(s->event_ctx));
-    }
-
     if (ev->type == EvPreSendStart) {
         ServerEventReset(ctx);
+        memset(s, 0, sizeof(*s)); // Yes, it's safe to zero init multisession, and
     }
 
     CR_START_UNTIL(ctx, ev->type == EvRecvStart);
@@ -872,17 +880,17 @@ int OnEventServer(ServerEventCtx *ctx, MultiSession *s, Event *ev) {
     };
 
     ctx->tx = MessageCreate(CLIENT_MAX_CAP + HANDLER_RET_SIZE);
-    Message output_view = {
+    Message output = {
         .len = CLIENT_MAX_CAP,
         .data = ctx->tx->data + HANDLER_RET_SIZE,
     };
-    int ret = handler(&input_view, &output_view);
+    int ret = handler(&input_view, &output);
 
     MessageDelete(ctx->rx);
     ctx->rx = NULL;
 
     if (ret == 0) {
-        ctx->tx->len = output_view.len + HANDLER_RET_SIZE;
+        ctx->tx->len = output.len + HANDLER_RET_SIZE;
     } else {
         ctx->tx->len = HANDLER_RET_SIZE;
     }
@@ -1126,7 +1134,7 @@ static void fill_input(char *data, uint32_t len, uint32_t seed) {
 
 static int test_echo(uint32_t input_len, uint32_t output_len, uint32_t seed) {
     printf("============================================\n");
-    printf("test_echo: input %" PRIu32 " -> output %" PRIu32 ", sedd %" PRIu32 "\n", input_len, output_len, seed);
+    printf("test_echo: input %" PRIu32 " -> output %" PRIu32 ", seed %" PRIu32 "\n", input_len, output_len, seed);
     printf("============================================\n");
     Message *input  = MessageCreate(input_len);
     Message *output = MessageCreate(output_len);
@@ -1154,6 +1162,37 @@ static int test_echo(uint32_t input_len, uint32_t output_len, uint32_t seed) {
     MessageDelete(output);
 
     return ok ? 0 : (ret ? ret : -1);
+}
+
+static int test_only_return(uint32_t input_len, uint32_t output_len, uint32_t seed) {
+    printf("============================================\n");
+    printf("test_only_return: input %" PRIu32 " , output %" PRIu32 ", seed %" PRIu32 "\n", input_len, output_len, seed);
+    printf("============================================\n");
+    Message *input  = MessageCreate(input_len);
+    Message *output = MessageCreate(output_len);
+    if (!input || !output) {
+        printf("[test_only_return] malloc failed for len=%lu\n", (unsigned long)input_len);
+        MessageDelete(input);
+        MessageDelete(output);
+        return -1;
+    }
+
+    fill_input(input->data, input->len, seed);
+    memset(output->data, 0xAC, output->len);
+
+    printf("[test_only_return] --> RPC multi request (%lu bytes), seed=%lu\n",
+           (unsigned long)input->len, (unsigned long)seed);
+
+    int ret = rpc_call_multi(only_return_handler, input, output);
+
+    int ok = (ret == input->len && output->len == 0);
+    printf("[test_only_return] <-- RPC multi response: ret=%d, recv_len=%lu, match=%s\n",
+           ret, (unsigned long)output->len, ok ? "PASS" : "FAIL");
+
+    MessageDelete(input);
+    MessageDelete(output);
+
+    return ret;
 }
 
 void TaskClient(void *pvParameters) {
@@ -1192,6 +1231,13 @@ void TaskClient(void *pvParameters) {
         printf("[TaskClient] test in=MULTI_CAP out=MULTI_CAP/2: ret=%d (expect %d)\n\n",
                ret, MULTI_ERR_CORECV_NOMEM);
 
+        /* only_return handler: 50-byte payload, no output */
+        ret = test_only_return(50, 128, counter);
+        printf("[TaskClient] test only_return(50): ret=%d (expect 50)\n\n", ret);
+
+        /* only_return handler: 0-byte payload, no output */
+        ret = test_only_return(0, 128, counter);
+        printf("[TaskClient] test only_return(0): ret=%d (expect 0)\n\n", ret);
 
         counter++;
         vTaskDelay(pdMS_TO_TICKS(1000));
