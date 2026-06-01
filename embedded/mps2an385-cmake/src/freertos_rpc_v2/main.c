@@ -203,6 +203,7 @@ void rpc_dispatch(void) {
 
 #define MULTI_CAP 128
 #define HANDLER_RET_SIZE 4
+#define MULTI_MAX_ROUND 100
 #define MULTI_REPLY_UNKNOWN UINT32_MAX  // sentinel: server hasn't determined reply length yet
 
 // ================================================
@@ -249,6 +250,7 @@ typedef struct ctx_t {
 #define MULTI_ERR_MAGIC        (MULTI_ERR_BASE - 1)   /* magic mismatch */
 #define MULTI_ERR_SHORT        (MULTI_ERR_BASE - 2)   /* buffer too short for Hdr */
 #define MULTI_ERR_NULLINPUT    (MULTI_ERR_BASE - 3)   /* NULL input/output */
+#define MULTI_ERR_TOO_MANY_ROUNDS (MULTI_ERR_BASE - 4)   /* round >= MULTI_MAX_ROUND */
 
 /* CoRecv errors: -1200 range */
 #define MULTI_ERR_CORECV_BASE   -1200
@@ -1065,6 +1067,13 @@ int rpc_call_multi(Func func, Message *input, Message *output)
             : session.event_ctx.client.error ? session.event_ctx.client.error
             : 0;
         if (session_ret) { break; }
+
+        if (session.round >= MULTI_MAX_ROUND) {
+            printf("[rpc_call_multi] error: too many rounds (round=%lu >= %u)\n",
+                   (unsigned long)session.round, (unsigned)MULTI_MAX_ROUND);
+            step_ret = MULTI_ERR_TOO_MANY_ROUNDS;
+            break;
+        }
 
         swap_imessage.len = sizeof(swap_ibuffer);
         swap_imessage.data = swap_ibuffer;
