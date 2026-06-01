@@ -255,6 +255,8 @@ typedef struct ctx_t {
 #define MULTI_ERR_CORECV_NOMEM       (MULTI_ERR_CORECV_BASE - 1)  /* buffer allocation failed */
 #define MULTI_ERR_CORECV_OUTOFSYNC   (MULTI_ERR_CORECV_BASE - 2)  /* unexpected send type */
 #define MULTI_ERR_CORECV_OVERSIZE    (MULTI_ERR_CORECV_BASE - 3)  /* offset+len > rx capacity */
+#define MULTI_ERR_CORECV_OFFSET      (MULTI_ERR_CORECV_BASE - 4)  /* offset != pos */
+#define MULTI_ERR_CORECV_INCOMPLETE  (MULTI_ERR_CORECV_BASE - 5)  /* pos != total at Done */
 
 /* CoSend errors: -1300 range */
 #define MULTI_ERR_COSEND_BASE   -1300
@@ -359,6 +361,7 @@ static void logHdr(const char *prefix, Hdr *hdr) {
 typedef struct {
     CR_FIELD_WITH_ERROR;
     Message *rx;
+    uint32_t pos;
 } RecvCtx;
 
 typedef struct {
@@ -542,6 +545,7 @@ static void OnRecvDone(EventCtx *ctx) {
 
 static void RecvReset(RecvCtx *recv) {
     recv->rx = NULL;
+    recv->pos = 0;
 }
 
 int CoRecv(RecvCtx *ctx, Data *data) {
@@ -566,6 +570,7 @@ int CoRecv(RecvCtx *ctx, Data *data) {
         CR_RESET_WITH(ctx, MULTI_ERR_CORECV_NOMEM);
     }
     memset(ctx->rx->data, 0, ctx->rx->len);
+    ctx->pos = 0;
 
     // Update / Done Stage
     while(1) {
@@ -583,6 +588,16 @@ int CoRecv(RecvCtx *ctx, Data *data) {
         if (ihdr->sh.type == SendDone) {
             break;
         }
+        if (ihdr->sh.as.update.offset != ctx->pos) {
+            printf("[%s] ERR: CoRecv: offset mismatch (offset=%lu, pos=%lu)\n",
+                   getTaskName(), (unsigned long)ihdr->sh.as.update.offset,
+                   (unsigned long)ctx->pos);
+            resp(data, MULTI_ERR_CORECV_OFFSET);
+            OnRecvErr(&s->event_ctx);
+
+            RecvReset(ctx);
+            CR_RESET_WITH(ctx, MULTI_ERR_CORECV_OFFSET);
+        }
         if(!(ihdr->sh.as.update.offset + ilen <= ctx->rx->len)) {
             printf("[%s] ERR: CoRecv: oversize (offset=%lu, ilen=%lu, rx_len=%lu)\n",
                    getTaskName(), (unsigned long)ihdr->sh.as.update.offset,
@@ -594,6 +609,17 @@ int CoRecv(RecvCtx *ctx, Data *data) {
             CR_RESET_WITH(ctx, MULTI_ERR_CORECV_OVERSIZE);
         }
         memcpy(ctx->rx->data + ihdr->sh.as.update.offset, idata, ilen);
+        ctx->pos += ilen;
+    }
+
+    if (ctx->pos != ctx->rx->len) {
+        printf("[%s] ERR: CoRecv: incomplete (pos=%lu, total=%lu)\n",
+               getTaskName(), (unsigned long)ctx->pos, (unsigned long)ctx->rx->len);
+        resp(data, MULTI_ERR_CORECV_INCOMPLETE);
+        OnRecvErr(&s->event_ctx);
+
+        RecvReset(ctx);
+        CR_RESET_WITH(ctx, MULTI_ERR_CORECV_INCOMPLETE);
     }
 
     resp(data, MULTI_OK);
