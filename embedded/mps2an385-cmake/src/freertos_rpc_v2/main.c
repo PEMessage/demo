@@ -308,32 +308,37 @@ typedef struct {
 // Protocol logging
 // ================================================
 static void logHdr(const char *prefix, Hdr *hdr) {
-    const char *st_str = "Inv";
+    char sh_buf[32];
     switch (hdr->sh.type) {
-        case SendStart:  st_str = "Start"; break;
-        case SendUpdate: st_str = "Update"; break;
-        case SendDone:   st_str = "Done"; break;
-        default:         st_str = "Invalid"; break;
-    }
-    const char *rt_str = "Inv";
-    switch (hdr->rh.type) {
-        case RespOK:  rt_str = "OK "; break;
-        case RespErr: rt_str = "Err"; break;
-        default:      rt_str = "Invalid"; break;
+        case SendStart:
+            snprintf(sh_buf, sizeof(sh_buf), "Start(%lu)", (unsigned long)hdr->sh.as.start.total);
+            break;
+        case SendUpdate:
+            snprintf(sh_buf, sizeof(sh_buf), "Update(%lu)", (unsigned long)hdr->sh.as.update.offset);
+            break;
+        case SendDone:
+            snprintf(sh_buf, sizeof(sh_buf), "Done");
+            break;
+        default:
+            snprintf(sh_buf, sizeof(sh_buf), "Invalid");
+            break;
     }
 
-    if (hdr->sh.type == SendStart) {
-        printf("[%s] %s: sh=%s(%lu) rh=%s\n",
-               getTaskName(), prefix, st_str,
-               (unsigned long)hdr->sh.as.start.total, rt_str);
-    } else if (hdr->sh.type == SendUpdate) {
-        printf("[%s] %s: sh=%s(%lu) rh=%s\n",
-               getTaskName(), prefix, st_str,
-               (unsigned long)hdr->sh.as.update.offset, rt_str);
-    } else {
-        printf("[%s] %s: sh=%s rh=%s\n",
-               getTaskName(), prefix, st_str, rt_str);
+    char rh_buf[32];
+    switch (hdr->rh.type) {
+        case RespOK:
+            snprintf(rh_buf, sizeof(rh_buf), "OK");
+            break;
+        case RespErr:
+            snprintf(rh_buf, sizeof(rh_buf), "Err(%d)", hdr->rh.as.err.errcode);
+            break;
+        default:
+            snprintf(rh_buf, sizeof(rh_buf), "Invalid");
+            break;
     }
+
+    printf("[%s] %s: sh=%s rh=%s\n",
+           getTaskName(), prefix, sh_buf, rh_buf);
 }
 
 // ================================================
@@ -564,38 +569,6 @@ int CoRecv(RecvCtx *ctx, Data *data) {
     return 0;
 }
 
-// ================================================
-// CoHandler
-// ================================================
-// int CoHandler(HandlerCtx *ctx, Data *data) {
-//     CR_START_UNTIL(ctx, ctx->in != NULL);
-//
-//     Message *out = MessageCreate(MULTI_CAP + HANDLER_RET_SIZE);
-//
-//     Message handler_input = {
-//         .data = ctx->in->data,
-//         .len  = ctx->in->len,
-//     };
-//     Message handler_output = {
-//         .data = out->data + HANDLER_RET_SIZE,
-//         .len  = (out->len > HANDLER_RET_SIZE) ? out->len - HANDLER_RET_SIZE : 0,
-//     };
-//     int ret = echo_handler(&handler_input, &handler_output);
-//
-//     *(int32_t *)(out->data) = ret;
-//     out->len = HANDLER_RET_SIZE + handler_output.len;
-//
-//     MessageDelete(ctx->in);
-//     ctx->in = NULL;
-//
-//     MessageMove(&CONTAINER_OF(ctx, MultiSession, handler_ctx)->send_ctx.tx, &out);
-//     CR_END(ctx);
-//     return 0;
-//
-// }
-
-
-
 
 // ================================================
 // CoSend
@@ -766,9 +739,9 @@ int OnEventServer(ServerEventCtx *ctx, MultiSession *s, Event *ev) {
         CR_RESET(ctx, 0);
     }
 
-    ctx->tx = MessageCreate(MULTI_CAP);
+    ctx->tx = MessageCreate(CLIENT_MAX_CAP + HANDLER_RET_SIZE);
     Message output = {
-        .len = CLIENT_MAX_CAP - HANDLER_RET_SIZE,
+        .len = CLIENT_MAX_CAP,
         .data = ctx->tx->data +  HANDLER_RET_SIZE
     };
     int ret = echo_handler(ctx->rx, &output);
@@ -800,6 +773,7 @@ int OnEventServer(ServerEventCtx *ctx, MultiSession *s, Event *ev) {
     ServerEventReset(ctx);
     CR_RESET(ctx, 0);
     CR_END(ctx);
+    return 0;
 }
 
 
@@ -821,6 +795,10 @@ int OnEventClient(ClientEventCtx *ctx, MultiSession *s, Event *ev) {
     if (ev->type != EvRecvStart) {
         CR_RESET(ctx, 0);
     }
+    if (ev->as.recv_start.total > ctx->rx_init->len) {
+        CR_RESET(ctx, 0);
+    }
+    ctx->rx_init->len = ev->as.recv_start.total;
     s->recv_ctx.rx = ctx->rx_init;
     CR_YIELD(ctx);
 
@@ -832,6 +810,7 @@ int OnEventClient(ClientEventCtx *ctx, MultiSession *s, Event *ev) {
     CR_RESET(ctx, 0);
 
     CR_END(ctx);
+    return 0;
 }
 
 // ================================================
@@ -861,7 +840,7 @@ int rpc_call_multi(Func func, Message *input, Message *output)
 {
     MultiSession session = {0};
 
-    Message *temp_output = MessageCreate(MULTI_CAP);
+    Message *temp_output = MessageCreate(output->len + HANDLER_RET_SIZE);
     session.send_ctx.tx = input;
     session.event_ctx.client.rx_init = temp_output;
 
@@ -1014,12 +993,12 @@ void TaskClient(void *pvParameters) {
         /* MULTI_CAP + 1 -> server rejects as oversize */
         ret = test_echo(MULTI_CAP + 1, MULTI_CAP, counter);
         printf("[TaskClient] test MULTI_CAP+1: ret=%d (expect %d)\n\n",
-               ret, MULTI_ERR_OVERSIZE);
+               ret, MULTI_ERR_NOMEM);
 
         /* output buffer too small -> client rejects as resp oversize */
         ret = test_echo(MULTI_CAP, MULTI_CAP / 2, counter);
-        printf("[TaskClient] test out=512: ret=%d (expect %d)\n\n",
-               ret, MULTI_ERR_RESP_OVERSIZE);
+        printf("[TaskClient] test in=MULTI_CAP out=MULTI_CAP/2: ret=%d (expect %d)\n\n",
+               ret, MULTI_ERR_NOMEM);
 
 
         counter++;
