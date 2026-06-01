@@ -364,7 +364,11 @@ typedef struct {
 typedef struct {
     CR_FIELD;
     Message *rx_init;
-    Message *rx;
+    Message *rx_done;
+
+    // if rx_done exist, following field is valid
+    Message rx_view;
+    int handler_ret;
 } ClientEventCtx;
 
 typedef struct {
@@ -779,7 +783,8 @@ int OnEventServer(ServerEventCtx *ctx, MultiSession *s, Event *ev) {
 
 int OnEventClient(ClientEventCtx *ctx, MultiSession *s, Event *ev) {
     CR_START(ctx);
-    ctx->rx = NULL;
+    ctx->rx_done = NULL;
+    ctx->handler_ret = 0;
     assert(ctx->rx_init != NULL);
 
     if (ev->type != EvSendStart) {
@@ -805,7 +810,26 @@ int OnEventClient(ClientEventCtx *ctx, MultiSession *s, Event *ev) {
     if (ev->type != EvRecvDone) {
         CR_RESET(ctx, 0);
     }
-    ctx->rx = s->recv_ctx.rx;
+
+    if (s->recv_ctx.rx == NULL) {
+        s->error = MULTI_ERR_FMT_UNKNOW;
+        CR_RESET(ctx, 0);
+    }
+    if (s->recv_ctx.rx->len < HANDLER_RET_SIZE) {
+        s->error = MULTI_ERR_FMT_TOOSHORT;
+        CR_RESET(ctx, 0);
+    }
+
+
+    {
+        ctx->handler_ret = *(int32_t *)s->recv_ctx.rx->data;
+        uint32_t payload_len = s->recv_ctx.rx->len - HANDLER_RET_SIZE;
+        ctx->rx_view = *s->recv_ctx.rx;
+        ctx->rx_view.data = s->recv_ctx.rx->data + HANDLER_RET_SIZE;
+        ctx->rx_view.len = payload_len;
+    }
+
+    ctx->rx_done = s->recv_ctx.rx;
 
     CR_RESET(ctx, 0);
 
@@ -890,33 +914,20 @@ int rpc_call_multi(Func func, Message *input, Message *output)
         goto EXIT;
     }
 
-    do {
-        if (session.event_ctx.client.rx == NULL) {
-            ret = MULTI_ERR_FMT_UNKNOW;
-            break;
-        }
-        if (session.event_ctx.client.rx->len < HANDLER_RET_SIZE) {
-            ret = MULTI_ERR_FMT_TOOSHORT;
-            break;
+    if (session.event_ctx.client.rx_done == NULL) {
+        ret = MULTI_ERR_FMT_UNKNOW;
+        goto EXIT;
+    }
 
-        }
+    ret = session.event_ctx.client.handler_ret;
+    output->len = MessageCopy(
+            output,
+            0,
+            &session.event_ctx.client.rx_view,
+            0,
+            session.event_ctx.client.rx_view.len
+            );
 
-        int32_t handler_ret = *(int32_t *)session.event_ctx.client.rx->data;
-        uint32_t payload_len = session.event_ctx.client.rx->len - HANDLER_RET_SIZE;
-
-        if (handler_ret != 0) {
-            ret =  handler_ret;
-        } else {
-            ret = 0;
-        }
-
-        if (payload_len > output->len) {
-            ret = MULTI_ERR_FMT_TOOLONG;
-            break;
-        }
-
-        output->len = MessageCopy(output, 0, session.event_ctx.client.rx, HANDLER_RET_SIZE, payload_len);
-    } while(0);
 EXIT:
     MessageDelete(temp_output);
     return ret;
