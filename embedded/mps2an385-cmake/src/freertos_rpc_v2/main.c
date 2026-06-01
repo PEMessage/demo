@@ -379,12 +379,23 @@ typedef struct {
 
 typedef struct {
     CR_FIELD_WITH_ERROR;
-    Message *rx_init;
-    Message *rx_done;
 
+    // recv side
+    // raw buffer for recv
+    Message *rx_init;
+
+    // if rx done, rx_done != NULL
+    Message *rx_done;
     // if rx_done exist, following field is valid
     Message rx_view;
     int handler_ret;
+
+
+    // send side
+    Message *tx;
+    Func handler;
+    // raw buffer for send
+    Message *tx_init;
 } ClientEventCtx;
 
 typedef struct {
@@ -398,6 +409,7 @@ typedef struct {
 
     EventCtx event_ctx;
 
+    uint32_t round;
 } MultiSession;
 
 typedef struct data_t  {
@@ -418,6 +430,7 @@ typedef struct data_t  {
 
 
 typedef enum {
+    EvPreOnFirstStep,
     EvPreSendStart,
 
     EvRecvStart,
@@ -432,6 +445,7 @@ typedef enum {
 typedef struct {
     EventType type;
     union {
+        struct {} pre_on_first_step;
         struct {} pre_recv_start;
 
         struct {uint32_t total;} recv_start;
@@ -452,6 +466,7 @@ typedef struct {
 //  if session state might change, this function should always return 0.
 //  if session state not change for sure, could return other value
 static int StepMultiSession(MultiSession *s, Message *input, Message *output) {
+    s->round++;
     if (!input || !output) {
         printf("[%s] ERR: StepMultiSession: NULL input/output\n", getTaskName());
         return MULTI_ERR_NULLINPUT;
@@ -748,6 +763,12 @@ int CoSend(SendCtx *ctx, Data *data) {
 // PreEvent(run before any other event per loop)
 // ================================================
 int PreEvent(MultiSession *s, Data *data) {
+    if (s->round == 1) {
+        Event ev = {
+            .type = EvPreOnFirstStep
+        };
+        OnEvent(&s->event_ctx, &ev);
+    }
     if (data->ihdr->sh.type == SendStart) {
         Event ev = {
             .type = EvPreSendStart
@@ -794,17 +815,24 @@ int OnEventServer(ServerEventCtx *ctx, MultiSession *s, Event *ev) {
     // if pervious session not finish for better Robustness
     //
     // logical this part don't have to exist.
+    if (ev->type == EvPreOnFirstStep) {
+        ServerEventReset(ctx);
+        memset(&s->recv_ctx, 0, sizeof(s->recv_ctx));
+        memset(&s->send_ctx, 0, sizeof(s->send_ctx));
+        memset(&s->event_ctx, 0, sizeof(s->event_ctx));
+    }
+
     if (ev->type == EvPreSendStart) {
         ServerEventReset(ctx);
-        memset(s, 0 ,sizeof(*s)); // Yes, MultiSession is zero init safe by design
     }
 
     CR_START_UNTIL(ctx, ev->type == EvRecvStart);
     ServerEventReset(ctx);
 
-    if (ev->as.recv_start.total > CLIENT_MAX_CAP) {
+    if (ev->as.recv_start.total > CLIENT_MAX_CAP + HANDLER_RET_SIZE) {
         printf("[%s] ERR: OnEventServer: recv total exceeds cap (total=%lu, cap=%lu)\n",
-               getTaskName(), (unsigned long)ev->as.recv_start.total, (unsigned long)CLIENT_MAX_CAP);
+               getTaskName(), (unsigned long)ev->as.recv_start.total,
+               (unsigned long)(CLIENT_MAX_CAP + HANDLER_RET_SIZE));
         ServerEventReset(ctx);
         CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_SERVER_OVERSIZE);
     }
@@ -827,18 +855,32 @@ int OnEventServer(ServerEventCtx *ctx, MultiSession *s, Event *ev) {
         CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_SERVER_RECV_ERR);
     }
 
-    ctx->tx = MessageCreate(CLIENT_MAX_CAP + HANDLER_RET_SIZE);
-    Message output = {
-        .len = CLIENT_MAX_CAP,
-        .data = ctx->tx->data +  HANDLER_RET_SIZE
+    if (ctx->rx->len < HANDLER_RET_SIZE) {
+        printf("[%s] ERR: OnEventServer: rx too short for handler header (len=%lu, need=%u)\n",
+               getTaskName(), (unsigned long)ctx->rx->len, (unsigned)HANDLER_RET_SIZE);
+        ServerEventReset(ctx);
+        CR_RESET_WITH(ctx, MULTI_ERR_ONEVENT_SERVER_RECV_ERR);
+    }
+
+    Func handler = *(Func *)ctx->rx->data;
+    uint32_t payload_len = ctx->rx->len - HANDLER_RET_SIZE;
+    Message input_view = {
+        .len = payload_len,
+        .data = payload_len > 0 ? ctx->rx->data + HANDLER_RET_SIZE : NULL,
     };
-    int ret = echo_handler(ctx->rx, &output);
+
+    ctx->tx = MessageCreate(CLIENT_MAX_CAP + HANDLER_RET_SIZE);
+    Message output_view = {
+        .len = CLIENT_MAX_CAP,
+        .data = ctx->tx->data + HANDLER_RET_SIZE,
+    };
+    int ret = handler(&input_view, &output_view);
 
     MessageDelete(ctx->rx);
     ctx->rx = NULL;
 
     if (ret == 0) {
-        ctx->tx->len = output.len + HANDLER_RET_SIZE;
+        ctx->tx->len = output_view.len + HANDLER_RET_SIZE;
     } else {
         ctx->tx->len = HANDLER_RET_SIZE;
     }
@@ -870,8 +912,20 @@ int OnEventServer(ServerEventCtx *ctx, MultiSession *s, Event *ev) {
 
 
 int OnEventClient(ClientEventCtx *ctx, MultiSession *s, Event *ev) {
-    // Client dont subscript to EvPreSendStart
+    // Client does not subscribe to EvPreSendStart
     if (ev->type == EvPreSendStart) {
+        return 0;
+    }
+
+    if (ev->type == EvPreOnFirstStep) {
+        assert(ctx->tx_init != NULL);
+        assert(ctx->tx != NULL);
+        assert(ctx->handler != NULL);
+        // 组合 handler + payload 到 tx_init
+        *(Func *)ctx->tx_init->data = ctx->handler;
+        memcpy(ctx->tx_init->data + HANDLER_RET_SIZE, ctx->tx->data, ctx->tx->len);
+        ctx->tx_init->len = HANDLER_RET_SIZE + ctx->tx->len;
+        s->send_ctx.tx = ctx->tx_init;
         return 0;
     }
 
@@ -968,8 +1022,14 @@ int rpc_call_multi(Func func, Message *input, Message *output)
 {
     MultiSession session = {0};
 
+    // send side
+    session.event_ctx.client.tx = input;
+    session.event_ctx.client.handler = func;
+    Message *temp_input = MessageCreate(input->len + HANDLER_RET_SIZE);
+    session.event_ctx.client.tx_init = temp_input;
+
+    // recv side
     Message *temp_output = MessageCreate(output->len + HANDLER_RET_SIZE);
-    session.send_ctx.tx = input;
     session.event_ctx.client.rx_init = temp_output;
 
     char swap_ibuffer[MESSAGE_MAX_LEN] = {0};
@@ -991,11 +1051,9 @@ int rpc_call_multi(Func func, Message *input, Message *output)
     int session_ret = 0;
     int step_ret = 0;
     int rpc_ret = 0;
-    int round = 0;
 
     do {
-        round++;
-        printf("[%s] ===== ROUND %d =====\n", getTaskName(), round);
+        printf("[%s] ===== ROUND %lu =====\n", getTaskName(), (unsigned long)session.round);
 
         swap_omessage.len = sizeof(swap_obuffer);
         swap_omessage.data = swap_obuffer;
@@ -1043,6 +1101,7 @@ int rpc_call_multi(Func func, Message *input, Message *output)
 
 EXIT:
     MessageDelete(temp_output);
+    MessageDelete(temp_input);
     return ret;
 }
 
