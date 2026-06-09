@@ -29,9 +29,8 @@ def string_to():
     # -> raw byte
     res = "random text is fine".encode(encoding='ascii')
 
-
-
-
+    # -> int arrary, use list() to convert byte[] -> int[]
+    res = list('random text is fine'.encode())
 
 
 def main() -> None:
