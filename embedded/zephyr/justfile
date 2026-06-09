@@ -1,14 +1,36 @@
 
 west := "uvx --with jsonschema --with pyelftools --with anytree west"
 
+# derive cmd
+
 run:
     just build -t run
+
 tracecmake:
     # after -- is cmake args
     just build -- --trace
 
+tracecmake-find_package:
+    # after -- is cmake args
+    just build -- --trace -DCMAKE_FIND_DEBUG_MODE=TRUE
+
+dryrun:
+    # Example Output:
+    # -- west build: generating a build system
+    # Dry run: /home/zhuojw/.local/share/pem/bin/cmake-3.31.11-linux-x86_64/bin/cmake --version
+    # Dry run: /home/zhuojw/.local/share/pem/bin/cmake-3.31.11-linux-x86_64/bin/cmake -DWEST_PYTHON=/home/zhuojw/.cache/uv/archive-v0/TtN_wMj-gED6CDzv/bin/python -B/home/zhuojw/demo_new/embedded/zephyr/build -GNinja -DBOARD=mps2/an385 -S/home/zhuojw/demo_new/embedded/zephyr/demo/helloworld
+    # -- west build: building application
+    # Dry run: /home/zhuojw/.local/share/pem/bin/cmake-3.31.11-linux-x86_64/bin/cmake --version
+    # Dry run: /home/zhuojw/.local/share/pem/bin/cmake-3.31.11-linux-x86_64/bin/cmake --build /home/zhuojw/demo_new/embedded/zephyr/build
+    just build -n
+
+
 build *args:
     {{west}} build -b mps2/an385 demo/helloworld/ {{args}}
+    if [ -f build/compile_commands.json ] ; then \
+        rm -f compile_commands.json ; \
+        ln -s build/compile_commands.json . ; \
+    fi
 
 
 
