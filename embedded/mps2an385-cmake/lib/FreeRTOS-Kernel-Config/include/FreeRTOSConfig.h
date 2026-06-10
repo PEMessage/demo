@@ -163,5 +163,6 @@
 #define xPortSysTickHandler SysTick_Handler
 
 #define configRECORD_STACK_HIGH_ADDRESS 1 // to record stack area, (clion freertos support also recommand this)
+#define configINCLUDE_FREERTOS_TASK_C_ADDITIONS_H 1 // enable freertos_tasks_c_additions.h
 
 #endif /* FREERTOS_CONFIG_H */
