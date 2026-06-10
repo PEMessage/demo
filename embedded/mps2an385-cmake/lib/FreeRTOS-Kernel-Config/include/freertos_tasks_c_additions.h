@@ -72,4 +72,31 @@ uint32_t taskGetStackSizeBytes(TaskHandle_t taskHandle)
 
 #endif // configRECORD_STACK_HIGH_ADDRESS == 1
 
+int32_t taskGetStackFreeSize(void)
+{
+    TCB_t * pxTCB;
+    uint32_t current_sp;
+
+    __asm volatile("mov %0, sp" : "=r"(current_sp));
+
+    pxTCB = prvGetTCBFromHandle(NULL);
+
+    #if portSTACK_GROWTH < 0
+    {
+        /* Signed subtraction: cast both to int32_t before subtracting
+         * to detect stack overflow (current_sp < pxStack -> negative) */
+        int32_t free_bytes = (int32_t)current_sp - (int32_t)pxTCB->pxStack;
+        return free_bytes / (int32_t)sizeof(StackType_t);
+    }
+    #else
+    {
+        // THIS BRANCH NO TEST YET
+        /* Upward-growing stack: free space is from SP to pxEndOfStack.
+         * pxEndOfStack is guaranteed to exist when portSTACK_GROWTH > 0. */
+        int32_t free_bytes = (int32_t)pxTCB->pxEndOfStack - (int32_t)current_sp;
+        return free_bytes / (int32_t)sizeof(StackType_t);
+    }
+    #endif
+}
+
 #endif /* end of include guard: FREERTOS_TASKS_C_ADDITIONS_H */

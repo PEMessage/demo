@@ -12,11 +12,16 @@ extern "C" {
 #include "FreeRTOS.h"
 #include "task.h"
 
-#if ((configINCLUDE_FREERTOS_TASK_C_ADDITIONS_H == 1) && (configRECORD_STACK_HIGH_ADDRESS == 1))
+#if (configINCLUDE_FREERTOS_TASK_C_ADDITIONS_H == 1)
+
+#if (configRECORD_STACK_HIGH_ADDRESS == 1)
 uint32_t taskGetStackSizeWords(TaskHandle_t taskHandle);
 uint32_t taskGetStackSizeBytes(TaskHandle_t taskHandle);
-#endif // ((configINCLUDE_FREERTOS_TASK_C_ADDITIONS_H == 1)
-       //   && (configRECORD_STACK_HIGH_ADDRESS == 1))
+#endif // configRECORD_STACK_HIGH_ADDRESS == 1
+
+int32_t taskGetStackFreeSize(void);
+
+#endif // configINCLUDE_FREERTOS_TASK_C_ADDITIONS_H == 1
 
 #ifdef __cplusplus
 }

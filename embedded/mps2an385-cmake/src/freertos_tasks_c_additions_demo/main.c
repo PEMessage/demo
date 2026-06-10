@@ -18,6 +18,23 @@ void setup() {
     NVIC_Init();
 }
 
+#define ARRAY_WORDS 200
+
+static void __attribute__((noinline)) nestedFunc(int depth)
+{
+    volatile uint32_t arr[ARRAY_WORDS];
+    for (int i = 0; i < ARRAY_WORDS; i++) arr[i] = (uint32_t)i;
+
+    printf("  depth=%d, arr[%d] on stack, free=%ld words\n",
+           depth, ARRAY_WORDS, (long)taskGetStackFreeSize());
+
+    if (depth > 0) {
+        nestedFunc(depth - 1);
+    }
+
+    (void)arr[0]; /* suppress unused warning */
+}
+
 void TaskTest(void *pvParameters) {
     intptr_t delay = (intptr_t)pvParameters;
     vTaskDelay(delay);
@@ -27,6 +44,14 @@ void TaskTest(void *pvParameters) {
     printf("%s:\n", pcTaskGetName(handle));
     printf("  stack size words: %lu\n", (unsigned long)taskGetStackSizeWords(handle));
     printf("  stack size bytes: %lu\n", (unsigned long)taskGetStackSizeBytes(handle));
+    printf("  baseline free words: %ld\n", (long)taskGetStackFreeSize());
+    printf("  baseline watermark words: %ld\n", (long)uxTaskGetStackHighWaterMark(NULL));
+
+    nestedFunc(1);
+
+    printf("  after nestedFunc, free words: %ld\n",
+           (long)taskGetStackFreeSize());
+    printf("  after nestedFunc watermark words: %ld\n", (long)uxTaskGetStackHighWaterMark(NULL));
     printf("\n");
 
     while (1) {
