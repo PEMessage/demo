@@ -5,26 +5,24 @@
 #include <errno.h>
 
 // -------------------- Configuration & Globals --------------------
-#define CANARY_SIZE     4                          // 4 bytes for uint32_t
-#define CANARY_MAGIC    0xBEADBEEF                 // fixed magic value
-
-static uint32_t canary_value = CANARY_MAGIC;       // canary stored as uint32_t
+#define CANARY_SIZE     4                          // canary size in bytes, freely adjustable
+static char canary_malloc[CANARY_SIZE] = {0xDE, 0xED, 0xBE, 0xEF};       // canary stored as byte array, initially zero-filled
 
 // -------------------- Helper Functions --------------------
 // Initialize canary (fixed, no randomisation)
 void init_canary(void) {
-    canary_value = CANARY_MAGIC;   // no longer reads from /dev/urandom
+    // null opt
 }
 
 // Fill canary at the end of the buffer (buffer must have at least len + CANARY_SIZE bytes)
 void fill_canary(void *buf, size_t len) {
-    memcpy((char*)buf + len, &canary_value, CANARY_SIZE);
+    memcpy((char*)buf + len, canary_malloc, CANARY_SIZE);
 }
 
 // Check the canary at the end of the buffer
 // Return: 0 if intact, -1 if corrupted
 int check_canary(void *buf, size_t len) {
-    if (memcmp((char*)buf + len, &canary_value, CANARY_SIZE) != 0) {
+    if (memcmp((char*)buf + len, canary_malloc, CANARY_SIZE) != 0) {
         fprintf(stderr, "ERROR: Buffer overflow detected (canary corrupted)\n");
         return -1;
     }
@@ -107,7 +105,7 @@ int main() {
     // ========== Stack array test ==========
     printf("\n=== Stack array test ===\n");
     size_t stack_len = 20;
-    char stack_buf[stack_len + CANARY_SIZE];   // reserve space for canary (now 4 bytes)
+    char stack_buf[stack_len + CANARY_SIZE];   // reserve space for canary
 
     strncpy(stack_buf, "Hello, stack!", stack_len);
     fill_canary(stack_buf, stack_len);
