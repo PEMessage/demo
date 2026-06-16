@@ -5,6 +5,10 @@
 #include <errno.h>
 #include <inttypes.h>
 
+// -------------------- Dummy lock unlock placeholder -------------
+void lock() {};
+void unlock() {};
+
 // -------------------- Configuration & Globals --------------------
 #define CANARY_SIZE     4
 static char canary_malloc[CANARY_SIZE] = {(char)0xDE, (char)0xED, (char)0xBE, (char)0xEF};
@@ -43,8 +47,10 @@ void* my_malloc(size_t size) {
     if (size == 0) return NULL;
 
     size_t total = sizeof(size_t) + size + CANARY_SIZE;
+    lock();
     void *raw_ptr = malloc(total);
-    if (!raw_ptr) return NULL;
+    unlock();
+    if (!raw_ptr) { return NULL; }
 
     // Store the user-requested size
     *(size_t*)raw_ptr = size;
@@ -61,31 +67,37 @@ void* my_malloc(size_t size) {
 int my_check(void *user_ptr) {
     if (user_ptr == NULL) return 0;
 
+    lock();
     void *raw_ptr = (char*)user_ptr - sizeof(size_t);
     size_t size = *(size_t*)raw_ptr;
 
     if (size == 0) {
         fprintf(stderr, "ERROR: check %p fail at %p due to size is 0\n", user_ptr, __builtin_return_address(0));
+        unlock();
         return CANARY_ERR_INVALID_SIZE;
     }
 
     int is_corrupt = check_canary(user_ptr, size);
     if (is_corrupt) {
         fprintf(stderr, "ERROR: check %p fail at %p due to %d\n", user_ptr, __builtin_return_address(0), is_corrupt);
+        unlock();
         return is_corrupt;
     }
 
-    return 0;
+    unlock();
+    return CANARY_OK;
 }
 
 void my_free(void *user_ptr) {
     if (user_ptr == NULL) return;
 
+    lock();
     void *raw_ptr = (char*)user_ptr - sizeof(size_t);
     size_t size = *(size_t*)raw_ptr;
 
     if (size == 0) {
         fprintf(stderr, "ERROR: free %p fail at %p due to size is 0\n", user_ptr, __builtin_return_address(0));
+        unlock();
         abort();
         return; // CANARY_ERR_INVALID_SIZE
     }
@@ -93,6 +105,7 @@ void my_free(void *user_ptr) {
     int is_corrupt = check_canary(user_ptr, size);
     if (is_corrupt) {
         fprintf(stderr, "ERROR: free %p fail at %p due to %d\n", user_ptr, __builtin_return_address(0), is_corrupt);
+        unlock();
         abort();
         return; // is_corrupt
     }
@@ -104,6 +117,7 @@ void my_free(void *user_ptr) {
 
     *(size_t*)raw_ptr = 0;
     free(raw_ptr);
+    unlock();
 }
 
 // -------------------- Test main() --------------------
