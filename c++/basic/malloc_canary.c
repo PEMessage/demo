@@ -3,30 +3,39 @@
 #include <stdint.h>
 #include <string.h>
 #include <errno.h>
+#include <inttypes.h>
 
 // -------------------- Configuration & Globals --------------------
-#define CANARY_SIZE     4                          // canary size in bytes, freely adjustable
-static char canary_malloc[CANARY_SIZE] = {0xDE, 0xED, 0xBE, 0xEF};       // canary stored as byte array, initially zero-filled
+#define CANARY_SIZE     4
+static char canary_malloc[CANARY_SIZE] = {(char)0xDE, (char)0xED, (char)0xBE, (char)0xEF};
+static char canary_free[CANARY_SIZE]   = {(char)0xFE, (char)0xED, (char)0xFA, (char)0xCE};   // 新增释放金丝雀
+
+#define CANARY_OK 0
+#define CANARY_ERR -1
+#define CANARY_ERR_USE_AFTER_FREE -2
+#define CANARY_ERR_INVALID_SIZE -3
 
 // -------------------- Helper Functions --------------------
-// Initialize canary (fixed, no randomisation)
-void init_canary(void) {
-    // null opt
-}
+void init_canary(void) { /* nothing */ }
 
-// Fill canary at the end of the buffer (buffer must have at least len + CANARY_SIZE bytes)
 void fill_canary(void *buf, size_t len) {
     memcpy((char*)buf + len, canary_malloc, CANARY_SIZE);
 }
 
-// Check the canary at the end of the buffer
-// Return: 0 if intact, -1 if corrupted
-int check_canary(void *buf, size_t len) {
-    if (memcmp((char*)buf + len, canary_malloc, CANARY_SIZE) != 0) {
-        fprintf(stderr, "ERROR: Buffer overflow detected (canary corrupted)\n");
-        return -1;
+void clear_canary(void *buf, size_t len) {             // 新增
+    memcpy((char*)buf + len, canary_free, CANARY_SIZE);
+}
+
+int check_canary(void *buf, size_t len) {              // 保持原样，仅检查 canary_malloc
+    if (memcmp((char*)buf + len, canary_malloc, CANARY_SIZE) == 0) {
+        return CANARY_OK;
     }
-    return 0;
+    if (memcmp((char*)buf + len, canary_free, CANARY_SIZE) == 0) {
+        fprintf(stderr, "ERROR: Use-After-Free detected %p, %zu\n", buf, len);
+        return CANARY_ERR_USE_AFTER_FREE;
+    }
+    fprintf(stderr, "ERROR: Canary corrupt detected %p, %zu\n", buf, len);
+    return CANARY_ERR;
 }
 
 // -------------------- Heap Memory Wrappers --------------------
@@ -49,23 +58,51 @@ void* my_malloc(size_t size) {
 }
 
 // Actively check the canary of a user pointer
-int my_check(void *ptr) {
-    if (ptr == NULL) return 0;
+int my_check(void *user_ptr) {
+    if (user_ptr == NULL) return 0;
 
-    void *raw_ptr = (char*)ptr - sizeof(size_t);
+    void *raw_ptr = (char*)user_ptr - sizeof(size_t);
     size_t size = *(size_t*)raw_ptr;
 
-    return check_canary(ptr, size);
-}
-
-void my_free(void *ptr) {
-    if (ptr == NULL) return;
-
-    if (my_check(ptr) != 0) {
-        abort();   // overflow detected, abort program
+    if (size == 0) {
+        fprintf(stderr, "ERROR: check %p fail at %p due to size is 0\n", user_ptr, __builtin_return_address(0));
+        return CANARY_ERR_INVALID_SIZE;
     }
 
-    void *raw_ptr = (char*)ptr - sizeof(size_t);
+    int is_corrupt = check_canary(user_ptr, size);
+    if (is_corrupt) {
+        fprintf(stderr, "ERROR: check %p fail at %p due to %d\n", user_ptr, __builtin_return_address(0), is_corrupt);
+        return is_corrupt;
+    }
+
+    return 0;
+}
+
+void my_free(void *user_ptr) {
+    if (user_ptr == NULL) return;
+
+    void *raw_ptr = (char*)user_ptr - sizeof(size_t);
+    size_t size = *(size_t*)raw_ptr;
+
+    if (size == 0) {
+        fprintf(stderr, "ERROR: free %p fail at %p due to size is 0\n", user_ptr, __builtin_return_address(0));
+        abort();
+        return; // CANARY_ERR_INVALID_SIZE
+    }
+
+    int is_corrupt = check_canary(user_ptr, size);
+    if (is_corrupt) {
+        fprintf(stderr, "ERROR: free %p fail at %p due to %d\n", user_ptr, __builtin_return_address(0), is_corrupt);
+        abort();
+        return; // is_corrupt
+    }
+
+    // Above same as my_check
+
+    clear_canary(user_ptr, size);
+    memset(user_ptr, 0, size);
+
+    *(size_t*)raw_ptr = 0;
     free(raw_ptr);
 }
 
@@ -100,6 +137,8 @@ int main() {
 #else
     my_free(heap_buf);
     printf("Heap buffer freed normally.\n");
+    // 模拟 Use-After-Free 检测（注释掉以通过测试）
+    // if (my_check(heap_buf) == 0) ...   // 会触发 USE-AFTER-FREE 错误
 #endif
 
     // ========== Stack array test ==========
