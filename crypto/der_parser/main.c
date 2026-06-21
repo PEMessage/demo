@@ -277,20 +277,14 @@ int der_begin(der_parser_t *p, uint8_t tag, uint8_t **out_endpos) {
 
     int res = 0;
     der_tlv_t tlv = {0};
-    der_tlv_t seq = {
-        .tag = tag,
-        .len = 0,
-        .value = NULL,
-    };
     if ((res = der_read_tl(p, &tlv))) {
         p->pos = save_pos;
         return res;
     }
-    if (tlv_cmp(&tlv, &seq) & TLV_CMP_TAG_Msk) {
+    if (tlv.tag != tag) {
         p->pos = save_pos;
         return DER_ERR_UNEXPECT_TAG;
     }
-
 
     *out_endpos = p->pos + tlv.len;
     return DER_OK;
@@ -346,7 +340,7 @@ void der_print_pkcs1_privatekey(der_parser_t *p) {
         }
         der_tlv_t tlv = {0};
         res = der_read_tlv(p, &tlv);
-        if (res) {
+        if (res || tlv.tag != DER_INTEGER) {
             printf("Error: failed to read '%s' (code %d)\n", field_names[i], res);
             return;
         }
@@ -354,16 +348,17 @@ void der_print_pkcs1_privatekey(der_parser_t *p) {
         der_print_tlv(&tlv);
     }
 
-    while (p->pos < endpos) {
-        der_tlv_t tlv = {0};
-        res = der_read_tlv(p, &tlv);
-        if (res) {
-            printf("Error: failed to read otherPrimeInfo\n");
-            return;
-        }
-        printf("otherPrimeInfo:\n");
-        der_print_tlv(&tlv);
-    }
+    // WE DONT PROCESS ATTR otherPrimeInfos
+    // while (p->pos < endpos) {
+    //     der_tlv_t tlv = {0};
+    //     res = der_read_tlv(p, &tlv);
+    //     if (res) {
+    //         printf("Error: failed to read otherPrimeInfo\n");
+    //         return;
+    //     }
+    //     printf("otherPrimeInfo:\n");
+    //     der_print_tlv(&tlv);
+    // }
 
     if (der_end(p, endpos)) {
         printf("Warning: SEQUENCE length mismatch (trailing bytes?)\n");
