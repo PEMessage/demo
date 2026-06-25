@@ -43,6 +43,14 @@
 
 #define configGENERATE_RUN_TIME_STATS            0
 
+// For freertos_runtimestat
+//
+// #define configGENERATE_RUN_TIME_STATS            1
+// #define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS()  __RunTimeStatsTimerInit()
+// #define portGET_RUN_TIME_COUNTER_VALUE()          (0xFFFFFFFFUL - CMSDK_TIMER0->VALUE)
+//
+// void __RunTimeStatsTimerInit(void);
+
 #define configUSE_PREEMPTION                     1
 #define configUSE_IDLE_HOOK                      0
 #define configUSE_TICK_HOOK                      0

@@ -3,6 +3,14 @@
 #include "task.h"
 #include <stdio.h>
 
+// For freertos_runtimestat
+// void __RunTimeStatsTimerInit(void) {
+//     CMSDK_TIMER0->CTRL = 0;
+//     CMSDK_TIMER0->RELOAD = 0xFFFFFFFFUL;
+//     CMSDK_TIMER0->VALUE = 0xFFFFFFFFUL;
+//     CMSDK_TIMER0->CTRL = CMSDK_TIMER_CTRL_EN_Msk;
+// }
+
 void vAssertCalled( const char * pcFileName,
                     uint32_t ulLine )
 {
