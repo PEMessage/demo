@@ -34,7 +34,8 @@ val projects = listOf(
     "helloworld-kotlin" to "app/helloworld-kotlin/",
     "calc-aes" to "app/calc-aes/",
     "zero-padding-3des-cbc" to "app/zero-padding-3des-cbc/",
-    "selfsign-cert" to "app/selfsign-cert/"
+    "selfsign-cert" to "app/selfsign-cert/",
+    "rsa-op" to "app/rsa-op/"
 )
 
 // See: https://docs.gradle.org/8.14.2/userguide/multi_project_builds.html#multi_project_layout
