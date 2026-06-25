@@ -6,6 +6,7 @@ import java.security.interfaces.RSAPrivateCrtKey;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.MGF1ParameterSpec;
+import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.PSSParameterSpec;
 
 // org.bouncycastle.asn1.pkcs.RSAPrivateKey used fully qualified below
@@ -46,6 +47,19 @@ public class App {
             printKeyEncodings(privCrt, pub);
         }
 
+        // ── Restore KeyPair from PKCS#8 encoding ───────────────────
+        {
+            byte[] privCrtEncoded = privCrt.getEncoded();
+            KeyPair kpRestored = restoreKeyPair(privCrtEncoded);
+
+            boolean privMatch = privCrt.equals(kpRestored.getPrivate());
+            boolean pubMatch = pub.equals(kpRestored.getPublic());
+            System.out.println("── [*] Restore KeyPair from PKCS#8 encoding");
+            System.out.println("  Priv restored match : " + privMatch);
+            System.out.println("  Pub restored match  : " + pubMatch);
+            System.out.println();
+        }
+
         // ── Signing & Verification ────────────────────────────────
         {
             byte[] data = "12345678".getBytes();
@@ -78,6 +92,16 @@ public class App {
         KeyPair kp = kpg.generateKeyPair();
         System.out.println("Done.\n");
         return kp;
+    }
+
+    static KeyPair restoreKeyPair(byte[] pkcs8) throws Exception {
+        KeyFactory kf = KeyFactory.getInstance("RSA", "BC");
+        RSAPrivateCrtKey priv = (RSAPrivateCrtKey)
+                kf.generatePrivate(new PKCS8EncodedKeySpec(pkcs8));
+        RSAPublicKey pub = (RSAPublicKey)
+                kf.generatePublic(new java.security.spec.RSAPublicKeySpec(
+                        priv.getModulus(), priv.getPublicExponent()));
+        return new KeyPair(pub, priv);
     }
 
     // ═══════════════════════════════════════════════════════════════
