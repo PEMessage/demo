@@ -6,6 +6,9 @@ cmake_minimum_required(VERSION 3.12)
 include(${CMAKE_SOURCE_DIR}/toolchain-arm.cmake)
 # endif()
 
+# # Include toolchain file (switch between system newlib and self-built newlib)
+# include(${CMAKE_SOURCE_DIR}/toolchain-arm-newlib.cmake)
+
 # Project name (doesn't affect embedded builds)
 project(mps2an385-minimal LANGUAGES C ASM)
 
@@ -19,6 +22,7 @@ add_subdirectory(lib/FreeRTOS-Kernel)
 add_subdirectory(lib/LVGL)
 add_subdirectory(lib/TraceRecorder)
 add_subdirectory(lib/misc)
+# add_subdirectory(lib/newlib)
 
 # Credit: deepseek-v3-0324
 macro(add_executable_with_binaries MODULE_NAME)
