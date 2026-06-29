@@ -32,6 +32,7 @@ rootProject.name = "multi-project"
 val projects = listOf(
     "helloworld" to "app/helloworld/",
     "helloworld-kotlin" to "app/helloworld-kotlin/",
+    "helloworld-jna" to "app/helloworld-jna/",
     "calc-aes" to "app/calc-aes/",
     "zero-padding-3des-cbc" to "app/zero-padding-3des-cbc/",
     "selfsign-cert" to "app/selfsign-cert/",
