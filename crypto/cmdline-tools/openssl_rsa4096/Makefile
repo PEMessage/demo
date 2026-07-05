@@ -250,7 +250,47 @@ $(PREFIX_DIR)/data.rsa.sig3: $(DATAS) $(KEYS) $(CERTS)
 	xxd -l 64 $@
 
 # =======================================
-verify: $(SIGNATURES) $(DATAS) $(KEYS) $(CERTS)
+ENCRYPTED := \
+			 $(PREFIX_DIR)/data.bin.enc_pkcs1 \
+			 $(PREFIX_DIR)/data.bin.enc_oaep
+
+$(PREFIX_DIR)/data.bin.enc_pkcs1: $(DATAS) $(KEYS)
+	# ======================================
+	# 加密方式1: PKCS#1 v1.5 padding (传统方式)
+	# ======================================
+	# 最大明文长度: 512 - (8 + 3) = 501 字节 (4096-bit key)
+	# 0x00 || 0x02 || PS || 0x00 || D
+	# Header:
+	# 	0x00: 必须是 0x00。这保证了构造的大整数在模幂运算后不会超过模数长度
+	# 	0x02: 与签名填充的 0x01 区分开
+	# PS: 填充字符串随机且非零, 这串随机数中的每一个字节都必须不为 0, 至少 8 个字节
+	# 0x00: 唯一分隔符
+	openssl pkeyutl -encrypt -in $(PREFIX_DIR)/data.bin \
+		-inkey $(PREFIX_DIR)/$(KEY_ID)_public_key.pem -pubin \
+		-out $@ -pkeyopt rsa_padding_mode:pkcs1
+	xxd -l 64 $@
+
+$(PREFIX_DIR)/data.bin.enc_oaep: $(DATAS) $(KEYS)
+	# ======================================
+	# 加密方式2: OAEP padding (SHA-256, 更现代更安全)
+	# ======================================
+	# 最大明文长度: 512 - 2*32 - 2 = 446 字节 (4096-bit key)
+	# 四个参数可调
+	# 	label: 默认空标签
+	# 	Hash Algorithm: 通常SHA256
+	# 	Mask Generation Function, MGF: 通常固定为MGF1, 理论可变, 但是目前没有其他实现
+	# 	MGF1 Digest: 通常和Hash Algorithm 一致
+	openssl pkeyutl -encrypt -in $(PREFIX_DIR)/data.bin \
+		-inkey $(PREFIX_DIR)/$(KEY_ID)_public_key.pem -pubin \
+		-out $@ \
+		-pkeyopt rsa_padding_mode:oaep \
+		-pkeyopt rsa_oaep_md:sha256 \
+		-pkeyopt rsa_mgf1_md:sha256 \
+		-pkeyopt rsa_oaep_label:64656d6f
+	xxd -l 64 $@
+
+# =======================================
+verify: $(SIGNATURES) $(DATAS) $(KEYS) $(CERTS) $(ENCRYPTED)
 	# ======================================
 	# 校验方式1: dgst -verify (对应签名方式1)
 	# ======================================
@@ -311,3 +351,29 @@ verify: $(SIGNATURES) $(DATAS) $(KEYS) $(CERTS)
 		$(PREFIX_DIR)/$(KEY_ID)_cert_v1.pem
 	openssl verify -CAfile $(PREFIX_DIR)/$(KEY_ID)_cert_v3.pem \
 		$(PREFIX_DIR)/$(KEY_ID)_cert_v3.pem
+
+	# ======================================
+	# 解密验证: 私钥解密 -> 与原始数据比对
+	# ======================================
+	# (1) 解密 PKCS#1 v1.5 密文
+	openssl pkeyutl -decrypt \
+		-in $(PREFIX_DIR)/data.bin.enc_pkcs1 \
+		-inkey $(PREFIX_DIR)/$(KEY_ID)_private_key.pem \
+		-out $(PREFIX_DIR)/data.bin.dec_pkcs1 \
+		-pkeyopt rsa_padding_mode:pkcs1
+	cmp -s $(PREFIX_DIR)/data.bin $(PREFIX_DIR)/data.bin.dec_pkcs1 && \
+		echo "[Decrypt PKCS#1 v1.5]: OK" || \
+		echo "[Decrypt PKCS#1 v1.5]: MISMATCH"
+
+	# (2) 解密 OAEP 密文
+	openssl pkeyutl -decrypt \
+		-in $(PREFIX_DIR)/data.bin.enc_oaep \
+		-inkey $(PREFIX_DIR)/$(KEY_ID)_private_key.pem \
+		-out $(PREFIX_DIR)/data.bin.dec_oaep \
+		-pkeyopt rsa_padding_mode:oaep \
+		-pkeyopt rsa_oaep_md:sha256 \
+		-pkeyopt rsa_mgf1_md:sha256 \
+		-pkeyopt rsa_oaep_label:64656d6f
+	cmp -s $(PREFIX_DIR)/data.bin $(PREFIX_DIR)/data.bin.dec_oaep && \
+		echo "[Decrypt OAEP SHA-256]: OK" || \
+		echo "[Decrypt OAEP SHA-256]: MISMATCH"
