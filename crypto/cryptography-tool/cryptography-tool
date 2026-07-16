@@ -1,0 +1,79 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "cryptography",
+# ]
+# ///
+"""CLI over pyca/cryptography primitives."""
+
+import argparse
+import sys
+
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+BLOCK_SIZE = 16
+
+
+def hex_bytes(value: str) -> bytes:
+    try:
+        return bytes.fromhex(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid hex string: {value!r}")
+
+
+def aes_ctr_xcrypt(key: bytes, nonce: bytes, data: bytes) -> bytes:
+    """CTR mode built on the raw AES block primitive (single-block ECB).
+
+    keystream[i] = AES_ECB(key, nonce + i mod 2^128); out = data XOR keystream
+    """
+    block_enc = Cipher(algorithms.AES(key), modes.ECB()).encryptor()
+    counter = int.from_bytes(nonce, "big")
+    out = bytearray()
+    for offset in range(0, len(data), BLOCK_SIZE):
+        keystream = block_enc.update(counter.to_bytes(BLOCK_SIZE, "big"))
+        chunk = data[offset : offset + BLOCK_SIZE]
+        out += bytes(d ^ k for d, k in zip(chunk, keystream))
+        counter = (counter + 1) % (1 << 128)
+    block_enc.finalize()
+    return bytes(out)
+
+
+def cmd_aes_ctr(args: argparse.Namespace) -> None:
+    if len(args.key) not in (16, 24, 32):
+        sys.exit("error: key must be 16, 24, or 32 bytes (AES-128/192/256)")
+    if len(args.nonce) != BLOCK_SIZE:
+        sys.exit(f"error: nonce must be {BLOCK_SIZE} bytes")
+    print(aes_ctr_xcrypt(args.key, args.nonce, args.data).hex())
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="cryptography-tool")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    aes_ctr = sub.add_parser(
+        "aes-ctr",
+        help="AES-CTR built from the raw AES block primitive",
+    )
+    aes_ctr.add_argument(
+        "op",
+        choices=["encrypt", "decrypt"],
+        help="operation (CTR is symmetric; both apply the same keystream)",
+    )
+    aes_ctr.add_argument("--key", type=hex_bytes, required=True, help="hex key (16/24/32 bytes)")
+    aes_ctr.add_argument("--nonce", type=hex_bytes, required=True, help="hex nonce/initial counter (16 bytes)")
+    aes_ctr.add_argument("--data", type=hex_bytes, required=True, help="hex plaintext/ciphertext")
+    aes_ctr.set_defaults(func=cmd_aes_ctr)
+
+    return parser
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()
+
+# vim: ft=python
