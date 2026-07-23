@@ -1,0 +1,22 @@
+default:
+    just --list
+
+# configure cmake project (run once)
+configure:
+    cmake -B build
+
+# build a specific target (e.g. just build src/uv_version)
+build target:
+    cmake --build build --target `basename {{target}}`
+
+# build + run a specific target (e.g. just run src/uv_version)
+run target: (build target)
+    ./build/{{target}}/`basename {{target}}`
+
+# build all targets
+build-all:
+    cmake --build build
+
+# remove build directory
+clean:
+    rm -rf build
