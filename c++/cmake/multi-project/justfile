@@ -3,7 +3,7 @@ default:
 
 # configure cmake project (run once)
 configure:
-    cmake -B build
+    cmake -B build -DCMAKE_BUILD_TYPE=Debug
 
 # build a specific target (e.g. just build src/uv_version)
 build target:
