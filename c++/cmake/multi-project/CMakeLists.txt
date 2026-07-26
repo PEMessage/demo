@@ -16,3 +16,4 @@ set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(libuv)
 
 add_subdirectory(src/uv_version)
+add_subdirectory(src/echo_server)
