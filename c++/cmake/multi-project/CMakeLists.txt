@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(multi-project LANGUAGES C)
+project(multi-project LANGUAGES C CXX)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -17,3 +17,4 @@ FetchContent_MakeAvailable(libuv)
 
 add_subdirectory(src/uv_version)
 add_subdirectory(src/echo_server)
+add_subdirectory(src/uv_coro)
