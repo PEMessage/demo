@@ -43,15 +43,19 @@ public:
     int run()  { return uv_run(&loop_, UV_RUN_DEFAULT); }
     void stop() { uv_stop(&loop_); }
 
-    // Allow passing to uv_* functions:  uv_timer_init(loop, ...)
     operator uv_loop_t*() { return &loop_; }
 };
 
 thread_local event_loop *event_loop::current_ = nullptr;
 
 // ============================================================
-//  Timer — reusable timer watcher
+//  Timer — reusable timer watcher (embedded uv_timer_t)
 // ============================================================
+//
+//  close_and_delete() is only valid when the Timer itself is
+//  heap-allocated (as in sleep_for).  The close callback runs
+//  after libuv finishes closing the handle, then deletes `this`.
+
 struct Timer {
     uv_timer_t handle{};
     io_op *waiter = nullptr;
@@ -59,11 +63,24 @@ struct Timer {
 
     Timer(event_loop &loop) { uv_timer_init(loop, &handle); }
 
+    Timer(const Timer&) = delete;
+    Timer& operator=(const Timer&) = delete;
+    Timer(Timer&&) = delete;
+    Timer& operator=(Timer&&) = delete;
+
     void start(uint64_t ms) {
         pending = 0;
         uv_timer_start(&handle, on_fire, ms, 0);
     }
     void stop() { uv_timer_stop(&handle); }
+
+    // heap-allocated Timer only: close the handle, then delete `this`
+    // when the event loop drains the closing queue.
+    void close_and_delete() {
+        uv_close((uv_handle_t *)&handle, [](uv_handle_t *h) {
+            delete static_cast<Timer *>(h->data);
+        });
+    }
 
     static void on_fire(uv_timer_t *h) {
         auto *self = static_cast<Timer *>(h->data);
@@ -76,6 +93,9 @@ struct Timer {
     }
 };
 
+// ============================================================
+//  TimerAwait — the co_await-able object for a Timer
+// ============================================================
 struct TimerAwait : io_op {
     Timer *timer;
     explicit TimerAwait(Timer *t) : timer(t) {}
@@ -95,31 +115,17 @@ struct TimerAwait : io_op {
 };
 
 // ============================================================
-//  sleep_for — convenience one-shot timer
+//  sleep_for — convenience one-shot, reuses Timer + TimerAwait
 // ============================================================
 auto sleep_for(event_loop &loop, uint64_t ms) {
-    struct Awaiter : io_op {
-        uv_timer_t *timer;
-
-        Awaiter(event_loop &l, uint64_t m) {
-            timer = new uv_timer_t;
-            uv_timer_init(l, timer);
-            uv_timer_start(timer,
-                [](uv_timer_t *t) {
-                    static_cast<Awaiter *>(t->data)->complete();
-                }, m, 0);
+    struct Awaiter : TimerAwait {
+        Awaiter(event_loop &l, uint64_t m)
+            : TimerAwait(new Timer(l)) {
+            timer->start(m);
         }
-
-        bool await_ready() { return false; }
-
-        void await_suspend(std::coroutine_handle<> h) {
-            parent = h;
-            timer->data = this;
-        }
-
-        void await_resume() {
-            uv_close((uv_handle_t *)timer,
-                [](uv_handle_t *h) { delete (uv_timer_t *)h; });
+        void await_resume() noexcept {
+            TimerAwait::await_resume();
+            timer->close_and_delete();   // Timer manages its own lifecycle
         }
     };
     return Awaiter(loop, ms);
