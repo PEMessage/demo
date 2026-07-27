@@ -1,20 +1,8 @@
 #include <uv.h>
 #include <coroutine>
 #include <cstdio>
+#include <exception>
 #include <utility>
-
-// ============================================================
-//  Task — minimal coroutine return type
-// ============================================================
-struct Task {
-    struct promise_type {
-        Task get_return_object() { return {}; }
-        std::suspend_never initial_suspend() { return {}; }
-        std::suspend_never final_suspend() noexcept { return {}; }
-        void return_void() {}
-        void unhandled_exception() {}
-    };
-};
 
 // ============================================================
 //  io_op — the resume primitive
@@ -49,13 +37,89 @@ public:
 thread_local event_loop *event_loop::current_ = nullptr;
 
 // ============================================================
-//  Timer — reusable timer watcher (embedded uv_timer_t)
+//  Task — lazy, awaitable coroutine return type
 // ============================================================
 //
-//  close_and_delete() is only valid when the Timer itself is
-//  heap-allocated (as in sleep_for).  The close callback runs
-//  after libuv finishes closing the handle, then deletes `this`.
+//  initial_suspend = always  → coroutine doesn't start until
+//    it is either co_await'ed or schedule()'d.
+//
+//  final_suspend resumes the parent (co_await case) or
+//  self-destructs (root / scheduled case).
 
+struct Task {
+    struct promise_type;
+    using handle_t = std::coroutine_handle<promise_type>;
+
+    handle_t coro;
+
+    Task(handle_t h) : coro(h) {}
+    Task(Task &&o) : coro(std::exchange(o.coro, nullptr)) {}
+    ~Task() { if (coro) coro.destroy(); }
+
+    Task(const Task&) = delete;
+    Task& operator=(const Task&) = delete;
+
+    // ── co_await Task ───────────────────────────────────────
+    bool await_ready() { return false; }
+
+    void await_suspend(std::coroutine_handle<> caller) {
+        coro.promise().parent = caller;  // tell child who to wake
+        coro.resume();                   // start the child
+    }
+
+    void await_resume() {
+        // child finished normally (void return)
+    }
+
+    // ── promise_type ────────────────────────────────────────
+    struct promise_type {
+        std::coroutine_handle<> parent;  // who to resume when we finish
+
+        Task get_return_object() {
+            return Task{handle_t::from_promise(*this)};
+        }
+
+        std::suspend_always initial_suspend() { return {}; }
+
+        auto final_suspend() noexcept {
+            struct FinalAwaiter {
+                bool await_ready() noexcept { return false; }
+
+                std::coroutine_handle<>
+                await_suspend(handle_t h) noexcept {
+                    auto parent = h.promise().parent;
+                    if (!parent) {
+                        h.destroy();  // root / scheduled: self-destruct
+                        return std::noop_coroutine();
+                    }
+                    return parent;    // co_await child: resume parent
+                }
+
+                void await_resume() noexcept {}
+            };
+            return FinalAwaiter{};
+        }
+
+        void return_void() {}
+        void unhandled_exception() { std::terminate(); }
+    };
+};
+
+// ============================================================
+//  event_loop::schedule — launch a root / concurrent task
+// ============================================================
+//  Takes ownership, releases the Task so its destructor is a
+//  no-op.  The coroutine self-destructs on completion.
+
+void schedule(Task &&t) {
+    auto h = t.coro;
+    t.coro = nullptr;  // release — ~Task() won't destroy
+    h.resume();         // start (initial_suspend → body)
+}
+
+// ============================================================
+//  Timer — reusable timer watcher (embedded uv_timer_t)
+// ============================================================
 struct Timer {
     uv_timer_t handle{};
     io_op *waiter = nullptr;
@@ -74,8 +138,6 @@ struct Timer {
     }
     void stop() { uv_timer_stop(&handle); }
 
-    // heap-allocated Timer only: close the handle, then delete `this`
-    // when the event loop drains the closing queue.
     void close_and_delete() {
         uv_close((uv_handle_t *)&handle, [](uv_handle_t *h) {
             delete static_cast<Timer *>(h->data);
@@ -94,7 +156,7 @@ struct Timer {
 };
 
 // ============================================================
-//  TimerAwait — the co_await-able object for a Timer
+//  TimerAwait
 // ============================================================
 struct TimerAwait : io_op {
     Timer *timer;
@@ -115,7 +177,7 @@ struct TimerAwait : io_op {
 };
 
 // ============================================================
-//  sleep_for — convenience one-shot, reuses Timer + TimerAwait
+//  sleep_for
 // ============================================================
 auto sleep_for(event_loop &loop, uint64_t ms) {
     struct Awaiter : TimerAwait {
@@ -125,16 +187,30 @@ auto sleep_for(event_loop &loop, uint64_t ms) {
         }
         void await_resume() noexcept {
             TimerAwait::await_resume();
-            timer->close_and_delete();   // Timer manages its own lifecycle
+            timer->close_and_delete();
         }
     };
     return Awaiter(loop, ms);
 }
 
 // ============================================================
-//  Coroutine demos
+//  sub-task demo — co_await a Task
 // ============================================================
+Task say_hello(event_loop &loop) {
+    co_await sleep_for(loop, 300);
+    printf("Hello from sub-task!\n");
+}
 
+Task sequential_demo(event_loop &loop) {
+    printf("=== sequential co_await ===\n");
+    co_await say_hello(loop);   // wait for sub-task to finish
+    co_await say_hello(loop);   // then run it again
+    printf("done\n");
+}
+
+// ============================================================
+//  concurrent demo — schedule() fires-and-forgets
+// ============================================================
 Task countdown(event_loop &loop) {
     for (int i = 3; i > 0; i--) {
         printf("%d...\n", i);
@@ -153,11 +229,9 @@ Task greet(event_loop &loop) {
 Task reusable_demo(event_loop &loop) {
     printf("=== reusable timer ===\n");
     Timer t(loop);
-
     t.start(700);
     co_await TimerAwait(&t);
     printf("first tick\n");
-
     t.start(300);
     co_await TimerAwait(&t);
     printf("second tick (same timer)\n");
@@ -166,15 +240,19 @@ Task reusable_demo(event_loop &loop) {
 // ============================================================
 //  main
 // ============================================================
-
 int main() {
     event_loop loop;
 
+    // concurrent — fire-and-forget via schedule()
     printf("=== concurrent ===\n");
-    countdown(loop);
-    greet(loop);
+    // schedule(countdown(loop));
+    // schedule(greet(loop));
 
-    reusable_demo(loop);
+    // sequential — co_await a sub-task
+    schedule(sequential_demo(loop));
+
+    // reusable timer — also scheduled
+    // schedule(reusable_demo(loop));
 
     printf("> entering loop\n");
     loop.run();
