@@ -1,0 +1,3 @@
+add_executable(uv_coro_simple_kota main.cpp)
+target_link_libraries(uv_coro_simple_kota PRIVATE uv_a)
+target_compile_features(uv_coro_simple_kota PRIVATE cxx_std_20)
