@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <exception>
 #include <utility>
+#include <vector>
 
 // ============================================================
 //  io_op — the resume primitive
@@ -15,12 +16,26 @@ struct io_op {
 // ============================================================
 //  event_loop — owns the uv_loop_t, thread-local singleton
 // ============================================================
+//  schedule() queues tasks; an idle watcher resumes them during
+//  the event loop's idle phase — same as kota.
+
+struct Task;
+
 class event_loop {
     uv_loop_t loop_{};
+    uv_idle_t idle_{};
+    std::vector<std::coroutine_handle<>> tasks_;
+    bool idle_running_ = false;
     static thread_local event_loop *current_;
 
 public:
-    event_loop()  { uv_loop_init(&loop_); current_ = this; }
+    event_loop() {
+        uv_loop_init(&loop_);
+        uv_idle_init(&loop_, &idle_);
+        idle_.data = this;
+        current_ = this;
+    }
+
     ~event_loop() { uv_loop_close(&loop_); current_ = nullptr; }
 
     event_loop(const event_loop&) = delete;
@@ -32,6 +47,10 @@ public:
     void stop() { uv_stop(&loop_); }
 
     operator uv_loop_t*() { return &loop_; }
+
+    // ── schedule ────────────────────────────────────────────
+
+    void schedule(Task &&t);
 };
 
 thread_local event_loop *event_loop::current_ = nullptr;
@@ -39,13 +58,6 @@ thread_local event_loop *event_loop::current_ = nullptr;
 // ============================================================
 //  Task — lazy, awaitable coroutine return type
 // ============================================================
-//
-//  initial_suspend = always  → coroutine doesn't start until
-//    it is either co_await'ed or schedule()'d.
-//
-//  final_suspend resumes the parent (co_await case) or
-//  self-destructs (root / scheduled case).
-
 struct Task {
     struct promise_type;
     using handle_t = std::coroutine_handle<promise_type>;
@@ -63,17 +75,15 @@ struct Task {
     bool await_ready() { return false; }
 
     void await_suspend(std::coroutine_handle<> caller) {
-        coro.promise().parent = caller;  // tell child who to wake
-        coro.resume();                   // start the child
+        coro.promise().parent = caller;
+        coro.resume();
     }
 
-    void await_resume() {
-        // child finished normally (void return)
-    }
+    void await_resume() {}
 
     // ── promise_type ────────────────────────────────────────
     struct promise_type {
-        std::coroutine_handle<> parent;  // who to resume when we finish
+        std::coroutine_handle<> parent;
 
         Task get_return_object() {
             return Task{handle_t::from_promise(*this)};
@@ -84,17 +94,15 @@ struct Task {
         auto final_suspend() noexcept {
             struct FinalAwaiter {
                 bool await_ready() noexcept { return false; }
-
                 std::coroutine_handle<>
                 await_suspend(handle_t h) noexcept {
                     auto parent = h.promise().parent;
                     if (!parent) {
-                        h.destroy();  // root / scheduled: self-destruct
+                        h.destroy();
                         return std::noop_coroutine();
                     }
-                    return parent;    // co_await child: resume parent
+                    return parent;
                 }
-
                 void await_resume() noexcept {}
             };
             return FinalAwaiter{};
@@ -106,19 +114,37 @@ struct Task {
 };
 
 // ============================================================
-//  event_loop::schedule — launch a root / concurrent task
+//  schedule (out-of-line — uses Task definition above)
 // ============================================================
-//  Takes ownership, releases the Task so its destructor is a
-//  no-op.  The coroutine self-destructs on completion.
 
-void schedule(Task &&t) {
-    auto h = t.coro;
-    t.coro = nullptr;  // release — ~Task() won't destroy
-    h.resume();         // start (initial_suspend → body)
+void event_loop::schedule(Task &&t) {
+    auto h = static_cast<std::coroutine_handle<>>(t.coro);
+    t.coro = nullptr;  // release ownership
+
+    if (!idle_running_) {
+        idle_running_ = true;
+        uv_idle_start(&idle_,
+            [](uv_idle_t *idle) {
+                auto *self = static_cast<event_loop *>(idle->data);
+
+                while (!self->tasks_.empty()) {
+                    auto batch = std::move(self->tasks_);
+                    self->tasks_.clear();
+                    for (auto h : batch) {
+                        h.resume();
+                    }
+                }
+
+                uv_idle_stop(idle);
+                self->idle_running_ = false;
+            });
+    }
+
+    tasks_.push_back(h);
 }
 
 // ============================================================
-//  Timer — reusable timer watcher (embedded uv_timer_t)
+//  Timer — reusable timer watcher
 // ============================================================
 struct Timer {
     uv_timer_t handle{};
@@ -203,14 +229,11 @@ Task say_hello(event_loop &loop) {
 
 Task sequential_demo(event_loop &loop) {
     printf("=== sequential co_await ===\n");
-    co_await say_hello(loop);   // wait for sub-task to finish
-    co_await say_hello(loop);   // then run it again
+    co_await say_hello(loop);
+    co_await say_hello(loop);
     printf("done\n");
 }
 
-// ============================================================
-//  concurrent demo — schedule() fires-and-forgets
-// ============================================================
 Task countdown(event_loop &loop) {
     for (int i = 3; i > 0; i--) {
         printf("%d...\n", i);
@@ -240,19 +263,15 @@ Task reusable_demo(event_loop &loop) {
 // ============================================================
 //  main
 // ============================================================
+
 int main() {
     event_loop loop;
 
-    // concurrent — fire-and-forget via schedule()
     printf("=== concurrent ===\n");
-    // schedule(countdown(loop));
-    // schedule(greet(loop));
-
-    // sequential — co_await a sub-task
-    schedule(sequential_demo(loop));
-
-    // reusable timer — also scheduled
-    // schedule(reusable_demo(loop));
+    loop.schedule(countdown(loop));
+    loop.schedule(greet(loop));
+    loop.schedule(sequential_demo(loop));
+    loop.schedule(reusable_demo(loop));
 
     printf("> entering loop\n");
     loop.run();
