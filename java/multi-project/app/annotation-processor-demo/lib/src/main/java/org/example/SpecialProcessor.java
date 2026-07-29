@@ -1,17 +1,18 @@
 package org.example;
 
+import com.squareup.javapoet.*;
+
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.RoundEnvironment;
 import javax.annotation.processing.SupportedAnnotationTypes;
 import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.PackageElement;
-import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.*;
 import javax.tools.JavaFileObject;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
@@ -38,7 +39,10 @@ public class SpecialProcessor extends AbstractProcessor {
         }
 
         String packageName = getPackageName(specialClasses.get(0));
+
+        // invoke JavaPoet version (active)
         generateRegistry(packageName, specialClasses);
+
         return true;
     }
 
@@ -50,10 +54,79 @@ public class SpecialProcessor extends AbstractProcessor {
         return "";
     }
 
+    // ============================================================
+    // Approach 1: JavaPoet (active)
+    // ============================================================
     private void generateRegistry(String packageName, List<TypeElement> classes) {
+        ClassName registryClass = ClassName.get(packageName, "SpecialRegistry");
+        ClassName entryClass = registryClass.nestedClass("Entry");
+
+        ParameterizedTypeName classOfWildcard = ParameterizedTypeName.get(
+                ClassName.get(Class.class), WildcardTypeName.subtypeOf(Object.class));
+
+        TypeSpec entryType = TypeSpec.classBuilder("Entry")
+                .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
+                .addField(FieldSpec.builder(classOfWildcard, "type",
+                        Modifier.PUBLIC, Modifier.FINAL).build())
+                .addField(FieldSpec.builder(String.class, "name",
+                        Modifier.PUBLIC, Modifier.FINAL).build())
+                .addMethod(MethodSpec.constructorBuilder()
+                        .addParameter(classOfWildcard, "type")
+                        .addParameter(String.class, "name")
+                        .addStatement("this.type = type")
+                        .addStatement("this.name = name")
+                        .build())
+                .build();
+
+        ParameterizedTypeName listOfEntries = ParameterizedTypeName.get(
+                ClassName.get(List.class), entryClass);
+
+        CodeBlock.Builder staticBlock = CodeBlock.builder();
+        for (TypeElement cls : classes) {
+            Special sp = cls.getAnnotation(Special.class);
+            String name = (sp != null) ? sp.name() : "";
+            staticBlock.addStatement("ENTRIES.add(new $T($T.class, $S))",
+                    entryClass, ClassName.get(cls), name);
+        }
+
+        TypeSpec registry = TypeSpec.classBuilder("SpecialRegistry")
+                .addModifiers(Modifier.PUBLIC)
+                .addType(entryType)
+                .addField(FieldSpec.builder(listOfEntries, "ENTRIES")
+                        .addModifiers(Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
+                        .initializer("new $T<>()", ArrayList.class)
+                        .build())
+                .addStaticBlock(staticBlock.build())
+                .addMethod(MethodSpec.methodBuilder("getAll")
+                        .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
+                        .returns(listOfEntries)
+                        .addStatement("return $T.unmodifiableList(ENTRIES)", Collections.class)
+                        .build())
+                .build();
+
+        try {
+            JavaFile.builder(packageName, registry)
+                    .skipJavaLangImports(true)
+                    .build()
+                    .writeTo(processingEnv.getFiler());
+            System.out.println("[SpecialProcessor] generated SpecialRegistry with "
+                    + classes.size() + " entries (via JavaPoet)");
+        } catch (IOException e) {
+            processingEnv.getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.ERROR,
+                    "Failed to generate SpecialRegistry: " + e.getMessage());
+        }
+    }
+
+    // ============================================================
+    // Approach 2: raw println (reference only, not in use)
+    // ============================================================
+    @SuppressWarnings("unused")
+    private void generateRegistryManual(String packageName, List<TypeElement> classes) {
         try {
             JavaFileObject file = processingEnv.getFiler()
-                    .createSourceFile((packageName.isEmpty() ? "" : packageName + ".") + "SpecialRegistry");
+                    .createSourceFile((packageName.isEmpty() ? "" : packageName + ".")
+                            + "SpecialRegistryManual");
             try (PrintWriter out = new PrintWriter(file.openWriter())) {
                 if (!packageName.isEmpty()) {
                     out.println("package " + packageName + ";");
@@ -63,7 +136,7 @@ public class SpecialProcessor extends AbstractProcessor {
                 out.println("import java.util.List;");
                 out.println("import java.util.ArrayList;");
                 out.println();
-                out.println("public class SpecialRegistry {");
+                out.println("public class SpecialRegistryManual {");
                 out.println();
                 out.println("    public static class Entry {");
                 out.println("        public final Class<?> type;");
@@ -91,12 +164,12 @@ public class SpecialProcessor extends AbstractProcessor {
                 out.println("    }");
                 out.println("}");
             }
-            System.out.println("[SpecialProcessor] generated SpecialRegistry with "
-                    + classes.size() + " entries");
+            System.out.println("[SpecialProcessor] generated SpecialRegistryManual with "
+                    + classes.size() + " entries (via println)");
         } catch (IOException e) {
             processingEnv.getMessager().printMessage(
                     javax.tools.Diagnostic.Kind.ERROR,
-                    "Failed to generate SpecialRegistry: " + e.getMessage());
+                    "Failed: " + e.getMessage());
         }
     }
 }
