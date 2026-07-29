@@ -38,7 +38,9 @@ val projects = listOf(
     "selfsign-cert" to "app/selfsign-cert/",
     "rsa-op" to "app/rsa-op/",
     "aes-ctr-demo" to "app/aes-ctr-demo/",
-    "block-cipher-mac" to "app/block-cipher-mac/"
+    "block-cipher-mac" to "app/block-cipher-mac/",
+    "annotation-processor-lib" to "app/annotation-processor-demo/lib/",
+    "annotation-processor-demo" to "app/annotation-processor-demo/demo/"
 )
 
 // See: https://docs.gradle.org/8.14.2/userguide/multi_project_builds.html#multi_project_layout
