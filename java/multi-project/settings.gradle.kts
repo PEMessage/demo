@@ -33,12 +33,12 @@ val projects = listOf(
     "helloworld" to "app/helloworld/",
     "helloworld-kotlin" to "app/helloworld-kotlin/",
     "helloworld-jna" to "app/helloworld-jna/",
-    "calc-aes" to "app/calc-aes/",
-    "zero-padding-3des-cbc" to "app/zero-padding-3des-cbc/",
-    "selfsign-cert" to "app/selfsign-cert/",
-    "rsa-op" to "app/rsa-op/",
-    "aes-ctr-demo" to "app/aes-ctr-demo/",
-    "block-cipher-mac" to "app/block-cipher-mac/",
+    "calc-aes" to "app/crypto/calc-aes/",
+    "zero-padding-3des-cbc" to "app/crypto/zero-padding-3des-cbc/",
+    "selfsign-cert" to "app/crypto/selfsign-cert/",
+    "rsa-op" to "app/crypto/rsa-op/",
+    "aes-ctr-demo" to "app/crypto/aes-ctr-demo/",
+    "block-cipher-mac" to "app/crypto/block-cipher-mac/",
     "annotation-processor-lib" to "app/annotation-processor-demo/lib/",
     "annotation-processor-demo" to "app/annotation-processor-demo/demo/"
 )
