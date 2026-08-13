@@ -1,0 +1,7 @@
+{
+  global:
+    a_say;
+    b_say;
+  local:
+    *;
+};
