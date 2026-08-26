@@ -5,7 +5,11 @@
 #include <limits>
 #include <utility>
 
-// function under test
+// ===========================================================================
+// Implementations
+// ===========================================================================
+
+// Original, flawed: the round-trip check misses signed/unsigned wrap-around.
 template <typename To, typename From>
 auto try_narrow(const From& from) noexcept -> std::optional<To>
 {
@@ -140,8 +144,8 @@ try_narrow_roundtrip_sfinae(const From& from) noexcept
     return to;
 }
 
-// out-parameter version: returns bool (true == success), writes result into the
-// first reference argument.
+// Out-parameter version: returns bool (true == success), writes into the first
+// reference argument. Only assigns on success.
 template <typename To, typename From>
 bool try_narrow_into(To& to, const From& from) noexcept
 {
@@ -164,6 +168,10 @@ bool try_narrow_into(To& to, const From& from) noexcept
     return true;
 }
 
+// ===========================================================================
+// Test harness (X-macro)
+// ===========================================================================
+
 // print a value to a stream (promote char/bool to int for readability)
 template <typename T>
 void print_val(std::ostream& os, const T& v) {
@@ -174,138 +182,98 @@ void print_val(std::ostream& os, const T& v) {
         os << v;
 }
 
-// RUN one case through a given implementation IMPL (a function template name).
-// Just prints the result; no expected value is required.
-#define RUN(IMPL, desc, To, From, val)                                      \
-    do {                                                                    \
-        auto r = IMPL<To, From>(val);                                       \
-        std::cout << "  " << (desc) << " -> "                               \
+// Handler for optional-returning implementations. The implementation name is
+// supplied via the IMPL_FN macro (defined right before ALL_CASES/INT_CASES).
+#define OPT_CASE(desc, To, From, val)                                        \
+    do {                                                                     \
+        auto r = IMPL_FN<To, From>(val);                                     \
+        std::cout << "  " << (desc) << " -> "                                \
                   << (r.has_value() ? "kept" : "lost");                     \
         if (r.has_value()) { std::cout << "  value="; print_val(std::cout, *r); } \
-        std::cout << "\n";                                                  \
-    } while (0)
+        std::cout << "\n";                                                   \
+    } while (0);
 
-// RUN2: same as RUN but for the out-param form (returns bool, writes into a
-// local To variable, leaving it untouched on failure).
-#define RUN2(desc, To, From, val)                                          \
-    do {                                                                    \
-        To _o{}; bool _ok = try_narrow_into(_o, val);                       \
+// Handler for the out-param form (try_narrow_into).
+#define INTO_CASE(desc, To, From, val)                                       \
+    do {                                                                     \
+        To _o{}; bool _ok = try_narrow_into(_o, val);                        \
         std::cout << "  " << (desc) << " -> "                               \
-                  << (_ok ? "kept" : "lost");                              \
+                  << (_ok ? "kept" : "lost");                               \
         if (_ok) { std::cout << "  value="; print_val(std::cout, _o); }     \
-        std::cout << "\n";                                                  \
-    } while (0)
+        std::cout << "\n";                                                   \
+    } while (0);
 
-// Cases that work for ANY implementation (integral + floating point).
-#define UNIVERSAL_CASES(IMPL)                                               \
-    RUN(IMPL, "int 100         -> short       ", short, int, 100);           \
-    RUN(IMPL, "int 40000       -> short (of)  ", short, int, 40000);        \
-    RUN(IMPL, "int 16777217    -> float (pl)  ", float, int, 16777217);     \
-    RUN(IMPL, "int 100         -> float       ", float, int, 100);          \
-    RUN(IMPL, "double 1.5      -> int (ft)    ", int, double, 1.5);        \
-    RUN(IMPL, "double 2.0      -> int         ", int, double, 2.0);         \
-    RUN(IMPL, "float 1.1       -> double      ", double, float, 1.1f);      \
-    RUN(IMPL, "int 300         -> schar (of)  ", signed char, int, 300);    \
-    RUN(IMPL, "int 2           -> bool (n01)  ", bool, int, 2);            \
-    RUN(IMPL, "bool true       -> int         ", int, bool, true);          \
-    RUN(IMPL, "int -1          -> unsigned    ", unsigned, int, -1);        \
-    RUN(IMPL, "unsigned 4e9    -> int (of)    ", int, unsigned, 4000000000u); \
-    RUN(IMPL, "int -1          -> ushort      ", unsigned short, int, -1);  \
-    RUN(IMPL, "uchar 200       -> schar (sl)  ", signed char, unsigned char, (unsigned char)200);
+// The single source of truth for all test cases. X is a per-case handler macro
+// taking (desc, To, From, val). OPT_CASE and INTO_CASE are just two different X
+// handlers, so they share this one list (RUN and RUN2 merged via X-macro).
+#define ALL_CASES(X)                                                         \
+    X("int 100         -> short       ", short, int, 100)                    \
+    X("int 40000       -> short (of)  ", short, int, 40000)                 \
+    X("int 16777217    -> float (pl)  ", float, int, 16777217)              \
+    X("int 100         -> float       ", float, int, 100)                   \
+    X("double 1.5      -> int (ft)    ", int, double, 1.5)                 \
+    X("double 2.0      -> int         ", int, double, 2.0)                  \
+    X("float 1.1       -> double      ", double, float, 1.1f)               \
+    X("int 300         -> schar (of)  ", signed char, int, 300)             \
+    X("int 2           -> bool (n01)  ", bool, int, 2)                      \
+    X("bool true       -> int         ", int, bool, true)                   \
+    X("int -1          -> unsigned    ", unsigned, int, -1)                 \
+    X("unsigned 4e9    -> int (of)    ", int, unsigned, 4000000000u)        \
+    X("int -1          -> ushort      ", unsigned short, int, -1)           \
+    X("uchar 200       -> schar (sl)  ", signed char, unsigned char, (unsigned char)200) \
+    X("unsigned 2147483647-> int      ", int, unsigned, 2147483647u)        \
+    X("unsigned 2147483648-> int (of) ", int, unsigned, 2147483648u)        \
+    X("long long 1e18  -> int (of)    ", int, long long, 1000000000000000000LL) \
+    X("int -128        -> schar       ", signed char, int, -128)             \
+    X("int -129        -> schar (of)  ", signed char, int, -129)             \
+    X("int 127         -> schar       ", signed char, int, 127)              \
+    X("int 128         -> schar (of)  ", signed char, int, 128)              \
+    X("uchar 255       -> schar (sl)  ", signed char, unsigned char, (unsigned char)255) \
+    X("schar -1        -> int         ", int, signed char, (signed char)-1)  \
+    X("uchar 255       -> int         ", int, unsigned char, (unsigned char)255) \
+    X("ushort 65535    -> short (of)  ", short, unsigned short, (unsigned short)65535) \
+    X("double 0.1      -> float (pl)  ", float, double, 0.1)                \
+    X("double 0.5      -> int (ft)    ", int, double, 0.5)                  \
+    X("double 3.0      -> int         ", int, double, 3.0)                  \
+    X("bool false      -> int         ", int, bool, false)                  \
+    X("int 0           -> bool        ", bool, int, 0)                      \
+    X("int 1           -> bool        ", bool, int, 1)                      \
+    X("bool true       -> unsigned    ", unsigned, bool, true)              \
+    X("unsigned 0      -> int         ", int, unsigned, 0u)
 
-// Cases for std::in_range based impl (standard integer types only; char/bool
-// are rejected by its static_assert, so they are excluded here).
-#define INT_CASES(IMPL)                                                     \
-    RUN(IMPL, "int 100         -> short       ", short, int, 100);          \
-    RUN(IMPL, "int 40000       -> short (of)  ", short, int, 40000);        \
-    RUN(IMPL, "int -1          -> unsigned    ", unsigned, int, -1);        \
-    RUN(IMPL, "unsigned 4e9    -> int (of)    ", int, unsigned, 4000000000u); \
-    RUN(IMPL, "int -1          -> ushort      ", unsigned short, int, -1);
-
-// Extra boundary / precision / sign cases.
-#define EXTRA_CASES(IMPL)                                                  \
-    RUN(IMPL, "unsigned 2147483647-> int        ", int, unsigned, 2147483647u); \
-    RUN(IMPL, "unsigned 2147483648-> int (of)   ", int, unsigned, 2147483648u); \
-    RUN(IMPL, "long long 1e18  -> int (of)      ", int, long long, 1000000000000000000LL); \
-    RUN(IMPL, "int -128        -> schar         ", signed char, int, -128); \
-    RUN(IMPL, "int -129        -> schar (of)    ", signed char, int, -129); \
-    RUN(IMPL, "int 127         -> schar         ", signed char, int, 127);  \
-    RUN(IMPL, "int 128         -> schar (of)    ", signed char, int, 128);  \
-    RUN(IMPL, "uchar 255       -> schar (sl)    ", signed char, unsigned char, (unsigned char)255); \
-    RUN(IMPL, "schar -1        -> int           ", int, signed char, (signed char)-1); \
-    RUN(IMPL, "uchar 255       -> int           ", int, unsigned char, (unsigned char)255); \
-    RUN(IMPL, "ushort 65535    -> short (of)    ", short, unsigned short, (unsigned short)65535); \
-    RUN(IMPL, "double 0.1      -> float (pl)    ", float, double, 0.1);    \
-    RUN(IMPL, "double 0.5      -> int (ft)      ", int, double, 0.5);      \
-    RUN(IMPL, "double 3.0      -> int           ", int, double, 3.0);      \
-    RUN(IMPL, "bool false      -> int           ", int, bool, false);      \
-    RUN(IMPL, "int 0           -> bool          ", bool, int, 0);          \
-    RUN(IMPL, "int 1           -> bool          ", bool, int, 1);          \
-    RUN(IMPL, "bool true       -> unsigned      ", unsigned, bool, true);  \
-    RUN(IMPL, "unsigned 0      -> int           ", int, unsigned, 0u);
-
-// Cases for the out-param form (try_narrow_into). Same tuples as the other
-// lists, but driven through RUN2 instead of RUN.
-#define INTO_CASES()                                                         \
-    RUN2("int 100         -> short       ", short, int, 100);                \
-    RUN2("int 40000       -> short (of)  ", short, int, 40000);              \
-    RUN2("int 16777217    -> float (pl)  ", float, int, 16777217);           \
-    RUN2("int 100         -> float       ", float, int, 100);                \
-    RUN2("double 1.5      -> int (ft)    ", int, double, 1.5);              \
-    RUN2("double 2.0      -> int         ", int, double, 2.0);               \
-    RUN2("float 1.1       -> double      ", double, float, 1.1f);            \
-    RUN2("int 300         -> schar (of)  ", signed char, int, 300);          \
-    RUN2("int 2           -> bool (n01)  ", bool, int, 2);                  \
-    RUN2("bool true       -> int         ", int, bool, true);                \
-    RUN2("int -1          -> unsigned    ", unsigned, int, -1);              \
-    RUN2("unsigned 4e9    -> int (of)    ", int, unsigned, 4000000000u);     \
-    RUN2("int -1          -> ushort      ", unsigned short, int, -1);        \
-    RUN2("uchar 200       -> schar (sl)  ", signed char, unsigned char, (unsigned char)200); \
-    RUN2("unsigned 2147483647-> int      ", int, unsigned, 2147483647u);      \
-    RUN2("unsigned 2147483648-> int (of) ", int, unsigned, 2147483648u);      \
-    RUN2("long long 1e18  -> int (of)    ", int, long long, 1000000000000000000LL); \
-    RUN2("int -128        -> schar       ", signed char, int, -128);         \
-    RUN2("int -129        -> schar (of)  ", signed char, int, -129);         \
-    RUN2("int 127         -> schar       ", signed char, int, 127);          \
-    RUN2("int 128         -> schar (of)  ", signed char, int, 128);          \
-    RUN2("uchar 255       -> schar (sl)  ", signed char, unsigned char, (unsigned char)255); \
-    RUN2("schar -1        -> int         ", int, signed char, (signed char)-1); \
-    RUN2("uchar 255       -> int         ", int, unsigned char, (unsigned char)255); \
-    RUN2("ushort 65535    -> short (of)  ", short, unsigned short, (unsigned short)65535); \
-    RUN2("double 0.1      -> float (pl)  ", float, double, 0.1);            \
-    RUN2("double 0.5      -> int (ft)    ", int, double, 0.5);              \
-    RUN2("double 3.0      -> int         ", int, double, 3.0);              \
-    RUN2("bool false      -> int         ", int, bool, false);              \
-    RUN2("int 0           -> bool        ", bool, int, 0);                  \
-    RUN2("int 1           -> bool        ", bool, int, 1);                  \
-    RUN2("bool true       -> unsigned    ", unsigned, bool, true);          \
-    RUN2("unsigned 0      -> int         ", int, unsigned, 0u);
+// standard-integer-only cases (std::in_range rejects char/bool)
+#define INT_CASES(X)                                                         \
+    X("int 100         -> short       ", short, int, 100)                    \
+    X("int 40000       -> short (of)  ", short, int, 40000)                  \
+    X("int -1          -> unsigned    ", unsigned, int, -1)                 \
+    X("unsigned 4e9    -> int (of)    ", int, unsigned, 4000000000u)        \
+    X("int -1          -> ushort      ", unsigned short, int, -1)
 
 int main()
 {
     std::cout << "=== try_narrow (original, flawed) ===\n";
-    UNIVERSAL_CASES(try_narrow)
+    #define IMPL_FN try_narrow
+    ALL_CASES(OPT_CASE)
+    #undef IMPL_FN
 
     std::cout << "\n=== try_narrow_inrange (std::in_range) ===\n";
     std::cout << "(standard integer types only)\n";
-    INT_CASES(try_narrow_inrange)
+    #define IMPL_FN try_narrow_inrange
+    INT_CASES(OPT_CASE)
+    #undef IMPL_FN
 
     std::cout << "\n=== try_narrow_roundtrip (minimal fix) ===\n";
-    UNIVERSAL_CASES(try_narrow_roundtrip)
-
-    std::cout << "\n--- extra cases: try_narrow (original, flawed) ---\n";
-    EXTRA_CASES(try_narrow)
-    std::cout << "\n--- extra cases: try_narrow_roundtrip (minimal fix) ---\n";
-    EXTRA_CASES(try_narrow_roundtrip)
+    #define IMPL_FN try_narrow_roundtrip
+    ALL_CASES(OPT_CASE)
+    #undef IMPL_FN
 
     std::cout << "\n=== try_narrow_roundtrip_sfinae (SFINAE overloads) ===\n";
-    UNIVERSAL_CASES(try_narrow_roundtrip_sfinae)
-    std::cout << "\n--- extra cases: try_narrow_roundtrip_sfinae ---\n";
-    EXTRA_CASES(try_narrow_roundtrip_sfinae)
+    #define IMPL_FN try_narrow_roundtrip_sfinae
+    ALL_CASES(OPT_CASE)
+    #undef IMPL_FN
 
-    // out-parameter version (returns bool, writes into first ref argument)
     std::cout << "\n=== try_narrow_into (out-param, returns bool) ===\n";
-    INTO_CASES()
+    ALL_CASES(INTO_CASE)
 
     return 0;
 }
