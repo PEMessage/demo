@@ -140,6 +140,30 @@ try_narrow_roundtrip_sfinae(const From& from) noexcept
     return to;
 }
 
+// out-parameter version: returns bool (true == success), writes result into the
+// first reference argument.
+template <typename To, typename From>
+bool try_narrow_into(To& to, const From& from) noexcept
+{
+    const auto tmp = static_cast<To>(from);   // work on a temp first
+    if (static_cast<From>(tmp) != from) {
+        return false;
+    }
+    // minimal fix: detect signed/unsigned wrap-around that round-trips back
+    if constexpr (std::is_unsigned_v<To> && std::is_signed_v<From>) {
+        if (from < 0) {
+            return false;               // signed -> unsigned: sign lost
+        }
+    }
+    if constexpr (std::is_signed_v<To> && std::is_unsigned_v<From>) {
+        if (tmp < 0) {
+            return false;               // unsigned -> signed: overflow wrap
+        }
+    }
+    to = tmp;   // only assign the output reference on success
+    return true;
+}
+
 // print a value to a stream (promote char/bool to int for readability)
 template <typename T>
 void print_val(std::ostream& os, const T& v) {
@@ -158,6 +182,17 @@ void print_val(std::ostream& os, const T& v) {
         std::cout << "  " << (desc) << " -> "                               \
                   << (r.has_value() ? "kept" : "lost");                     \
         if (r.has_value()) { std::cout << "  value="; print_val(std::cout, *r); } \
+        std::cout << "\n";                                                  \
+    } while (0)
+
+// RUN2: same as RUN but for the out-param form (returns bool, writes into a
+// local To variable, leaving it untouched on failure).
+#define RUN2(desc, To, From, val)                                          \
+    do {                                                                    \
+        To _o{}; bool _ok = try_narrow_into(_o, val);                       \
+        std::cout << "  " << (desc) << " -> "                               \
+                  << (_ok ? "kept" : "lost");                              \
+        if (_ok) { std::cout << "  value="; print_val(std::cout, _o); }     \
         std::cout << "\n";                                                  \
     } while (0)
 
@@ -209,6 +244,43 @@ void print_val(std::ostream& os, const T& v) {
     RUN(IMPL, "bool true       -> unsigned      ", unsigned, bool, true);  \
     RUN(IMPL, "unsigned 0      -> int           ", int, unsigned, 0u);
 
+// Cases for the out-param form (try_narrow_into). Same tuples as the other
+// lists, but driven through RUN2 instead of RUN.
+#define INTO_CASES()                                                         \
+    RUN2("int 100         -> short       ", short, int, 100);                \
+    RUN2("int 40000       -> short (of)  ", short, int, 40000);              \
+    RUN2("int 16777217    -> float (pl)  ", float, int, 16777217);           \
+    RUN2("int 100         -> float       ", float, int, 100);                \
+    RUN2("double 1.5      -> int (ft)    ", int, double, 1.5);              \
+    RUN2("double 2.0      -> int         ", int, double, 2.0);               \
+    RUN2("float 1.1       -> double      ", double, float, 1.1f);            \
+    RUN2("int 300         -> schar (of)  ", signed char, int, 300);          \
+    RUN2("int 2           -> bool (n01)  ", bool, int, 2);                  \
+    RUN2("bool true       -> int         ", int, bool, true);                \
+    RUN2("int -1          -> unsigned    ", unsigned, int, -1);              \
+    RUN2("unsigned 4e9    -> int (of)    ", int, unsigned, 4000000000u);     \
+    RUN2("int -1          -> ushort      ", unsigned short, int, -1);        \
+    RUN2("uchar 200       -> schar (sl)  ", signed char, unsigned char, (unsigned char)200); \
+    RUN2("unsigned 2147483647-> int      ", int, unsigned, 2147483647u);      \
+    RUN2("unsigned 2147483648-> int (of) ", int, unsigned, 2147483648u);      \
+    RUN2("long long 1e18  -> int (of)    ", int, long long, 1000000000000000000LL); \
+    RUN2("int -128        -> schar       ", signed char, int, -128);         \
+    RUN2("int -129        -> schar (of)  ", signed char, int, -129);         \
+    RUN2("int 127         -> schar       ", signed char, int, 127);          \
+    RUN2("int 128         -> schar (of)  ", signed char, int, 128);          \
+    RUN2("uchar 255       -> schar (sl)  ", signed char, unsigned char, (unsigned char)255); \
+    RUN2("schar -1        -> int         ", int, signed char, (signed char)-1); \
+    RUN2("uchar 255       -> int         ", int, unsigned char, (unsigned char)255); \
+    RUN2("ushort 65535    -> short (of)  ", short, unsigned short, (unsigned short)65535); \
+    RUN2("double 0.1      -> float (pl)  ", float, double, 0.1);            \
+    RUN2("double 0.5      -> int (ft)    ", int, double, 0.5);              \
+    RUN2("double 3.0      -> int         ", int, double, 3.0);              \
+    RUN2("bool false      -> int         ", int, bool, false);              \
+    RUN2("int 0           -> bool        ", bool, int, 0);                  \
+    RUN2("int 1           -> bool        ", bool, int, 1);                  \
+    RUN2("bool true       -> unsigned    ", unsigned, bool, true);          \
+    RUN2("unsigned 0      -> int         ", int, unsigned, 0u);
+
 int main()
 {
     std::cout << "=== try_narrow (original, flawed) ===\n";
@@ -230,6 +302,10 @@ int main()
     UNIVERSAL_CASES(try_narrow_roundtrip_sfinae)
     std::cout << "\n--- extra cases: try_narrow_roundtrip_sfinae ---\n";
     EXTRA_CASES(try_narrow_roundtrip_sfinae)
+
+    // out-parameter version (returns bool, writes into first ref argument)
+    std::cout << "\n=== try_narrow_into (out-param, returns bool) ===\n";
+    INTO_CASES()
 
     return 0;
 }
