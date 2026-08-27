@@ -78,6 +78,68 @@ auto try_narrow_roundtrip(const From& from) noexcept -> std::optional<To>
     return to;
 }
 
+// ---------------------------------------------------------------------------
+// try_narrow_roundtrip_sfinae: pure SFINAE dispatch -- overloads selected by
+// std::enable_if on the return type, NO if constexpr anywhere. The signedness
+// combinations for integral types are split into separate overloads, and a
+// final overload handles all non-integral (float) conversions.
+// ---------------------------------------------------------------------------
+// 1) both signed
+template <typename To, typename From>
+std::enable_if_t<std::is_integral_v<To> && std::is_integral_v<From> &&
+                 std::is_signed_v<To> && std::is_signed_v<From>, std::optional<To>>
+try_narrow_roundtrip_sfinae(const From& from) noexcept
+{
+    const auto to = static_cast<To>(from);
+    if (static_cast<From>(to) != from) return std::nullopt;
+    return to;
+}
+
+// 2) both unsigned
+template <typename To, typename From>
+std::enable_if_t<std::is_integral_v<To> && std::is_integral_v<From> &&
+                 std::is_unsigned_v<To> && std::is_unsigned_v<From>, std::optional<To>>
+try_narrow_roundtrip_sfinae(const From& from) noexcept
+{
+    const auto to = static_cast<To>(from);
+    if (static_cast<From>(to) != from) return std::nullopt;
+    return to;
+}
+
+// 3) To unsigned, From signed -> sign lost
+template <typename To, typename From>
+std::enable_if_t<std::is_integral_v<To> && std::is_integral_v<From> &&
+                 std::is_unsigned_v<To> && std::is_signed_v<From>, std::optional<To>>
+try_narrow_roundtrip_sfinae(const From& from) noexcept
+{
+    const auto to = static_cast<To>(from);
+    if (static_cast<From>(to) != from) return std::nullopt;
+    if (from < 0) return std::nullopt;      // signed -> unsigned: sign lost
+    return to;
+}
+
+// 4) To signed, From unsigned -> overflow wrap
+template <typename To, typename From>
+std::enable_if_t<std::is_integral_v<To> && std::is_integral_v<From> &&
+                 std::is_signed_v<To> && std::is_unsigned_v<From>, std::optional<To>>
+try_narrow_roundtrip_sfinae(const From& from) noexcept
+{
+    const auto to = static_cast<To>(from);
+    if (static_cast<From>(to) != from) return std::nullopt;
+    if (to < 0) return std::nullopt;        // unsigned -> signed: overflow wrap
+    return to;
+}
+
+// 5) non-integral (float<->float, float<->int, etc.)
+template <typename To, typename From>
+std::enable_if_t<!std::is_integral_v<To> || !std::is_integral_v<From>, std::optional<To>>
+try_narrow_roundtrip_sfinae(const From& from) noexcept
+{
+    const auto to = static_cast<To>(from);
+    if (static_cast<From>(to) != from) return std::nullopt;
+    return to;
+}
+
 // print a value to a stream (promote char/bool to int for readability)
 template <typename T>
 void print_val(std::ostream& os, const T& v) {
@@ -163,6 +225,11 @@ int main()
     EXTRA_CASES(try_narrow)
     std::cout << "\n--- extra cases: try_narrow_roundtrip (minimal fix) ---\n";
     EXTRA_CASES(try_narrow_roundtrip)
+
+    std::cout << "\n=== try_narrow_roundtrip_sfinae (SFINAE overloads) ===\n";
+    UNIVERSAL_CASES(try_narrow_roundtrip_sfinae)
+    std::cout << "\n--- extra cases: try_narrow_roundtrip_sfinae ---\n";
+    EXTRA_CASES(try_narrow_roundtrip_sfinae)
 
     return 0;
 }
