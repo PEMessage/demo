@@ -125,6 +125,28 @@ void print_val(std::ostream& os, const T& v) {
     RUN(IMPL, "unsigned 4e9    -> int (of)    ", int, unsigned, 4000000000u); \
     RUN(IMPL, "int -1          -> ushort      ", unsigned short, int, -1);
 
+// Extra boundary / precision / sign cases.
+#define EXTRA_CASES(IMPL)                                                  \
+    RUN(IMPL, "unsigned 2147483647-> int        ", int, unsigned, 2147483647u); \
+    RUN(IMPL, "unsigned 2147483648-> int (of)   ", int, unsigned, 2147483648u); \
+    RUN(IMPL, "long long 1e18  -> int (of)      ", int, long long, 1000000000000000000LL); \
+    RUN(IMPL, "int -128        -> schar         ", signed char, int, -128); \
+    RUN(IMPL, "int -129        -> schar (of)    ", signed char, int, -129); \
+    RUN(IMPL, "int 127         -> schar         ", signed char, int, 127);  \
+    RUN(IMPL, "int 128         -> schar (of)    ", signed char, int, 128);  \
+    RUN(IMPL, "uchar 255       -> schar (sl)    ", signed char, unsigned char, (unsigned char)255); \
+    RUN(IMPL, "schar -1        -> int           ", int, signed char, (signed char)-1); \
+    RUN(IMPL, "uchar 255       -> int           ", int, unsigned char, (unsigned char)255); \
+    RUN(IMPL, "ushort 65535    -> short (of)    ", short, unsigned short, (unsigned short)65535); \
+    RUN(IMPL, "double 0.1      -> float (pl)    ", float, double, 0.1);    \
+    RUN(IMPL, "double 0.5      -> int (ft)      ", int, double, 0.5);      \
+    RUN(IMPL, "double 3.0      -> int           ", int, double, 3.0);      \
+    RUN(IMPL, "bool false      -> int           ", int, bool, false);      \
+    RUN(IMPL, "int 0           -> bool          ", bool, int, 0);          \
+    RUN(IMPL, "int 1           -> bool          ", bool, int, 1);          \
+    RUN(IMPL, "bool true       -> unsigned      ", unsigned, bool, true);  \
+    RUN(IMPL, "unsigned 0      -> int           ", int, unsigned, 0u);
+
 int main()
 {
     std::cout << "=== try_narrow (original, flawed) ===\n";
@@ -136,6 +158,11 @@ int main()
 
     std::cout << "\n=== try_narrow_roundtrip (minimal fix) ===\n";
     UNIVERSAL_CASES(try_narrow_roundtrip)
+
+    std::cout << "\n--- extra cases: try_narrow (original, flawed) ---\n";
+    EXTRA_CASES(try_narrow)
+    std::cout << "\n--- extra cases: try_narrow_roundtrip (minimal fix) ---\n";
+    EXTRA_CASES(try_narrow_roundtrip)
 
     return 0;
 }
