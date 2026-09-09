@@ -1,0 +1,13 @@
+config("public_includes") {
+  include_dirs = [ "." ]
+}
+
+static_library("greeting") {
+  sources = [
+    "greeting.cc",
+    "greeting.h",
+  ]
+  public = [ "greeting.h" ]
+  public_configs = [ ":public_includes" ]
+  configs = [ "//build/config:warnings" ]
+}

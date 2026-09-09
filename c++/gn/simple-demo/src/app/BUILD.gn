@@ -1,0 +1,5 @@
+executable("app") {
+  sources = [ "main.cc" ]
+  deps = [ "//lib/greeting:greeting" ]
+  configs = [ "//build/config:warnings" ]
+}
