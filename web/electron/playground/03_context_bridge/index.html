@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+  <body>
+    <h1>Hello Electron (ESM)</h1>
+    <button onclick="alert('clicked')">Click Me</button>
+
+    <p>page sees <code>process</code>: <code id="page-process"></code></p>
+    <p>preload saw Electron: <code id="preload-version"></code></p>
+
+    <p>
+      <button onclick="showNative()">Ask native</button>
+      <code id="native-info"></code>
+    </p>
+
+    <script>
+      document.getElementById('page-process').textContent = typeof process;
+
+      function showNative() {
+        const { electron, node } = window.native.getInfo();
+        document.getElementById('native-info').textContent =
+          `electron ${electron}, node ${node}`;
+      }
+    </script>
+  </body>
+</html>
