@@ -1,0 +1,14 @@
+<!doctype html>
+<html>
+  <body>
+    <h1>Hello Electron (ESM)</h1>
+    <button onclick="alert('clicked')">Click Me</button>
+
+    <p>page sees <code>process</code>: <code id="page-process"></code></p>
+    <p>preload saw Electron: <code id="preload-version"></code></p>
+
+    <script>
+      document.getElementById('page-process').textContent = typeof process;
+    </script>
+  </body>
+</html>
