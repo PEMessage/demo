@@ -1,0 +1,10 @@
+{
+  "name": "electron-playground",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@types/node": "^24.13.6",
+    "electron": "^41.10.7",
+    "typescript": "^5.9.3"
+  }
+}
