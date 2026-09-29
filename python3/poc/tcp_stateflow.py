@@ -1,99 +1,127 @@
 """TCP connection state machine, modelled with Python generators.
 
-Each generator yields its current state name and receives events such as
-("recv", "ACK") or ("app", "close"). A connection only knows its own transmit
-wire (an outgoing queue); the Sim moves packets off that wire and turns them
-into "recv" events on the far end.
+Each generator is a pure state transducer: it *yields* intents and *receives*
+events. Nothing is globals and no I/O happens inside the machine.
 
-The packet sender is injected into each state machine (see ``send`` below),
-so nothing the machine touches is global.
+Values the machine yields (outbound):
+    ("state", name)              current state, driver waits for an event
+    ("send", seg)                request to transmit one segment
+    ("app", "recv", data)        deliver received data up to the application
+
+Events fed into the machine (inbound):
+    ("recv", seg)                a segment arrived from the network
+    ("app", "send", data)        application wants to push data
+    ("app", "close")             application wants to close
+    ("timer", "2MSL")            a timer expired
+
+A segment is a control name ("SYN", "ACK", "FIN", "RST", "SYN+ACK") or a data
+tuple ("DATA", payload).
 """
 
 from collections import deque
 
 
+def send(seg):
+    """Yield a transmit request; the driver decides what to do with it.
+
+    Written as a generator so state machines can say `yield from send("ACK")`
+    and stay side-effect free.
+    """
+    yield ("send", seg)
+
+
 # ---------- Active close path ----------
 
-def fin_wait_1(send):
-    event = yield "FIN_WAIT_1"
+def fin_wait_1():
+    event = yield ("state", "FIN_WAIT_1")
     if event == ("recv", "ACK"):
-        yield from fin_wait_2(send)
+        yield from fin_wait_2()
     elif event == ("recv", "FIN"):       # simultaneous close
-        send("ACK")
-        yield from closing(send)
+        yield from send("ACK")
+        yield from closing()
     elif event == ("recv", "RST"):
         return
 
-def fin_wait_2(send):
-    event = yield "FIN_WAIT_2"
+def fin_wait_2():
+    event = yield ("state", "FIN_WAIT_2")
     if event == ("recv", "FIN"):
-        send("ACK")
-        yield from time_wait(send)
+        yield from send("ACK")
+        yield from time_wait()
 
-def closing(send):
-    event = yield "CLOSING"
+def closing():
+    event = yield ("state", "CLOSING")
     if event == ("recv", "ACK"):
-        yield from time_wait(send)
+        yield from time_wait()
 
-def time_wait(send):
-    event = yield "TIME_WAIT"
+def time_wait():
+    event = yield ("state", "TIME_WAIT")
     if event == ("timer", "2MSL"):
         return
 
 
 # ---------- Passive close path ----------
 
-def close_wait(send):
-    event = yield "CLOSE_WAIT"
+def close_wait():
+    event = yield ("state", "CLOSE_WAIT")
     if event == ("app", "close"):
-        send("FIN")
-        yield from last_ack(send)
+        yield from send("FIN")
+        yield from last_ack()
 
-def last_ack(send):
-    event = yield "LAST_ACK"
+def last_ack():
+    event = yield ("state", "LAST_ACK")
     if event == ("recv", "ACK"):
         return
 
 
 # ---------- Data phase ----------
 
-def established(send):
+def established():
     while True:
-        event = yield "ESTABLISHED"
-        if event == ("app", "close"):
-            send("FIN")
-            yield from fin_wait_1(send)
-            return
-        elif event == ("recv", "FIN"):
-            send("ACK")
-            yield from close_wait(send)
-            return
-        elif event == ("recv", "RST"):
-            return
-        # any other event (DATA) keeps us in ESTABLISHED
+        event = yield ("state", "ESTABLISHED")
+        tag = event[0]
+        if tag == "app":
+            if event[1] == "close":
+                yield from send("FIN")
+                yield from fin_wait_1()
+                return
+            elif event[1] == "send":
+                yield from send(("DATA", event[2]))   # naive: one segment per write
+                continue
+        elif tag == "recv":
+            seg = event[1]
+            if seg == "FIN":
+                yield from send("ACK")
+                yield from close_wait()
+                return
+            elif seg == "RST":
+                return
+            elif isinstance(seg, tuple) and seg[0] == "DATA":
+                yield ("app", "recv", seg[1])          # deliver up, stay ESTABLISHED
+                continue
+        # anything else is ignored; stay in ESTABLISHED
 
 
 # ---------- Client path ----------
 
-def client(send):
-    send("SYN")
-    event = yield "SYN_SENT"
+def client():
+    yield from send("SYN")
+    event = yield ("state", "SYN_SENT")
     if event == ("recv", "SYN+ACK"):
-        send("ACK")
-        yield from established(send)
+        yield from send("ACK")
+        yield from established()
     elif event == ("recv", "RST"):
         return
 
 
 # ---------- Server path ----------
 
-def server(send):
-    event = yield "LISTEN"
+def server():
+    event = yield ("state", "LISTEN")
     if event == ("recv", "SYN"):
-        send("SYN+ACK")
-        event = yield "SYN_RCVD"
+        yield from send("SYN+ACK")
+        event = yield ("state", "SYN_RCVD")
         if event == ("recv", "ACK"):
-            yield from established(send)
+            yield from established()
         elif event == ("recv", "RST"):
             return
 
@@ -101,36 +129,53 @@ def server(send):
 # ---------- Scheduler ----------
 
 class TCPConn:
+    """Drives one state machine and performs its outbound actions."""
+
     def __init__(self, machine, name="conn"):
         self.name = name
         self.state = None                # set by start()
-        self.out = deque()               # transmit wire: packets this end sends
-        self.coro = machine(self._send)  # inject this connection's sender
-
-    def _send(self, pkt):
-        """Bound sender handed to the state machine; no globals involved."""
-        print(f"    TX -> {pkt}")
-        self.out.append(pkt)
+        self.out = deque()               # transmit wire: segments this end sends
+        self.coro = machine()
 
     def start(self):
-        """Run to the first yield and grab the initial state name."""
-        self.state = next(self.coro)
+        """Run to the first ("state", ...) yield."""
+        self._pump(None)
 
     def on(self, event):
+        """Feed one inbound event and pump until the machine waits again."""
+        if self.state == "CLOSED":
+            return
         print(f"  [{self.name}] EV <- {event}")
-        try:
-            self.state = self.coro.send(event)
-        except StopIteration:
-            self.state = "CLOSED"
-        print(f"  [{self.name}]     state = {self.state}")
+        self._pump(event)
+
+    def _pump(self, event):
+        # One inbound event can yield several actions before the machine parks
+        # on its next state, so keep resuming until we see ("state", ...).
+        while True:
+            try:
+                out = self.coro.send(event)
+            except StopIteration:
+                self.state = "CLOSED"
+                print(f"  [{self.name}]     state = {self.state}")
+                return
+            event = None                     # later sends just resume pending actions
+            tag = out[0]
+            if tag == "state":
+                self.state = out[1]
+                print(f"  [{self.name}]     state = {self.state}")
+                return
+            elif tag == "send":
+                self.out.append(out[1])
+            elif tag == "app":               # outbound notification to the app
+                print(f"  [{self.name}] APP <- {out[1:]}")
 
 
 # ---------- Network + driver ----------
 
 class Sim:
-    """Connect two endpoints: move packets off each transmit wire.
+    """Connect two endpoints: move segments off each transmit wire.
 
-    A packet leaving one endpoint becomes a ("recv", ...) event on the other.
+    A segment leaving one endpoint becomes a ("recv", seg) event on the other.
     The endpoints stay unaware of each other; the Sim knows the topology.
     """
 
@@ -140,24 +185,16 @@ class Sim:
         server.start()                   # server waits in LISTEN
 
     def drain(self):
-        """Deliver packets in both directions until both wires are empty."""
+        """Deliver segments in both directions until both wires are empty."""
         while self.client.out or self.server.out:
             if self.client.out:          # client -> server first, for deterministic output
-                pkt = self.client.out.popleft()
-                print(f"  [client] -- {pkt} --> [server]")
-                self.server.on(("recv", pkt))
+                seg = self.client.out.popleft()
+                print(f"  [client] -- {seg} --> [server]")
+                self.server.on(("recv", seg))
             else:
-                pkt = self.server.out.popleft()
-                print(f"  [server] -- {pkt} --> [client]")
-                self.client.on(("recv", pkt))
-
-    def inject(self, conn, event):
-        """Inject a non-network event (application close / timer)."""
-        conn.on(event)
-
-    def data(self, sender, payload="DATA"):
-        """Sender pushes a chunk of application data onto its transmit wire."""
-        sender.out.append(payload)
+                seg = self.server.out.popleft()
+                print(f"  [server] -- {seg} --> [client]")
+                self.client.on(("recv", seg))
 
 
 def make_pair():
@@ -183,11 +220,11 @@ def scenario_client_close():
     c, s = make_pair()
     sim = Sim(c, s)                      # starts both ends
     sim.drain()                          # complete the three-way handshake
-    sim.inject(c, ("app", "close"))      # client application closes first
+    c.on(("app", "close"))      # client application closes first
     sim.drain()                          # FIN -> ACK -> FIN -> ACK flows by itself
-    sim.inject(s, ("app", "close"))      # server application closes afterwards
+    s.on(("app", "close"))      # server application closes afterwards
     sim.drain()
-    sim.inject(c, ("timer", "2MSL"))     # wait out 2MSL, then finish
+    c.on(("timer", "2MSL"))     # wait out 2MSL, then finish
     sim.drain()
     show_done(c, s)
 
@@ -198,11 +235,11 @@ def scenario_server_close():
     c, s = make_pair()
     sim = Sim(c, s)
     sim.drain()
-    sim.inject(s, ("app", "close"))
+    s.on(("app", "close"))
     sim.drain()
-    sim.inject(c, ("app", "close"))
+    c.on(("app", "close"))
     sim.drain()
-    sim.inject(s, ("timer", "2MSL"))
+    s.on(("timer", "2MSL"))
     sim.drain()
     show_done(c, s)
 
@@ -213,29 +250,29 @@ def scenario_simultaneous_close():
     c, s = make_pair()
     sim = Sim(c, s)
     sim.drain()
-    sim.inject(c, ("app", "close"))
-    sim.inject(s, ("app", "close"))      # the two FINs cross on the wire
+    c.on(("app", "close"))
+    s.on(("app", "close"))      # the two FINs cross on the wire
     sim.drain()
-    sim.inject(c, ("timer", "2MSL"))
-    sim.inject(s, ("timer", "2MSL"))
+    c.on(("timer", "2MSL"))
+    s.on(("timer", "2MSL"))
     sim.drain()
     show_done(c, s)
 
 
 def scenario_data_then_close():
-    """Data transfer keeps both ends in ESTABLISHED, then they close normally."""
+    """Application data goes up and down, then the connection closes normally."""
     banner("Data transfer, then close")
     c, s = make_pair()
     sim = Sim(c, s)
+    sim.drain()                          # three-way handshake
+    c.on(("app", "send", "hello"))   # app write -> DATA segment
+    s.on(("app", "send", "world"))
+    sim.drain()                          # delivered as ("app", "recv", ...) on the far end
+    c.on(("app", "close"))
     sim.drain()
-    sim.data(c, "hello")                 # travels the client transmit wire
-    sim.data(s, "world")                 # and the server one
-    sim.drain()                          # both ends stay in ESTABLISHED
-    sim.inject(c, ("app", "close"))
+    s.on(("app", "close"))
     sim.drain()
-    sim.inject(s, ("app", "close"))
-    sim.drain()
-    sim.inject(c, ("timer", "2MSL"))
+    c.on(("timer", "2MSL"))
     sim.drain()
     show_done(c, s)
 
