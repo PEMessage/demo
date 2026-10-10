@@ -52,10 +52,44 @@ class Hook(Enum):
 
 
 class Table(Enum):
-    # Value is the priority: lower runs first, matching real netfilter.
+    """Netfilter tables: priority, typical hooks, and responsibility.
+
+    At one hook the tables run in priority order (lower value first), and the
+    packet walks through every table present there.
+
+    Priority map (real netfilter hook priorities):
+        raw         -300   NF_IP_PRI_RAW
+        conntrack   -200   NF_IP_PRI_CONNTRACK   (not a table)
+        mangle      -150   NF_IP_PRI_MANGLE
+        nat (dst)   -100   NF_IP_PRI_NAT_DST
+        filter         0   NF_IP_PRI_FILTER
+        security      50   NF_IP_PRI_SECURITY
+        nat (src)    100   NF_IP_PRI_NAT_SRC
+
+    Table  ->  typical hooks  ->  responsibility:
+        raw       PREROUTING, OUTPUT
+                  Runs before conntrack. Sets NOTRACK / CT options.
+        mangle    PREROUTING, INPUT, FORWARD, OUTPUT, POSTROUTING  (all five)
+                  Alters headers: TTL, TOS/DSCP, MARK, TCPMSS.
+        nat       PREROUTING (DNAT), OUTPUT (DNAT), POSTROUTING (SNAT)
+                  Rewrites addresses/ports. Consulted only for the first
+                  packet of a connection (ct state NEW).
+        filter    INPUT, FORWARD, OUTPUT
+                  The actual accept/drop/reject decisions.
+        security  INPUT, FORWARD, OUTPUT
+                  SELinux/SECMARK labels, runs after filter. (Not modeled here.)
+
+    Note: real netfilter splits nat into two priorities, dstnat (-100) and
+    srcnat (+100). This model uses a single NAT priority as a simplification.
+    """
+
+    # raw: PREROUTING, OUTPUT -- before conntrack; NOTRACK / CT options.
     RAW = -300
+    # mangle: all five hooks -- header edits: TTL, TOS, MARK, TCPMSS.
     MANGLE = -150
+    # nat: PREROUTING/OUTPUT (dnat) and POSTROUTING (snat); first packet only.
     NAT = -100
+    # filter: INPUT, FORWARD, OUTPUT -- accept/drop/reject decisions.
     FILTER = 0
 
     @property
