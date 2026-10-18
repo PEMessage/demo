@@ -180,6 +180,8 @@ typedef struct {
     uint32_t jmprelsz;
     const Elf32_Sym* symtab;
     const char* strtab;
+    uint32_t syment;         // DT_SYMENT: size of one .dynsym entry
+    uint32_t relent;         // DT_RELENT: size of one relocation entry
 } applet_dyn_info_t;
 
 // Everything the relocation pass needs that is the same for every entry.
@@ -308,8 +310,11 @@ static void apply_relocations(const applet_dyn_info_t* dyn, int64_t delta) {
 // DT_STRTAB  0x40000384     -> .dynstr
 // DT_SYMTAB  0x400002b4     -> .dynsym
 // DT_STRSZ   112 / DT_SYMENT 16
-static applet_dyn_info_t parse_dynamic_section(const Elf32_Dyn* dyn, int64_t delta) {
-    applet_dyn_info_t info = {0};
+// Parse the .dynamic tag list into *info.
+// Returns 0 on success, -1 if the metadata is incompatible with this loader.
+static int parse_dynamic_section(const Elf32_Dyn* dyn, int64_t delta,
+                                 applet_dyn_info_t* info) {
+    memset(info, 0, sizeof(*info));
 
     for (int i = 0; dyn[i].d_tag != DT_NULL; i++) {
         printf(
@@ -323,15 +328,31 @@ static applet_dyn_info_t parse_dynamic_section(const Elf32_Dyn* dyn, int64_t del
         void *addr = (void *)(uint32_t)(dyn[i].d_un.d_ptr + delta);
         uint32_t val = dyn[i].d_un.d_val;
         switch ((uint32_t)dyn[i].d_tag) {
-            case DT_REL:      info.rel = (const Elf32_Rel*)addr; break;
-            case DT_RELSZ:    info.relsz = val; break;
-            case DT_JMPREL:   info.jmprel = (const Elf32_Rel*)addr; break;
-            case DT_PLTRELSZ: info.jmprelsz = val; break;
-            case DT_SYMTAB:   info.symtab = (const Elf32_Sym*)addr; break;
-            case DT_STRTAB:   info.strtab = (const char*)addr; break;
+            case DT_REL:      info->rel = (const Elf32_Rel*)addr; break;
+            case DT_RELSZ:    info->relsz = val; break;
+            case DT_JMPREL:   info->jmprel = (const Elf32_Rel*)addr; break;
+            case DT_PLTRELSZ: info->jmprelsz = val; break;
+            case DT_SYMTAB:   info->symtab = (const Elf32_Sym*)addr; break;
+            case DT_STRTAB:   info->strtab = (const char*)addr; break;
+            case DT_SYMENT:
+                info->syment = val;
+                if (val != sizeof(Elf32_Sym)) {
+                    printf("Error: DT_SYMENT=%lu but sizeof(Elf32_Sym)=%lu\n",
+                           (unsigned long)val, (unsigned long)sizeof(Elf32_Sym));
+                    return -1;
+                }
+                break;
+            case DT_RELENT:
+                info->relent = val;
+                if (val != sizeof(Elf32_Rel)) {
+                    printf("Error: DT_RELENT=%lu but sizeof(Elf32_Rel)=%lu\n",
+                           (unsigned long)val, (unsigned long)sizeof(Elf32_Rel));
+                    return -1;
+                }
+                break;
         }
     }
-    return info;
+    return 0;
 }
 
 static int load_applet(const uint8_t* data, size_t size) {
@@ -376,7 +397,11 @@ static int load_applet(const uint8_t* data, size_t size) {
     printf("Header size: 0x%08lX\n", (unsigned long)sizeof(*header));
     printf("Dynamic section addr: 0x%08lX\n", (unsigned long)dynamic_load);
 
-    applet_dyn_info_t dyn_info = parse_dynamic_section((const Elf32_Dyn*)dynamic_load, delta);
+    applet_dyn_info_t dyn_info;
+    if (parse_dynamic_section((const Elf32_Dyn*)dynamic_load, delta, &dyn_info) != 0) {
+        printf("Error: incompatible dynamic section, refusing to load\n");
+        return -2;
+    }
 
     apply_relocations(&dyn_info, delta);
     
