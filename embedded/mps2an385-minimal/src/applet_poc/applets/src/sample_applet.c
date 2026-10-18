@@ -2,8 +2,21 @@
 
 static const applet_api_t* g_api = NULL;
 
+char global_string[] = "Hello World from global";
+static char static_global_string[] = "Hello World from static global";
+
 static uint32_t applet_main(const applet_api_t* api, void* arg) {
     g_api = api;
+    {
+        api->print("&g_api is %p\n", &g_api);
+
+        api->print("&global_string is %p\n", &global_string);
+        api->print("global_string is %s\n", global_string);
+
+        api->print("&static_global_string is %p\n", &static_global_string);
+        api->print("static_global_string is %s\n", static_global_string);
+    }
+
     
     api->print("Hello from sample applet!\n");
     api->print("Tick: %lu\n", api->get_tick());

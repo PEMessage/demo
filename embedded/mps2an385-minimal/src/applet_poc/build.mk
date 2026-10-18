@@ -7,8 +7,6 @@ APPLETS_DIR := $(THIS_DIR)/applets
 APPLETS_OUT := $(OUT)/applets
 
 
-$(info DEVTO)
-
 $(shell mkdir -p $(APPLETS_OUT))
 
 APPLETS_SRCS := $(wildcard $(APPLETS_DIR)/src/*.c)
