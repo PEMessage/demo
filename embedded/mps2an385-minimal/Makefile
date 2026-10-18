@@ -89,6 +89,17 @@ ifeq ($(call file_exists,src/$(MODULE_NAME)/*.mk),false)
 else
   $(call include_wildcard,src/$(MODULE_NAME)/*.mk)
 endif
+
+# ====================================================
+# Step 4, size optimization: discard unused sections
+# ====================================================
+# -ffunction-sections / -fdata-sections: put each function/data in its own
+#   section so the linker can drop the ones nothing references.
+# -Wl,--gc-sections: actually remove them; anything that must stay is pinned
+#   by KEEP() in the linker script (e.g. .vectors, init/fini arrays).
+CFLAGS  += -ffunction-sections -fdata-sections
+LDFLAGS += -Wl,--gc-sections
+
 OBJS    := $(addprefix $(OUT)/, $(SRCS:.c=.o))
 TARGET  := $(OUT)/$(MODULE_NAME).elf
 BIN     := $(OUT)/$(MODULE_NAME).bin

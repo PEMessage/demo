@@ -45,9 +45,16 @@ OBJDUMP=${CROSS_COMPILE}objdump
 #                        to ANOTHER applet, mark it with APPLET_EXPORT.
 #                        (Linker-script symbols like __bss_start are NOT
 #                        affected; hide those with PROVIDE_HIDDEN in applet.ld.)
+#   -ffunction-sections -fdata-sections -Wl,--gc-sections
+#                        give every function/data its own section and let the
+#                        linker drop the unused ones. .applet_header is pinned
+#                        by KEEP() in applet.ld (+ __attribute__((used))), and
+#                        the entry is reachable from that header, so they stay.
 CFLAGS="-mcpu=cortex-m3 -mthumb -Wall -Os -fPIC -shared -nostdlib -nostartfiles -fno-builtin -fvisibility=hidden"
+CFLAGS+=" -ffunction-sections -fdata-sections"
 CFLAGS+=" -I ${SCRIPT_DIR}/applet_lib"
 LDFLAGS="-T ${SCRIPT_DIR}/applet_lib/applet.ld"
+LDFLAGS+=" -Wl,--gc-sections"
 
 prepare() {
     runcmd mkdir -p "$OBJ_DIR"
