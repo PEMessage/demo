@@ -160,8 +160,12 @@ static const applet_api_t g_applet_api = {
     .realloc = sys_realloc,
 };
 
-#define APPLET_MAX_SIZE 4096
-static uint8_t applet_memory[APPLET_MAX_SIZE] __attribute__((aligned(4)));
+#define APPLET_MAX_SIZE  4096
+#define APPLET_MAX_COUNT 4
+// Each loaded applet gets its own resident slot, so several applets can stay
+// loaded at the same time (required for applet-to-applet symbol resolution).
+static uint8_t applet_pool[APPLET_MAX_SIZE * APPLET_MAX_COUNT] __attribute__((aligned(4)));
+static int applet_used = 0;
 
 static void* loader_lookup_symbol(const char* name) {
     if (strcmp(name, "printf") == 0) return (void*)sys_print;
@@ -273,9 +277,20 @@ static int load_applet(const uint8_t* data, size_t size) {
         printf("Error: Applet too large (%zu > %d bytes)\n", size, APPLET_MAX_SIZE);
         return -1;
     }
-    
+    if (applet_used >= APPLET_MAX_COUNT) {
+        printf("Error: no free applet slot (%d/%d in use)\n",
+               applet_used, APPLET_MAX_COUNT);
+        return -1;
+    }
+
+    // Give this applet its own resident region so previously loaded applets
+    // stay alive (and keep their exported symbols valid).
+    uint8_t* applet_memory = applet_pool + (size_t)applet_used * APPLET_MAX_SIZE;
+    printf("Slot: %d\n", applet_used);
+    applet_used++;
+
     // some background bytes to help identify bug
-    memset(applet_memory, 0xAE, sizeof(applet_memory));
+    memset(applet_memory, 0xAE, APPLET_MAX_SIZE);
 
     printf("Loading applet (%zu bytes)...\n", size);
     memcpy(applet_memory, data, size);
