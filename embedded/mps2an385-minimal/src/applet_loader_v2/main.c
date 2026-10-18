@@ -1,0 +1,368 @@
+#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+#include <stdarg.h>
+#include "applet_api.h"
+
+extern int stdout_init(void);
+
+// ========== dynamic section struct ==========
+typedef struct {
+    int32_t d_tag;
+    union {
+        uint32_t d_val;
+        uint32_t d_ptr;
+    } d_un;
+} Elf32_Dyn;
+
+#define ELF_DYNAMIC_TAGS                                                      \
+    X(DT_NULL,       0)                                                       \
+    X(DT_NEEDED,     1)                                                       \
+    X(DT_PLTRELSZ,   2)                                                       \
+    X(DT_PLTGOT,     3)                                                       \
+    X(DT_HASH,       4)                                                       \
+    X(DT_STRTAB,     5)                                                       \
+    X(DT_SYMTAB,     6)                                                       \
+    X(DT_RELA,       7)                                                       \
+    X(DT_RELASZ,     8)                                                       \
+    X(DT_RELAENT,    9)                                                       \
+    X(DT_STRSZ,     10)                                                       \
+    X(DT_SYMENT,    11)                                                       \
+    X(DT_INIT,      12)                                                       \
+    X(DT_FINI,      13)                                                       \
+    X(DT_SONAME,    14)                                                       \
+    X(DT_RPATH,     15)                                                       \
+    X(DT_SYMBOLIC,  16)                                                       \
+    X(DT_REL,       17)                                                       \
+    X(DT_RELSZ,     18)                                                       \
+    X(DT_RELENT,    19)                                                       \
+    X(DT_PLTREL,    20)                                                       \
+    X(DT_DEBUG,     21)                                                       \
+    X(DT_TEXTREL,   22)                                                       \
+    X(DT_JMPREL,    23)                                                       \
+    X(DT_BIND_NOW,  24)                                                       \
+    X(DT_INIT_ARRAY,      25)                                                 \
+    X(DT_FINI_ARRAY,      26)                                                 \
+    X(DT_INIT_ARRAYSZ,    27)                                                 \
+    X(DT_FINI_ARRAYSZ,    28)                                                 \
+    X(DT_RUNPATH,         29)                                                 \
+    X(DT_FLAGS,           30)
+
+typedef enum dynamic_tag {
+#define X(name, value) name = value,
+    ELF_DYNAMIC_TAGS
+#undef X
+    DT_NUM_TAGS              /* optional sentinel, not a real tag */
+} dynamic_tag_t;
+
+const char* dynamic_tag_string(dynamic_tag_t tag) {
+    switch (tag) {
+#define X(name, value) case name: return #name;
+        ELF_DYNAMIC_TAGS
+#undef X
+        default: return "DT_UNKNOWN";
+    }
+}
+
+// ========== relocation section ==========
+// ARM relocation types
+typedef struct {
+    uint32_t r_offset;
+    uint32_t r_info;
+} Elf32_Rel;
+
+#define ARM_RELOC_TYPES                                                       \
+    X(R_ARM_NONE,          0)                                                 \
+    X(R_ARM_ABS32,         2)                                                 \
+    X(R_ARM_REL32,         3)                                                 \
+    X(R_ARM_THM_CALL,     10)                                                 \
+    X(R_ARM_GLOB_DAT,     21)                                                 \
+    X(R_ARM_JUMP_SLOT,    22)                                                 \
+    X(R_ARM_RELATIVE,     23)                                                 \
+    X(R_ARM_BASE_PREL,    25)                                                 \
+    X(R_ARM_GOT_BREL,     26)
+
+typedef enum arm_reloc_tag {
+#define X(name, value) name = value,
+    ARM_RELOC_TYPES
+#undef X
+    ARM_RELOC_NUM
+} arm_reloc_tag_t;
+
+const char* arm_reloc_tag_string(arm_reloc_tag_t tag) {
+    switch (tag) {
+#define X(name, value) case name: return #name;
+        ARM_RELOC_TYPES
+#undef X
+        default: return "R_ARM_UNKNOW";
+    }
+}
+
+
+typedef struct {
+    uint32_t st_name;
+    uint32_t st_value;
+    uint32_t st_size;
+    uint8_t  st_info;
+    uint8_t  st_other;
+    uint16_t st_shndx;
+} Elf32_Sym;
+
+// ========== End ELF structures ==========
+
+static uint32_t sys_get_tick(void) {
+    static uint32_t tick = 0;
+    return tick++;
+}
+
+static void sys_delay_ms(uint32_t ms) {
+    volatile uint32_t count = ms * 1000;
+    while (count--) {
+        __asm volatile ("nop");
+    }
+}
+
+static void sys_putc(char c) {
+    putchar(c);
+}
+
+static int sys_print(const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    int ret = vprintf(fmt, args);
+    va_end(args);
+    return ret;
+}
+
+static void* sys_malloc(size_t size) {
+    (void)size;
+    return NULL;
+}
+
+static void sys_free(void* ptr) {
+    (void)ptr;
+}
+
+static void* sys_realloc(void* ptr, size_t size) {
+    (void)ptr;
+    (void)size;
+    return NULL;
+}
+
+static const applet_api_t g_applet_api = {
+    .version = 1,
+    .print = sys_print,
+    .putc = sys_putc,
+    .get_tick = sys_get_tick,
+    .delay_ms = sys_delay_ms,
+    .malloc = sys_malloc,
+    .free = sys_free,
+    .realloc = sys_realloc,
+};
+
+#define APPLET_MAX_SIZE 4096
+static uint8_t applet_memory[APPLET_MAX_SIZE] __attribute__((aligned(4)));
+
+static void* loader_lookup_symbol(const char* name) {
+    if (strcmp(name, "printf") == 0) return (void*)sys_print;
+    if (strcmp(name, "malloc") == 0) return (void*)sys_malloc;
+    if (strcmp(name, "free") == 0) return (void*)sys_free;
+    if (strcmp(name, "realloc") == 0) return (void*)sys_realloc;
+    return NULL;
+}
+
+typedef struct {
+    const Elf32_Rel* rel;
+    uint32_t relsz;
+    const Elf32_Rel* jmprel;
+    uint32_t jmprelsz;
+    const Elf32_Sym* symtab;
+    const char* strtab;
+} applet_dyn_info_t;
+
+static void apply_single_relocs(int64_t delta, const Elf32_Rel* rel, uint32_t relsz,
+                                   const Elf32_Sym* symtab, const char* strtab) {
+    uint32_t count = relsz / sizeof(Elf32_Rel);
+    for (uint32_t i = 0; i < count; i++) {
+        uint32_t r_info = rel[i].r_info;
+        uint32_t r_sym = r_info >> 8;
+        uint32_t r_type = r_info & 0xFF;
+
+        uint32_t* target = (uint32_t*)(uintptr_t)((int64_t)rel[i].r_offset + delta);
+        printf("[%ld] %p: %s offset = 0x%08lX\n", i, &rel[i], arm_reloc_tag_string(r_type), rel[i].r_offset);
+
+        switch (r_type) {
+            case R_ARM_RELATIVE: {
+                uint32_t next_target  = (uint32_t)((int64_t)*target + delta);
+                printf("| target %08lX => %08lX\n", *target, next_target);
+                *target = next_target;
+                break;
+            }
+
+            case R_ARM_ABS32:
+            case R_ARM_GLOB_DAT:
+            case R_ARM_JUMP_SLOT: {
+                const Elf32_Sym* sym = &symtab[r_sym];
+                uint32_t sym_addr;
+                if (sym->st_shndx == 0) {
+                    const char* sym_name = strtab + sym->st_name;
+                    void* resolved = loader_lookup_symbol(sym_name);
+                    printf("| resolved: %s -- %p\n", sym_name, resolved);
+
+                    if (resolved == NULL) {
+                        printf("Warning: unresolved symbol '%s'\n", sym_name);
+                        continue;
+                    }
+                    sym_addr = (uint32_t)resolved;
+                } else {
+                    sym_addr = (uint32_t)((int64_t)sym->st_value + delta);
+                    printf("| sym->value %08lX => sym_addr %08lX\n",  sym->st_value, sym_addr);
+
+                }
+                *target = sym_addr;
+                break;
+            }
+
+            default:
+                break;
+        }
+    }
+}
+
+static void apply_relocations(const applet_dyn_info_t* dyn, int64_t delta) {
+    if (dyn->rel != NULL && dyn->symtab != NULL && dyn->strtab != NULL) {
+        printf("------------\n");
+        printf("Applying .rel.dyn (%lu bytes)...\n", (unsigned long)dyn->relsz);
+        apply_single_relocs(delta, dyn->rel, dyn->relsz, dyn->symtab, dyn->strtab);
+    }
+    if (dyn->jmprel != NULL && dyn->symtab != NULL && dyn->strtab != NULL) {
+        printf("------------\n");
+        printf("Applying .rel.plt (%lu bytes)...\n", (unsigned long)dyn->jmprelsz);
+        apply_single_relocs(delta, dyn->jmprel, dyn->jmprelsz, dyn->symtab, dyn->strtab);
+    }
+}
+
+static applet_dyn_info_t parse_dynamic_section(const Elf32_Dyn* dyn, int64_t delta) {
+    applet_dyn_info_t info = {0};
+
+    for (int i = 0; dyn[i].d_tag != DT_NULL; i++) {
+        printf(
+                "[%d] %p: tag %s(%ld) = 0x%08lX\n",
+                i, &dyn[i],
+                dynamic_tag_string(dyn[i].d_tag),
+                (unsigned long)dyn[i].d_tag,
+                (unsigned long)dyn[i].d_un.d_val
+              );
+
+        void *addr = (void *)(uint32_t)(dyn[i].d_un.d_ptr + delta);
+        uint32_t val = dyn[i].d_un.d_val;
+        switch ((uint32_t)dyn[i].d_tag) {
+            case DT_REL:      info.rel = (const Elf32_Rel*)addr; break;
+            case DT_RELSZ:    info.relsz = val; break;
+            case DT_JMPREL:   info.jmprel = (const Elf32_Rel*)addr; break;
+            case DT_PLTRELSZ: info.jmprelsz = val; break;
+            case DT_SYMTAB:   info.symtab = (const Elf32_Sym*)addr; break;
+            case DT_STRTAB:   info.strtab = (const char*)addr; break;
+        }
+    }
+    return info;
+}
+
+static int load_applet(const uint8_t* data, size_t size) {
+    if (size > APPLET_MAX_SIZE) {
+        printf("Error: Applet too large (%zu > %d bytes)\n", size, APPLET_MAX_SIZE);
+        return -1;
+    }
+    
+    // some background bytes to help identify bug
+    memset(applet_memory, 0xAE, sizeof(applet_memory));
+
+    printf("Loading applet (%zu bytes)...\n", size);
+    memcpy(applet_memory, data, size);
+    
+    applet_header_t* header = (applet_header_t*)applet_memory;
+    
+    if (header->magic != APPLET_MAGIC) {
+        printf("Error: Invalid applet magic (expected 0x%08lX, got 0x%08lX)\n", 
+               (uint32_t)APPLET_MAGIC, (uint32_t)header->magic);
+        return -1;
+    }
+    
+    if (header->version != APPLET_VERSION) {
+        printf("Error: Unsupported applet version (expected %d, got %lu)\n",
+               APPLET_VERSION, (unsigned long)header->version);
+        return -1;
+    }
+    
+    printf("Applet magic: 0x%08lX OK\n", (uint32_t)header->magic);
+    printf("Applet version: %lu\n", (unsigned long)header->version);
+    
+    const uint32_t link_base = APPLET_LINK_ADDR;
+    uint32_t load_base = (uint32_t)applet_memory;
+    int64_t delta = (int64_t)load_base - (int64_t)link_base;
+    
+    printf("Link base: 0x%08lX\n", (unsigned long)link_base);
+    printf("Load base: 0x%08lX\n", (unsigned long)load_base);
+    printf("Delta: %ld\n", (long)delta);
+
+    printf("=====================================\n");
+    void* dynamic_load = applet_memory + sizeof(*header);
+    printf("Header size: 0x%08lX\n", (unsigned long)sizeof(*header));
+    printf("Dynamic section addr: 0x%08lX\n", (unsigned long)dynamic_load);
+
+    applet_dyn_info_t dyn_info = parse_dynamic_section((const Elf32_Dyn*)dynamic_load, delta);
+
+    apply_relocations(&dyn_info, delta);
+    
+    // NOTICE:
+    // .rel.dyn's  R_ARM_ABS32 will modify header->bss_start/bss_end,
+    // so header->bss_start / end only accessiable after `apply_relocations`
+    printf("=====================================\n");
+    printf("BSS: 0x%08X -  0x%08X\n", (uintptr_t)header->bss_start, (uintptr_t)header->bss_end);
+    if (!(header->bss_start >= (void *)applet_memory && header->bss_end <= (void *)(applet_memory + APPLET_MAX_SIZE))) {
+        printf("BSS: Exceed limit\n");
+        return -3;
+    } else {
+        printf("BSS: Within limit\n");
+    }
+    memset(header->bss_start, 0, header->bss_end - header->bss_start);
+
+    printf("=====================================\n");
+    printf("Entry: 0x%08lX\n", (unsigned long)header->entry);
+    printf("Name: %s\n", header->name);
+    
+    printf("Executing applet...\n");
+    
+    uint32_t result = header->entry(&g_applet_api, NULL);
+    
+    printf("=====================================\n");
+    printf("Applet returned: %lu\n", (unsigned long)result);
+    
+    return 0;
+}
+
+// Embedded applet binary (generated by Makefile)
+extern unsigned char out_applet_loader_applets_sample_applet_bin[];
+extern const unsigned int out_applet_loader_applets_sample_applet_bin_len;
+
+extern unsigned char out_applet_loader_applets_counter_applet_bin[];
+extern const unsigned int out_applet_loader_applets_counter_applet_bin_len;
+
+int main(void) {
+    stdout_init();
+    
+    printf("\n========================================\n");
+    printf("MPS2-AN385 Minimal Applet Loader\n");
+    printf("========================================\n\n");
+    
+    load_applet(out_applet_loader_applets_sample_applet_bin, out_applet_loader_applets_sample_applet_bin_len);
+    load_applet(out_applet_loader_applets_counter_applet_bin, out_applet_loader_applets_counter_applet_bin_len);
+
+    printf("\n========================================\n");
+    printf("all success!\n");
+    printf("========================================\n");
+    
+    while (1) {
+        __asm volatile ("wfi");
+    }
+}
