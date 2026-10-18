@@ -12,6 +12,14 @@ static char static_global_string[] = "Hello World from static global";
 
 char empty_arrow[128] = {0};
 
+// Exported symbol: any applet loaded *after* this one can link against it.
+// It has default visibility and is not static, so it lands in .dynsym.
+uint32_t sample_applet_add(uint32_t a, uint32_t b) {
+    printf("  [sample_applet] sample_applet_add(%lu, %lu) called from another applet\n",
+           (unsigned long)a, (unsigned long)b);
+    return a + b;
+}
+
 static uint32_t applet_main(const applet_api_t* api, void* arg) {
     (void)api;
     (void)arg;

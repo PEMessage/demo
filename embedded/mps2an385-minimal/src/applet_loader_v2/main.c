@@ -108,6 +108,17 @@ typedef struct {
     uint16_t st_shndx;
 } Elf32_Sym;
 
+// ELF32_ST_BIND / ELF32_ST_TYPE and special section indexes
+#define STB_LOCAL   0
+#define STB_GLOBAL  1
+#define STB_WEAK    2
+#define STT_NOTYPE  0
+#define STT_OBJECT  1
+#define STT_FUNC    2
+#define STT_SECTION 3
+#define STT_FILE    4
+#define SHN_UNDEF   0
+
 // ========== End ELF structures ==========
 
 static uint32_t sys_get_tick(void) {
@@ -167,7 +178,46 @@ static const applet_api_t g_applet_api = {
 static uint8_t applet_pool[APPLET_MAX_SIZE * APPLET_MAX_COUNT] __attribute__((aligned(4)));
 static int applet_used = 0;
 
+// ========== Exported-symbol registry (applet-to-applet linkage) ==========
+#define SYMBOL_REGISTRY_MAX 64
+
+typedef struct {
+    const char* name;    // points into an applet's .dynstr (resident while loaded)
+    uint32_t    addr;    // host-space address of the exported symbol
+    const char* owner;   // applet that exports it (for logging)
+} symbol_entry_t;
+
+static symbol_entry_t g_symbols[SYMBOL_REGISTRY_MAX];
+static int g_symbol_count = 0;
+
+static void registry_add(const char* name, uint32_t addr, const char* owner) {
+    for (int i = 0; i < g_symbol_count; i++) {
+        if (strcmp(g_symbols[i].name, name) == 0) {
+            printf("|   ! '%s' already exported by '%s', keeping first\n",
+                   name, g_symbols[i].owner);
+            return;
+        }
+    }
+    if (g_symbol_count >= SYMBOL_REGISTRY_MAX) {
+        printf("|   ! symbol registry full, dropping '%s'\n", name);
+        return;
+    }
+    g_symbols[g_symbol_count].name  = name;
+    g_symbols[g_symbol_count].addr  = addr;
+    g_symbols[g_symbol_count].owner = owner;
+    g_symbol_count++;
+    printf("|   + %-24s @ 0x%08lX  (%s)\n", name, (unsigned long)addr, owner);
+}
+
+// Resolve a symbol name: first among previously loaded applets, then among the
+// host-provided built-ins (standard library / runtime).
 static void* loader_lookup_symbol(const char* name) {
+    for (int i = 0; i < g_symbol_count; i++) {
+        if (strcmp(g_symbols[i].name, name) == 0) {
+            printf("|   -> provided by applet '%s'\n", g_symbols[i].owner);
+            return (void*)g_symbols[i].addr;
+        }
+    }
     if (strcmp(name, "printf") == 0) return (void*)sys_print;
     if (strcmp(name, "malloc") == 0) return (void*)sys_malloc;
     if (strcmp(name, "free") == 0) return (void*)sys_free;
@@ -182,6 +232,8 @@ typedef struct {
     uint32_t jmprelsz;
     const Elf32_Sym* symtab;
     const char* strtab;
+    const uint32_t*  hash;      // DT_HASH; hash[1] (nchain) == .dynsym entry count
+    uint32_t         symcount;
 } applet_dyn_info_t;
 
 static void apply_single_relocs(int64_t delta, const Elf32_Rel* rel, uint32_t relsz,
@@ -246,6 +298,32 @@ static void apply_relocations(const applet_dyn_info_t* dyn, int64_t delta) {
     }
 }
 
+// Walk an applet's .dynsym and register every symbol it EXPORTS (defined,
+// global/weak, non-section), so later-loaded applets can link against it.
+static void register_applet_symbols(const applet_dyn_info_t* dyn, int64_t delta,
+                                    const char* owner) {
+    if (dyn->symtab == NULL || dyn->strtab == NULL || dyn->symcount == 0) {
+        return;
+    }
+    printf("------------\n");
+    printf("Exporting symbols from '%s':\n", owner);
+    for (uint32_t i = 0; i < dyn->symcount; i++) {
+        const Elf32_Sym* sym = &dyn->symtab[i];
+        uint32_t bind = sym->st_info >> 4;
+        uint32_t type = sym->st_info & 0xF;
+
+        if (sym->st_shndx == SHN_UNDEF)              continue; // import, not export
+        if (bind != STB_GLOBAL && bind != STB_WEAK)  continue; // not externally visible
+        if (type != STT_FUNC && type != STT_OBJECT)  continue; // export code/data only
+        if (sym->st_value == 0)                      continue;
+
+        const char* name = dyn->strtab + sym->st_name;
+        if (name[0] == '\0')                         continue;
+
+        registry_add(name, (uint32_t)((int64_t)sym->st_value + delta), owner);
+    }
+}
+
 static applet_dyn_info_t parse_dynamic_section(const Elf32_Dyn* dyn, int64_t delta) {
     applet_dyn_info_t info = {0};
 
@@ -267,7 +345,12 @@ static applet_dyn_info_t parse_dynamic_section(const Elf32_Dyn* dyn, int64_t del
             case DT_PLTRELSZ: info.jmprelsz = val; break;
             case DT_SYMTAB:   info.symtab = (const Elf32_Sym*)addr; break;
             case DT_STRTAB:   info.strtab = (const char*)addr; break;
+            case DT_HASH:     info.hash = (const uint32_t*)addr; break;
         }
+    }
+    // The SysV hash table's second word is nchain == number of .dynsym entries.
+    if (info.hash != NULL) {
+        info.symcount = info.hash[1];
     }
     return info;
 }
@@ -345,7 +428,9 @@ static int load_applet(const uint8_t* data, size_t size) {
     printf("=====================================\n");
     printf("Entry: 0x%08lX\n", (unsigned long)header->entry);
     printf("Name: %s\n", header->name);
-    
+
+    register_applet_symbols(&dyn_info, delta, header->name);
+
     printf("Executing applet...\n");
     
     uint32_t result = header->entry(&g_applet_api, NULL);
