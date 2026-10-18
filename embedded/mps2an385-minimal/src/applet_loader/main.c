@@ -108,6 +108,8 @@ typedef struct {
     uint16_t st_shndx;
 } Elf32_Sym;
 
+#define SHN_UNDEF 0   // st_shndx value: symbol is undefined in this object
+
 // ========== End ELF structures ==========
 
 static uint32_t sys_get_tick(void) {
@@ -180,68 +182,132 @@ typedef struct {
     const char* strtab;
 } applet_dyn_info_t;
 
-static void apply_single_relocs(int64_t delta, const Elf32_Rel* rel, uint32_t relsz,
-                                   const Elf32_Sym* symtab, const char* strtab) {
+// Everything the relocation pass needs that is the same for every entry.
+typedef struct {
+    int64_t          delta;
+    const Elf32_Sym* symtab;
+    const char*      strtab;
+} reloc_ctx_t;
+
+static uint32_t reloc_sym_index(uint32_t r_info) { return r_info >> 8; }
+static uint32_t reloc_type(uint32_t r_info)      { return r_info & 0xFF; }
+
+// Address to patch = link-time offset rebased onto the load address.
+static uint32_t* reloc_slot(const Elf32_Rel* r, int64_t delta) {
+    return (uint32_t*)(uintptr_t)((int64_t)r->r_offset + delta);
+}
+
+// Resolve one symbol to its runtime address.
+// Returns 1 on success, 0 if it is an unresolved external symbol.
+static int resolve_symbol(const reloc_ctx_t* ctx, uint32_t sym_index, uint32_t* addr_out) {
+    const Elf32_Sym* sym = &ctx->symtab[sym_index];
+
+    if (sym->st_shndx != SHN_UNDEF) {                 // defined by this applet
+        *addr_out = (uint32_t)((int64_t)sym->st_value + ctx->delta);
+        printf("| local symbol[%lu]: 0x%08lX -> 0x%08lX\n",
+               (unsigned long)sym_index,
+               (unsigned long)sym->st_value, (unsigned long)*addr_out);
+        return 1;
+    }
+
+    const char* name = ctx->strtab + sym->st_name;
+    void* resolved = loader_lookup_symbol(name);      // defined by the host
+    printf("| external symbol[%lu] '%s' -> %p\n",
+           (unsigned long)sym_index, name, resolved);
+
+    if (resolved == NULL) {
+        printf("Warning: unresolved symbol '%s'\n", name);
+        return 0;
+    }
+    *addr_out = (uint32_t)resolved;
+    return 1;
+}
+
+static void apply_one_reloc(const reloc_ctx_t* ctx, uint32_t index, const Elf32_Rel* r) {
+    uint32_t r_info = r->r_info;
+    uint32_t type   = reloc_type(r_info);
+    uint32_t* slot  = reloc_slot(r, ctx->delta);
+
+    printf("[%lu] %p: %s offset = 0x%08lX\n",
+           (unsigned long)index, (const void*)r,
+           arm_reloc_tag_string(type), (unsigned long)r->r_offset);
+
+    switch (type) {
+        case R_ARM_RELATIVE: {
+            uint32_t before = *slot;
+            *slot = (uint32_t)((int64_t)before + ctx->delta);
+            printf("| RELATIVE: 0x%08lX + delta -> 0x%08lX\n",
+                   (unsigned long)before, (unsigned long)*slot);
+            break;
+        }
+
+        case R_ARM_ABS32: {
+            // R_ARM_ABS32 = (S + A) | T : A is the addend already stored
+            // in the word, so it must be added to the symbol address.
+            uint32_t sym_addr;
+            if (!resolve_symbol(ctx, reloc_sym_index(r_info), &sym_addr)) {
+                break;                                // leave slot untouched
+            }
+
+            uint32_t addend = *slot;
+            *slot = sym_addr + addend;
+            printf("| ABS32: S(0x%08lX) + A(0x%08lX) -> 0x%08lX\n",
+                   (unsigned long)sym_addr, (unsigned long)addend,
+                   (unsigned long)*slot);
+            break;
+        }
+
+        case R_ARM_GLOB_DAT:
+        case R_ARM_JUMP_SLOT: {
+            // GLOB_DAT / JUMP_SLOT: the slot becomes S (no addend).
+            uint32_t sym_addr;
+            if (!resolve_symbol(ctx, reloc_sym_index(r_info), &sym_addr)) {
+                break;                                // leave slot untouched
+            }
+
+            *slot = sym_addr;
+            printf("| %s: S -> 0x%08lX\n",
+                   arm_reloc_tag_string(type), (unsigned long)*slot);
+            break;
+        }
+
+        default:
+            // Unsupported type: leave the word untouched.
+            break;
+    }
+}
+
+static void apply_single_relocs(const reloc_ctx_t* ctx, const char* name,
+                                const Elf32_Rel* rel, uint32_t relsz) {
+    if (rel == NULL || ctx->symtab == NULL || ctx->strtab == NULL) {
+        return;
+    }
+
+    printf("------------\n");
+    printf("Applying %s (%lu bytes)...\n", name, (unsigned long)relsz);
+
     uint32_t count = relsz / sizeof(Elf32_Rel);
     for (uint32_t i = 0; i < count; i++) {
-        uint32_t r_info = rel[i].r_info;
-        uint32_t r_sym = r_info >> 8;
-        uint32_t r_type = r_info & 0xFF;
-
-        uint32_t* target = (uint32_t*)(uintptr_t)((int64_t)rel[i].r_offset + delta);
-        printf("[%ld] %p: %s offset = 0x%08lX\n", i, &rel[i], arm_reloc_tag_string(r_type), rel[i].r_offset);
-
-        switch (r_type) {
-            case R_ARM_RELATIVE: {
-                uint32_t next_target  = (uint32_t)((int64_t)*target + delta);
-                printf("| target %08lX => %08lX\n", *target, next_target);
-                *target = next_target;
-                break;
-            }
-
-            case R_ARM_ABS32:
-            case R_ARM_GLOB_DAT:
-            case R_ARM_JUMP_SLOT: {
-                const Elf32_Sym* sym = &symtab[r_sym];
-                uint32_t sym_addr;
-                if (sym->st_shndx == 0) {
-                    const char* sym_name = strtab + sym->st_name;
-                    void* resolved = loader_lookup_symbol(sym_name);
-                    printf("| resolved: %s -- %p\n", sym_name, resolved);
-
-                    if (resolved == NULL) {
-                        printf("Warning: unresolved symbol '%s'\n", sym_name);
-                        continue;
-                    }
-                    sym_addr = (uint32_t)resolved;
-                } else {
-                    sym_addr = (uint32_t)((int64_t)sym->st_value + delta);
-                    printf("| sym->value %08lX => sym_addr %08lX\n",  sym->st_value, sym_addr);
-
-                }
-                *target = sym_addr;
-                break;
-            }
-
-            default:
-                break;
-        }
+        apply_one_reloc(ctx, i, &rel[i]);
     }
 }
 
 static void apply_relocations(const applet_dyn_info_t* dyn, int64_t delta) {
-    if (dyn->rel != NULL && dyn->symtab != NULL && dyn->strtab != NULL) {
-        printf("------------\n");
-        printf("Applying .rel.dyn (%lu bytes)...\n", (unsigned long)dyn->relsz);
-        apply_single_relocs(delta, dyn->rel, dyn->relsz, dyn->symtab, dyn->strtab);
-    }
-    if (dyn->jmprel != NULL && dyn->symtab != NULL && dyn->strtab != NULL) {
-        printf("------------\n");
-        printf("Applying .rel.plt (%lu bytes)...\n", (unsigned long)dyn->jmprelsz);
-        apply_single_relocs(delta, dyn->jmprel, dyn->jmprelsz, dyn->symtab, dyn->strtab);
-    }
+    const reloc_ctx_t ctx = {
+        .delta  = delta,
+        .symtab = dyn->symtab,
+        .strtab = dyn->strtab,
+    };
+
+    apply_single_relocs(&ctx, ".rel.dyn", dyn->rel, dyn->relsz);
+    apply_single_relocs(&ctx, ".rel.plt", dyn->jmprel, dyn->jmprelsz);
 }
 
+// TAG - VALUE table
+// DT_HASH    0x400003f4     -> .hash
+// DT_STRTAB  0x40000384     -> .dynstr
+// DT_SYMTAB  0x400002b4     -> .dynsym
+// DT_STRSZ   112 / DT_SYMENT 16
 static applet_dyn_info_t parse_dynamic_section(const Elf32_Dyn* dyn, int64_t delta) {
     applet_dyn_info_t info = {0};
 
@@ -348,6 +414,9 @@ extern const unsigned int out_applet_loader_applets_sample_applet_bin_len;
 extern unsigned char out_applet_loader_applets_counter_applet_bin[];
 extern const unsigned int out_applet_loader_applets_counter_applet_bin_len;
 
+extern unsigned char out_applet_loader_applets_addend_applet_bin[];
+extern const unsigned int out_applet_loader_applets_addend_applet_bin_len;
+
 int main(void) {
     stdout_init();
     
@@ -357,6 +426,7 @@ int main(void) {
     
     load_applet(out_applet_loader_applets_sample_applet_bin, out_applet_loader_applets_sample_applet_bin_len);
     load_applet(out_applet_loader_applets_counter_applet_bin, out_applet_loader_applets_counter_applet_bin_len);
+    load_applet(out_applet_loader_applets_addend_applet_bin, out_applet_loader_applets_addend_applet_bin_len);
 
     printf("\n========================================\n");
     printf("all success!\n");
