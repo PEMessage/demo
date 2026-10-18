@@ -22,7 +22,30 @@ CC=${CROSS_COMPILE}gcc
 OBJCOPY=${CROSS_COMPILE}objcopy
 OBJDUMP=${CROSS_COMPILE}objdump
 
-CFLAGS="-mcpu=cortex-m3 -mthumb -Wall -Os -fPIC -shared -nostdlib -nostartfiles -fno-builtin"
+# Applet build flags.
+#
+#   -fPIC -shared        applet is position-independent with a PLT/GOT, so the
+#                        loader can rebind its symbol references at load time.
+#   -nostdlib -nostartfiles -fno-builtin
+#                        no libc/startup inside the applet; printf/malloc/...
+#                        stay UNDEFINED and are resolved by the loader against
+#                        the host.
+#   -fvisibility=hidden  make the DEFAULT symbol visibility "hidden", so only
+#                        symbols explicitly marked with APPLET_EXPORT
+#                        (= __attribute__((visibility("default")))) are exported.
+#                        This noticeably shrinks the applet:
+#                          * fewer dynamic symbols  -> smaller .dynsym/.dynstr/.hash
+#                          * hidden globals are addressed directly (not via GOT)
+#                            -> fewer .got slots + GLOB_DAT relocations
+#                          * hidden functions are called directly (not via PLT)
+#                            -> fewer .plt entries + JUMP_SLOT relocations
+#                        Our applets need to export nothing (the loader finds
+#                        the header by its magic at offset 0), so hiding
+#                        everything is fine. If an applet must expose a symbol
+#                        to ANOTHER applet, mark it with APPLET_EXPORT.
+#                        (Linker-script symbols like __bss_start are NOT
+#                        affected; hide those with PROVIDE_HIDDEN in applet.ld.)
+CFLAGS="-mcpu=cortex-m3 -mthumb -Wall -Os -fPIC -shared -nostdlib -nostartfiles -fno-builtin -fvisibility=hidden"
 CFLAGS+=" -I ${SCRIPT_DIR}/applet_lib"
 LDFLAGS="-T ${SCRIPT_DIR}/applet_lib/applet.ld"
 
