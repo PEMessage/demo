@@ -6,6 +6,30 @@
 
 extern int stdout_init(void);
 
+// ========== Applet loader status codes ==========
+// One unified error namespace, prefixed AL_ (applet_loader). AL_OK == 0.
+typedef enum {
+    AL_OK = 0,
+
+    // load_applet
+    AL_ERR_TOO_BIG,          // image larger than APPLET_MAX_SIZE
+    AL_ERR_BAD_MAGIC,        // applet_header.magic mismatch
+    AL_ERR_BAD_VERSION,      // applet_header.version mismatch
+    AL_ERR_BAD_BSS,          // BSS range lies outside the image
+
+    // .dynamic parsing
+    AL_ERR_BAD_ENTRY_SIZE,   // DT_SYMENT / DT_RELENT != the loader's structs
+    AL_ERR_NO_DT_NULL,       // .dynamic is not terminated by DT_NULL
+
+    // relocation
+    AL_ERR_BAD_TABLE,        // relocation/symbol/string table outside the image
+    AL_ERR_SYM_RANGE,        // r_sym index out of range
+    AL_ERR_SYM_NAME,         // st_name offset out of range
+    AL_ERR_RELOC_TARGET,     // relocation target outside the image
+    AL_ERR_UNHANDLED_RELOC,  // relocation type the loader does not implement
+    AL_ERR_UNRESOLVED_SYM,   // external symbol not found (soft; caller may skip)
+} al_status_t;
+
 // ========== dynamic section struct ==========
 typedef struct {
     int32_t d_tag;
@@ -180,28 +204,52 @@ typedef struct {
     uint32_t jmprelsz;
     const Elf32_Sym* symtab;
     const char* strtab;
-    uint32_t syment;         // DT_SYMENT: size of one .dynsym entry
-    uint32_t relent;         // DT_RELENT: size of one relocation entry
+    const uint32_t*  hash;    // DT_HASH (SYSV); hash[1] = number of .dynsym entries
+    uint32_t symcount;        // = hash[1] (nchain); bounds every r_sym
+    uint32_t strsz;           // DT_STRSZ; bounds every st_name
+    uint32_t syment;          // DT_SYMENT: size of one .dynsym entry
+    uint32_t relent;          // DT_RELENT: size of one relocation entry
 } applet_dyn_info_t;
 
-// Everything the relocation pass needs that is the same for every entry.
+// Everything the relocation pass needs. image_base/image_limit bound the copied
+// applet, so the loader never reads or writes outside its own buffer.
 typedef struct {
     int64_t          delta;
     const Elf32_Sym* symtab;
+    uint32_t         symcount;
     const char*      strtab;
+    uint32_t         strsz;
+    uintptr_t        image_base;
+    uintptr_t        image_limit;
 } reloc_ctx_t;
 
 static uint32_t reloc_sym_index(uint32_t r_info) { return r_info >> 8; }
 static uint32_t reloc_type(uint32_t r_info)      { return r_info & 0xFF; }
 
-// Address to patch = link-time offset rebased onto the load address.
-static uint32_t* reloc_slot(const Elf32_Rel* r, int64_t delta) {
-    return (uint32_t*)(uintptr_t)((int64_t)r->r_offset + delta);
+// Is [addr, addr+len) fully inside the loaded applet image?
+// len is uint64_t so a huge (attacker-controlled) length cannot wrap around.
+static int in_image(const reloc_ctx_t* ctx, uintptr_t addr, uint64_t len) {
+    return addr >= ctx->image_base
+        && addr <= ctx->image_limit
+        && len <= (uint64_t)(ctx->image_limit - addr);
+}
+
+// Address to patch (link-time offset rebased), or NULL if outside the image.
+static uint32_t* reloc_slot(const reloc_ctx_t* ctx, const Elf32_Rel* r) {
+    uintptr_t addr = (uintptr_t)((int64_t)r->r_offset + ctx->delta);
+    return in_image(ctx, addr, sizeof(uint32_t)) ? (uint32_t*)addr : NULL;
 }
 
 // Resolve one symbol to its runtime address.
-// Returns 1 on success, 0 if it is an unresolved external symbol.
-static int resolve_symbol(const reloc_ctx_t* ctx, uint32_t sym_index, uint32_t* addr_out) {
+// AL_OK on success; AL_ERR_UNRESOLVED_SYM for a missing external symbol (soft;
+// the caller may leave the slot untouched); another AL_ERR_* on bad input.
+static al_status_t resolve_symbol(const reloc_ctx_t* ctx, uint32_t sym_index,
+                                  uint32_t* addr_out) {
+    if (sym_index >= ctx->symcount) {
+        printf("Error: symbol index %lu out of range (%lu)\n",
+               (unsigned long)sym_index, (unsigned long)ctx->symcount);
+        return AL_ERR_SYM_RANGE;
+    }
     const Elf32_Sym* sym = &ctx->symtab[sym_index];
 
     if (sym->st_shndx != SHN_UNDEF) {                 // defined by this applet
@@ -209,9 +257,15 @@ static int resolve_symbol(const reloc_ctx_t* ctx, uint32_t sym_index, uint32_t* 
         printf("| local symbol[%lu]: 0x%08lX -> 0x%08lX\n",
                (unsigned long)sym_index,
                (unsigned long)sym->st_value, (unsigned long)*addr_out);
-        return 1;
+        return AL_OK;
     }
 
+    if (sym->st_name >= ctx->strsz) {
+        printf("Error: symbol[%lu] name offset %lu out of range (%lu)\n",
+               (unsigned long)sym_index, (unsigned long)sym->st_name,
+               (unsigned long)ctx->strsz);
+        return AL_ERR_SYM_NAME;
+    }
     const char* name = ctx->strtab + sym->st_name;
     void* resolved = loader_lookup_symbol(name);      // defined by the host
     printf("| external symbol[%lu] '%s' -> %p\n",
@@ -219,20 +273,28 @@ static int resolve_symbol(const reloc_ctx_t* ctx, uint32_t sym_index, uint32_t* 
 
     if (resolved == NULL) {
         printf("Warning: unresolved symbol '%s'\n", name);
-        return 0;
+        return AL_ERR_UNRESOLVED_SYM;
     }
     *addr_out = (uint32_t)resolved;
-    return 1;
+    return AL_OK;
 }
 
-static void apply_one_reloc(const reloc_ctx_t* ctx, uint32_t index, const Elf32_Rel* r) {
+// Apply one relocation. AL_OK on success (a soft, unresolved symbol is also
+// "success" — the slot is just left untouched); another AL_ERR_* on bad input.
+static al_status_t apply_one_reloc(const reloc_ctx_t* ctx, uint32_t index, const Elf32_Rel* r) {
     uint32_t r_info = r->r_info;
     uint32_t type   = reloc_type(r_info);
-    uint32_t* slot  = reloc_slot(r, ctx->delta);
 
     printf("[%lu] %p: %s offset = 0x%08lX\n",
            (unsigned long)index, (const void*)r,
            arm_reloc_tag_string(type), (unsigned long)r->r_offset);
+
+    uint32_t* slot = reloc_slot(ctx, r);
+    if (slot == NULL) {
+        printf("Error: relocation target 0x%08lX is outside the applet image\n",
+               (unsigned long)r->r_offset);
+        return AL_ERR_RELOC_TARGET;
+    }
 
     switch (type) {
         case R_ARM_RELATIVE: {
@@ -247,10 +309,13 @@ static void apply_one_reloc(const reloc_ctx_t* ctx, uint32_t index, const Elf32_
             // R_ARM_ABS32 = (S + A) | T : A is the addend already stored
             // in the word, so it must be added to the symbol address.
             uint32_t sym_addr;
-            if (!resolve_symbol(ctx, reloc_sym_index(r_info), &sym_addr)) {
-                break;                                // leave slot untouched
+            al_status_t st = resolve_symbol(ctx, reloc_sym_index(r_info), &sym_addr);
+            if (st == AL_ERR_UNRESOLVED_SYM) {
+                break;                                // soft: leave slot untouched
             }
-
+            if (st != AL_OK) {
+                return st;                            // hard: propagate
+            }
             uint32_t addend = *slot;
             *slot = sym_addr + addend;
             printf("| ABS32: S(0x%08lX) + A(0x%08lX) -> 0x%08lX\n",
@@ -263,10 +328,13 @@ static void apply_one_reloc(const reloc_ctx_t* ctx, uint32_t index, const Elf32_
         case R_ARM_JUMP_SLOT: {
             // GLOB_DAT / JUMP_SLOT: the slot becomes S (no addend).
             uint32_t sym_addr;
-            if (!resolve_symbol(ctx, reloc_sym_index(r_info), &sym_addr)) {
-                break;                                // leave slot untouched
+            al_status_t st = resolve_symbol(ctx, reloc_sym_index(r_info), &sym_addr);
+            if (st == AL_ERR_UNRESOLVED_SYM) {
+                break;                                // soft: leave slot untouched
             }
-
+            if (st != AL_OK) {
+                return st;                            // hard: propagate
+            }
             *slot = sym_addr;
             printf("| %s: S -> 0x%08lX\n",
                    arm_reloc_tag_string(type), (unsigned long)*slot);
@@ -274,15 +342,42 @@ static void apply_one_reloc(const reloc_ctx_t* ctx, uint32_t index, const Elf32_
         }
 
         default:
-            // Unsupported type: leave the word untouched.
-            break;
+            printf("Error: unhandled relocation type %lu (%s)\n",
+                   (unsigned long)type, arm_reloc_tag_string(type));
+            return AL_ERR_UNHANDLED_RELOC;
     }
+    return AL_OK;
 }
 
-static void apply_single_relocs(const reloc_ctx_t* ctx, const char* name,
-                                const Elf32_Rel* rel, uint32_t relsz) {
-    if (rel == NULL || ctx->symtab == NULL || ctx->strtab == NULL) {
-        return;
+// The .dynsym/.dynstr tables must lie inside the image, otherwise symbol
+// lookups could read arbitrary memory.
+static al_status_t validate_symbol_tables(const reloc_ctx_t* ctx) {
+    if (ctx->symtab != NULL &&
+        !in_image(ctx, (uintptr_t)ctx->symtab,
+                  (uint64_t)ctx->symcount * sizeof(Elf32_Sym))) {
+        printf("Error: symbol table is outside the applet image\n");
+        return AL_ERR_BAD_TABLE;
+    }
+    if (ctx->strtab != NULL && !in_image(ctx, (uintptr_t)ctx->strtab, ctx->strsz)) {
+        printf("Error: string table is outside the applet image\n");
+        return AL_ERR_BAD_TABLE;
+    }
+    return AL_OK;
+}
+
+static al_status_t apply_single_relocs(const reloc_ctx_t* ctx, const char* name,
+                                       const Elf32_Rel* rel, uint32_t relsz) {
+    if (rel == NULL || relsz == 0) {
+        return AL_OK;                             // table not present
+    }
+    if (ctx->symtab == NULL || ctx->strtab == NULL) {
+        printf("Error: %s present but no symbol/string table\n", name);
+        return AL_ERR_BAD_TABLE;
+    }
+    if (!in_image(ctx, (uintptr_t)rel, relsz)) {
+        printf("Error: %s table (0x%08lX + %lu) is outside the applet image\n",
+               name, (unsigned long)(uintptr_t)rel, (unsigned long)relsz);
+        return AL_ERR_BAD_TABLE;
     }
 
     printf("------------\n");
@@ -290,33 +385,54 @@ static void apply_single_relocs(const reloc_ctx_t* ctx, const char* name,
 
     uint32_t count = relsz / sizeof(Elf32_Rel);
     for (uint32_t i = 0; i < count; i++) {
-        apply_one_reloc(ctx, i, &rel[i]);
+        al_status_t st = apply_one_reloc(ctx, i, &rel[i]);
+        if (st != AL_OK) {
+            return st;
+        }
     }
+    return AL_OK;
 }
 
-static void apply_relocations(const applet_dyn_info_t* dyn, int64_t delta) {
+static al_status_t apply_relocations(const applet_dyn_info_t* dyn,
+                                     uintptr_t image_base, uintptr_t image_limit) {
     const reloc_ctx_t ctx = {
-        .delta  = delta,
-        .symtab = dyn->symtab,
-        .strtab = dyn->strtab,
+        .delta       = (int64_t)image_base - (int64_t)APPLET_LINK_ADDR,
+        .symtab      = dyn->symtab,
+        .symcount    = dyn->symcount,
+        .strtab      = dyn->strtab,
+        .strsz       = dyn->strsz,
+        .image_base  = image_base,
+        .image_limit = image_limit,
     };
 
-    apply_single_relocs(&ctx, ".rel.dyn", dyn->rel, dyn->relsz);
-    apply_single_relocs(&ctx, ".rel.plt", dyn->jmprel, dyn->jmprelsz);
+    al_status_t st = validate_symbol_tables(&ctx);
+    if (st != AL_OK) {
+        return st;
+    }
+    st = apply_single_relocs(&ctx, ".rel.dyn", dyn->rel, dyn->relsz);
+    if (st != AL_OK) {
+        return st;
+    }
+    return apply_single_relocs(&ctx, ".rel.plt", dyn->jmprel, dyn->jmprelsz);
 }
 
-// TAG - VALUE table
-// DT_HASH    0x400003f4     -> .hash
-// DT_STRTAB  0x40000384     -> .dynstr
-// DT_SYMTAB  0x400002b4     -> .dynsym
-// DT_STRSZ   112 / DT_SYMENT 16
+// .dynamic has no length of its own; it ends at the DT_NULL entry. This bound
+// stops a truncated/corrupt section from being read out of bounds.
+#define MAX_DYNAMIC_ENTRIES 64
+
 // Parse the .dynamic tag list into *info.
 // Returns 0 on success, -1 if the metadata is incompatible with this loader.
-static int parse_dynamic_section(const Elf32_Dyn* dyn, int64_t delta,
-                                 applet_dyn_info_t* info) {
+static al_status_t parse_dynamic_section(const Elf32_Dyn* dyn, int64_t delta,
+                                         applet_dyn_info_t* info) {
     memset(info, 0, sizeof(*info));
 
-    for (int i = 0; dyn[i].d_tag != DT_NULL; i++) {
+    int terminated = 0;
+    for (int i = 0; i < MAX_DYNAMIC_ENTRIES; i++) {
+        if (dyn[i].d_tag == DT_NULL) {
+            terminated = 1;                       // normal end of .dynamic
+            break;
+        }
+
         printf(
                 "[%d] %p: tag %s(%ld) = 0x%08lX\n",
                 i, &dyn[i],
@@ -334,12 +450,14 @@ static int parse_dynamic_section(const Elf32_Dyn* dyn, int64_t delta,
             case DT_PLTRELSZ: info->jmprelsz = val; break;
             case DT_SYMTAB:   info->symtab = (const Elf32_Sym*)addr; break;
             case DT_STRTAB:   info->strtab = (const char*)addr; break;
+            case DT_HASH:     info->hash = (const uint32_t*)addr; break;
+            case DT_STRSZ:    info->strsz = val; break;
             case DT_SYMENT:
                 info->syment = val;
                 if (val != sizeof(Elf32_Sym)) {
                     printf("Error: DT_SYMENT=%lu but sizeof(Elf32_Sym)=%lu\n",
                            (unsigned long)val, (unsigned long)sizeof(Elf32_Sym));
-                    return -1;
+                    return AL_ERR_BAD_ENTRY_SIZE;
                 }
                 break;
             case DT_RELENT:
@@ -347,18 +465,29 @@ static int parse_dynamic_section(const Elf32_Dyn* dyn, int64_t delta,
                 if (val != sizeof(Elf32_Rel)) {
                     printf("Error: DT_RELENT=%lu but sizeof(Elf32_Rel)=%lu\n",
                            (unsigned long)val, (unsigned long)sizeof(Elf32_Rel));
-                    return -1;
+                    return AL_ERR_BAD_ENTRY_SIZE;
                 }
                 break;
         }
     }
-    return 0;
+
+    if (!terminated) {
+        printf("Error: .dynamic is not terminated by DT_NULL\n");
+        return AL_ERR_NO_DT_NULL;
+    }
+
+    // .dynsym has no count tag of its own; the SYSV hash's 2nd word (nchain)
+    // is its length, and bounds every r_sym we will use.
+    if (info->hash != NULL) {
+        info->symcount = info->hash[1];
+    }
+    return AL_OK;
 }
 
-static int load_applet(const uint8_t* data, size_t size) {
+static al_status_t load_applet(const uint8_t* data, size_t size) {
     if (size > APPLET_MAX_SIZE) {
         printf("Error: Applet too large (%zu > %d bytes)\n", size, APPLET_MAX_SIZE);
-        return -1;
+        return AL_ERR_TOO_BIG;
     }
     
     // some background bytes to help identify bug
@@ -372,13 +501,13 @@ static int load_applet(const uint8_t* data, size_t size) {
     if (header->magic != APPLET_MAGIC) {
         printf("Error: Invalid applet magic (expected 0x%08lX, got 0x%08lX)\n", 
                (uint32_t)APPLET_MAGIC, (uint32_t)header->magic);
-        return -1;
+        return AL_ERR_BAD_MAGIC;
     }
     
     if (header->version != APPLET_VERSION) {
         printf("Error: Unsupported applet version (expected %d, got %lu)\n",
                APPLET_VERSION, (unsigned long)header->version);
-        return -1;
+        return AL_ERR_BAD_VERSION;
     }
     
     printf("Applet magic: 0x%08lX OK\n", (uint32_t)header->magic);
@@ -398,12 +527,18 @@ static int load_applet(const uint8_t* data, size_t size) {
     printf("Dynamic section addr: 0x%08lX\n", (unsigned long)dynamic_load);
 
     applet_dyn_info_t dyn_info;
-    if (parse_dynamic_section((const Elf32_Dyn*)dynamic_load, delta, &dyn_info) != 0) {
-        printf("Error: incompatible dynamic section, refusing to load\n");
-        return -2;
+    al_status_t status = parse_dynamic_section((const Elf32_Dyn*)dynamic_load, delta, &dyn_info);
+    if (status != AL_OK) {
+        printf("Error: bad .dynamic section, refusing to load\n");
+        return status;
     }
 
-    apply_relocations(&dyn_info, delta);
+    status = apply_relocations(&dyn_info, (uintptr_t)applet_memory,
+                               (uintptr_t)applet_memory + APPLET_MAX_SIZE);
+    if (status != AL_OK) {
+        printf("Error: relocation failed, refusing to load\n");
+        return status;
+    }
     
     // NOTICE:
     // .rel.dyn's  R_ARM_ABS32 will modify header->bss_start/bss_end,
@@ -412,7 +547,7 @@ static int load_applet(const uint8_t* data, size_t size) {
     printf("BSS: 0x%08X -  0x%08X\n", (uintptr_t)header->bss_start, (uintptr_t)header->bss_end);
     if (!(header->bss_start >= (void *)applet_memory && header->bss_end <= (void *)(applet_memory + APPLET_MAX_SIZE))) {
         printf("BSS: Exceed limit\n");
-        return -3;
+        return AL_ERR_BAD_BSS;
     } else {
         printf("BSS: Within limit\n");
     }
@@ -429,7 +564,7 @@ static int load_applet(const uint8_t* data, size_t size) {
     printf("=====================================\n");
     printf("Applet returned: %lu\n", (unsigned long)result);
     
-    return 0;
+    return AL_OK;
 }
 
 // Embedded applet binary (generated by Makefile)
