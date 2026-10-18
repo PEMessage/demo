@@ -20,12 +20,20 @@ SECTIONS
   .data : {
     *(.data*)
   } > ram
-  
+
+  .got : {
+    *(.got)
+    *(.got.plt)
+  } > ram
+
+  __got_start = ADDR(.got);
+  __got_end = ADDR(.got) + SIZEOF(.got);
+
   .bss : {
     *(.bss*)
     *(COMMON)
   } > ram
-  
+
   __bss_start = ADDR(.bss);
   __bss_end = ADDR(.bss) + SIZEOF(.bss);
 }
