@@ -124,6 +124,9 @@ static int load_applet(const uint8_t* data, size_t size) {
 extern unsigned char out_applet_poc_applets_sample_applet_bin[];
 extern const unsigned int out_applet_poc_applets_sample_applet_bin_len;
 
+extern unsigned char out_applet_poc_applets_counter_applet_bin[];
+extern const unsigned int out_applet_poc_applets_counter_applet_bin_len;
+
 int main(void) {
     stdout_init();
     
@@ -132,6 +135,7 @@ int main(void) {
     printf("========================================\n\n");
     
     load_applet(out_applet_poc_applets_sample_applet_bin, out_applet_poc_applets_sample_applet_bin_len);
+    load_applet(out_applet_poc_applets_counter_applet_bin, out_applet_poc_applets_counter_applet_bin_len);
     
     while (1) {
         __asm volatile ("wfi");

@@ -1,10 +1,8 @@
-#pragma once
+#ifndef APPLET_API_H
+#define APPLET_API_H
+
 #include <stdint.h>
 #include <stddef.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #define APPLET_EXPORT __attribute__((visibility("default")))
 
@@ -43,6 +41,4 @@ typedef struct applet_api {
     
 } applet_api_t;
 
-#ifdef __cplusplus
-}
-#endif
+#endif /* end of include guard: APPLET_API_H */
