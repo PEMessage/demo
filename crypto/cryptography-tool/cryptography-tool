@@ -10,9 +10,18 @@
 import argparse
 import sys
 
+from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 BLOCK_SIZE = 16
+
+# HKDF is defined per hash function: HashLen is the digest size in bytes.
+HASHES = {
+    "sha1": (hashes.SHA1, "SHA-1"),
+    "sha256": (hashes.SHA256, "SHA-256"),
+    "sha384": (hashes.SHA384, "SHA-384"),
+    "sha512": (hashes.SHA512, "SHA-512"),
+}
 
 
 def hex_bytes(value: str) -> bytes:
@@ -47,6 +56,142 @@ def cmd_aes_ctr(args: argparse.Namespace) -> None:
     print(aes_ctr_xcrypt(args.key, args.nonce, args.data).hex())
 
 
+# --- HKDF (RFC 5869) ---------------------------------------------------------
+# extract: concentrate IKM (any length, possibly non-uniform) into a PRK.
+#
+#     PRK = HMAC-Hash(salt, IKM)          # salt is the HMAC key, IKM the message
+#                                         # salt omitted -> HashLen zero bytes
+#
+# expand: stretch PRK into L bytes of OKM, bound to context "info".
+#
+#     N    = ceil(L / HashLen)            # N <= 255 (counter is one byte)
+#     T(0) = empty
+#     T(i) = HMAC-Hash(PRK, T(i-1) | info | i)    # i = 0x01 .. 0xN
+#     OKM  = (T(1) | T(2) | ... | T(N))[:L]
+#
+# Primitive: HMAC-Hash only. salt/info are public; PRK/OKM are secret.
+#
+# IKM = Input Keying Material, PRK = Pseudorandom Key,
+# OKM = Output Keying Material, HashLen = hash digest size in bytes.
+# -----------------------------------------------------------------------------
+
+
+def hmac_digest(algorithm, key: bytes, data: bytes) -> bytes:
+    """One-shot HMAC-Hash(key, data)."""
+    ctx = hmac.HMAC(key, algorithm)
+    ctx.update(data)
+    return ctx.finalize()
+
+
+def hkdf_extract(algorithm, salt: bytes | None, ikm: bytes) -> bytes:
+    """RFC 5869 section 2.2: PRK = HMAC-Hash(salt, IKM).
+
+    ``salt=None`` means "not provided": RFC 5869 then uses HashLen zero
+    octets, matching cryptography's HKDF(salt=None).
+    """
+    if salt is None:
+        salt = bytes(algorithm.digest_size)
+    return hmac_digest(algorithm, salt, ikm)
+
+
+def hkdf_expand(algorithm, prk: bytes, info: bytes, length: int) -> tuple[bytes, list[bytes]]:
+    """RFC 5869 section 2.3: expand PRK into ``length`` bytes of OKM.
+
+    T(0) = empty
+    T(i) = HMAC-Hash(PRK, T(i-1) | info | i)   for i = 1..N, N = ceil(L/HashLen)
+    OKM  = first L octets of T(1) | T(2) | ... | T(N)
+
+    Returns the OKM plus the full T(i) blocks (the last one is truncated).
+    """
+    hash_len = algorithm.digest_size
+    if length < 0:
+        raise ValueError("length must be >= 0")
+    if length > 255 * hash_len:
+        raise ValueError(f"length must be <= 255 * HashLen = {255 * hash_len} bytes")
+
+    blocks: list[bytes] = []
+    previous = b""
+    for counter in range(1, (length + hash_len - 1) // hash_len + 1):
+        previous = hmac_digest(algorithm, prk, previous + info + bytes([counter]))
+        blocks.append(previous)
+    return b"".join(blocks)[:length], blocks
+
+
+def fmt_bytes(value: bytes | None, omitted: str = "<empty>") -> str:
+    """Human-readable hex + length, used by the --trace output."""
+    if value is None:
+        return omitted
+    if not value:
+        return "<empty>"
+    return f"{value.hex()}  ({len(value)} bytes)"
+
+
+def trace_extract(args, hash_label: str, hash_len: int, prk: bytes) -> None:
+    print(f"# HKDF-{hash_label} (RFC 5869): extract")
+    print(f"{'ikm':<8}= {fmt_bytes(args.ikm)}")
+    if args.salt is None:
+        salt = f"<omitted> (=> HashLen = {hash_len} zero bytes)"
+    else:
+        salt = fmt_bytes(args.salt)
+    print(f"{'salt':<8}= {salt}")
+    print(f"{'hashlen':<8}= {hash_len} bytes")
+    print(f"{'prk':<8}= {prk.hex()}  (HMAC-{hash_label}(salt, IKM), {len(prk)} bytes)")
+
+
+def trace_expand(args, hash_label: str, hash_len: int, prk: bytes, blocks: list[bytes]) -> None:
+    print(f"# HKDF-{hash_label} (RFC 5869): expand")
+    print(f"{'prk':<8}= {fmt_bytes(prk)}")
+    print(f"{'info':<8}= {fmt_bytes(args.info)}")
+    print(f"{'hashlen':<8}= {hash_len} bytes")
+    print(f"{'length':<8}= {args.length} bytes ({len(blocks)} block(s))")
+    print(f"# T(i) = HMAC-{hash_label}(PRK, T(i-1) | info | 0x0i), T(0) = empty")
+    for i, block in enumerate(blocks, 1):
+        previous = f"T({i - 1}) | " if i > 1 else ""
+        print(f"{f'T({i})':<8}= {block.hex()}  (HMAC-{hash_label}(PRK, {previous}info | {i:02x}))")
+
+
+def cmd_hkdf(args: argparse.Namespace) -> None:
+    hash_class, hash_label = HASHES[args.hash_name]
+    algorithm = hash_class()
+    hash_len = algorithm.digest_size
+
+    if args.op == "expand":
+        if args.prk is None:
+            sys.exit("error: --prk is required for expand")
+        if args.ikm is not None:
+            sys.exit("error: --ikm is not used by expand (pass --prk instead)")
+        if len(args.prk) < hash_len:
+            sys.exit(
+                f"error: PRK must be at least HashLen = {hash_len} bytes for {hash_label}"
+            )
+        prk = args.prk
+    else:
+        if args.ikm is None:
+            sys.exit(f"error: --ikm is required for {args.op}")
+        if args.prk is not None:
+            sys.exit("error: --prk is only valid for expand")
+        prk = hkdf_extract(algorithm, args.salt, args.ikm)
+
+    if args.op == "extract":
+        if args.trace:
+            trace_extract(args, hash_label, hash_len, prk)
+        print(prk.hex())
+        return
+
+    if args.trace and args.op == "derive":
+        trace_extract(args, hash_label, hash_len, prk)
+        print()
+    try:
+        okm, blocks = hkdf_expand(algorithm, prk, args.info, args.length)
+    except ValueError as exc:
+        sys.exit(f"error: {exc}")
+
+    if args.trace:
+        trace_expand(args, hash_label, hash_len, prk, blocks)
+        print(f"okm     = T(1) | ... | T({len(blocks)}) truncated to {args.length} bytes")
+    print(okm.hex())
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="cryptography-tool")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -64,6 +209,61 @@ def build_parser() -> argparse.ArgumentParser:
     aes_ctr.add_argument("--nonce", type=hex_bytes, required=True, help="hex nonce/initial counter (16 bytes)")
     aes_ctr.add_argument("--data", type=hex_bytes, required=True, help="hex plaintext/ciphertext")
     aes_ctr.set_defaults(func=cmd_aes_ctr)
+
+    hkdf = sub.add_parser(
+        "hkdf",
+        help="HKDF-SHA (RFC 5869) extract-then-expand key derivation",
+        description=(
+            "HKDF (RFC 5869). extract: PRK = HMAC-Hash(salt, IKM). "
+            "expand: T(i) = HMAC-Hash(PRK, T(i-1) | info | i), "
+            "OKM = first L bytes of T(1) | T(2) | ..."
+        ),
+    )
+    hkdf.add_argument(
+        "op",
+        choices=["derive", "extract", "expand"],
+        help="derive = extract + expand; extract = PRK only; expand = PRK -> OKM",
+    )
+    hkdf.add_argument(
+        "--hash",
+        dest="hash_name",
+        choices=sorted(HASHES),
+        default="sha256",
+        help="hash function (default: sha256)",
+    )
+    hkdf.add_argument(
+        "--ikm",
+        type=hex_bytes,
+        help="hex input keying material (derive/extract)",
+    )
+    hkdf.add_argument(
+        "--prk",
+        type=hex_bytes,
+        help="hex pseudorandom key (expand only; at least HashLen bytes)",
+    )
+    hkdf.add_argument(
+        "--salt",
+        type=hex_bytes,
+        help="hex salt; omitted => HashLen zero bytes (RFC 5869 section 2.2)",
+    )
+    hkdf.add_argument(
+        "--info",
+        type=hex_bytes,
+        default=b"",
+        help="hex application/context info, e.g. 666f6f (default: empty)",
+    )
+    hkdf.add_argument(
+        "--length",
+        type=int,
+        default=32,
+        help="output length L in bytes, <= 255 * HashLen (default: 32)",
+    )
+    hkdf.add_argument(
+        "--trace",
+        action="store_true",
+        help="show salt default, PRK, and each T(i) block",
+    )
+    hkdf.set_defaults(func=cmd_hkdf)
 
     return parser
 
