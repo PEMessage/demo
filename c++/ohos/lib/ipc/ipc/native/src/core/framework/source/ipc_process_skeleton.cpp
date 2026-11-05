@@ -15,6 +15,7 @@
 
 #include "ipc_process_skeleton.h"
 
+#include <algorithm> // PEM Modify
 #include <random>
 #include <securec.h>
 #include <sys/epoll.h>

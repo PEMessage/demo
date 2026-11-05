@@ -27,7 +27,8 @@
 #include "iremote_invoker.h"
 #include "iremote_object.h"
 #include "refbase.h"
-#include "selinux/selinux.h"
+// selinux/selinux.h is not available on standard Linux; its only uses below
+// are already commented out. // PEM Modify
 #include "string"
 #include "unistd.h"
 #include "unistd_ohos_mock.h" // PEM Modify

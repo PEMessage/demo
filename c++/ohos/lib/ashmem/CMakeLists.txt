@@ -5,4 +5,5 @@ add_library(ashmem STATIC
 )
 
 target_include_directories(ashmem PUBLIC .)
-auto_target_link_libraries(ashmem PUBLIC misc refbase parcel)
+# musl_ohos_mock supplies <linux/ashmem.h>, which modern Linux headers no longer ship.
+auto_target_link_libraries(ashmem PUBLIC misc refbase parcel musl_ohos_mock)

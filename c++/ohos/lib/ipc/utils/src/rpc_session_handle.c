@@ -21,6 +21,7 @@
 
 #include "rpc_log.h"
 #include "rpc_errno.h"
+#include "securec.h" // PEM Modify
 
 static int32_t GetWaitTime(struct timespec *waitTime)
 {

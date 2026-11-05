@@ -16,6 +16,7 @@
 #ifndef OHOS_IPC_MESSAGE_OPTION_H
 #define OHOS_IPC_MESSAGE_OPTION_H
 
+#include <cstdint> // PEM Modify
 #include <memory>
 namespace OHOS {
 class MessageOption {

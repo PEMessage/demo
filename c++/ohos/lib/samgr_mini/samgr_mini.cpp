@@ -16,6 +16,7 @@
 #include "samgr_mini.h"
 #include "hilog/log.h"
 #include "ipc_skeleton.h"
+#include <algorithm>
 #include <chrono>
 #include <thread>
 

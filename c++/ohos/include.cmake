@@ -7,6 +7,11 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}" CACHE STRING "C++ Compiler Fl
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
+# OHOS uses musl, which exposes extra APIs like gettid() unconditionally.
+# glibc only declares them when _GNU_SOURCE is defined, so define it for
+# every target (all libraries are added after this file is included).
+add_compile_definitions(_GNU_SOURCE)
+
 function(find_project_root out_var)
     # Start from current source directory
     set(current_dir "${CMAKE_CURRENT_SOURCE_DIR}")

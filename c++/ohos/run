@@ -37,9 +37,13 @@ done
 build() {
     (
         set -xe
-        if [ ! -f "out/$project_name/CMakeCache.txt" ] ; then
-        cmake -S "$project_dir" -B "out/$project_name" -DROOT_DIR="$script_dir"
-        fi
+        # Always configure: a failed configure still leaves CMakeCache.txt behind,
+        # so checking for the cache alone would skip reconfiguration and then
+        # "cmake --build" would fail with "No such file or directory: Makefile".
+        # CMAKE_POLICY_VERSION_MINIMUM=3.5 keeps CMake >= 4 happy with old
+        # third-party projects (e.g. lib/cjson/code uses cmake_minimum_required 3.0).
+        cmake -S "$project_dir" -B "out/$project_name" -DROOT_DIR="$script_dir" \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
         ln -sf "out/$project_name/compile_commands.json" compile_commands.json
         cmake --build "out/$project_name"
     )

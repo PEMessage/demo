@@ -25,6 +25,7 @@
 #include "securec.h"
 #include "string_ex.h"
 
+#include <algorithm> // PEM Modify
 #include <limits.h> // PEM Modify
 
 namespace OHOS {
